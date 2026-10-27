@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Flora v0.3 manifest — behaviour-based, no creator manifest copy.
+<!-- Flora v0.4 manifest — behaviour-based, no creator manifest copy.
      CAMERA sirf Scan screen ke liye hai, user ke permission ke baad hi
      chalega. Sensitive permissions (WRITE_SECURE_SETTINGS,
      INSTALL/DELETE_PACKAGES, DISABLE_KEYGUARD) default me NAHI hain. -->

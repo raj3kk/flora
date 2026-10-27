@@ -30,6 +30,7 @@ class FloraPreferences(private val context: Context) {
         val AUTOMATION_CONSENT = booleanPreferencesKey("automation_consent")
         val PIN_ENABLED = booleanPreferencesKey("pin_enabled")
         val GUARDIAN_MODE = booleanPreferencesKey("guardian_mode")
+        val FACE_LOCK = booleanPreferencesKey("face_lock")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
     }
@@ -90,6 +91,14 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setGuardianMode(value: Boolean) {
         context.floraDataStore.edit { it[Keys.GUARDIAN_MODE] = value }
+    }
+
+    /** Face Lock toggle: OFF by default. ON = Chat PIN verify ke bina nahi khulega. */
+    suspend fun faceLock(): Boolean =
+        context.floraDataStore.data.map { it[Keys.FACE_LOCK] ?: false }.first()
+
+    suspend fun setFaceLock(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.FACE_LOCK] = value }
     }
 
     /** Talk seconds used on [today] (yyyy-MM-dd). Rolls over automatically. */

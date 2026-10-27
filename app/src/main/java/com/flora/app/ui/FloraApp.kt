@@ -43,7 +43,7 @@ import com.flora.app.security.GuardianGate
 import com.flora.app.security.PinVault
 import kotlinx.coroutines.launch
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
 
@@ -67,7 +67,18 @@ fun FloraApp(
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var licence by remember { mutableStateOf<LicenceStatus?>(null) }
+    var faceLockOn by remember { mutableStateOf(false) }
+    var chatUnlocked by remember { mutableStateOf(false) }
+    var pinInput by remember { mutableStateOf("") }
+    var lockNote by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        faceLockOn = prefs.faceLock()
+    }
+    LaunchedEffect(screen) {
+        if (screen == Screen.CHAT) faceLockOn = prefs.faceLock()
+    }
 
     LaunchedEffect(voiceResult.value) {
         val spoken = voiceResult.value
@@ -98,6 +109,8 @@ fun FloraApp(
                 Button(onClick = { screen = Screen.TOOLS }) { Text("Tools") }
                 Spacer(modifier = Modifier.padding(4.dp))
                 Button(onClick = { screen = Screen.SOS }) { Text("SOS") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = { screen = Screen.FACE }) { Text("Face") }
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -110,6 +123,33 @@ fun FloraApp(
             Spacer(modifier = Modifier.height(8.dp))
 
             if (screen == Screen.CHAT) {
+                if (faceLockOn && !chatUnlocked) {
+                    Text("Chat locked hai (Face Lock ON). PIN daal kar unlock kijiye. Face presence check se unlock nahi hota — sirf PIN se.")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = pinInput, onValueChange = { pinInput = it },
+                        label = { Text("PIN") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = {
+                        if (pinVault.verify(pinInput)) {
+                            guardian.markPinVerified()
+                            chatUnlocked = true
+                            lockNote = ""
+                        } else {
+                            lockNote = "Galat PIN."
+                        }
+                        pinInput = ""
+                    }) { Text("Unlock karo") }
+                    if (lockNote.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(lockNote)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("PIN bhool gaye ho to Settings me naya PIN set kar sakte ho (Chat ke alawa baaki screens khuli hain).")
+                } else {
                 LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     items(messages) { msg ->
                         Text((if (msg.fromUser) "Aap: " else "Flora: ") + msg.text)
@@ -150,6 +190,7 @@ fun FloraApp(
                     "Note: screen, camera aur calls sirf tab jab aap khud kahein — " +
                         "kabhi chupke se record nahi hota. Automation ke liye Settings me consent ON karna hoga."
                 )
+                }
             } else if (screen == Screen.SETTINGS) {
                 SettingsScreen(prefs, licenceClient, pinVault, guardian) { status ->
                     licence = status
@@ -160,6 +201,8 @@ fun FloraApp(
                 ScanScreen()
             } else if (screen == Screen.SOS) {
                 SosScreen(sosStore)
+            } else if (screen == Screen.FACE) {
+                FaceScreen()
             } else {
                 ToolsScreen(searchTools)
             }
@@ -275,6 +318,43 @@ private fun SettingsScreen(
                 })
             }
             Text("Voice-match abhi is gate me nahi hai — jab tak aapke consent samples aur model step poora nahi hota, PIN hi gate hai.")
+            Spacer(modifier = Modifier.height(12.dp))
+            var verifyPin by remember { mutableStateOf("") }
+            var faceLock by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) { faceLock = prefs.faceLock() }
+            OutlinedTextField(
+                value = verifyPin, onValueChange = { verifyPin = it },
+                label = { Text("PIN verify karo (session unlock ke liye)") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = {
+                if (pinVault.verify(verifyPin)) {
+                    guardian.markPinVerified()
+                    note = "PIN sahi hai — is session ke liye unlock ho gaya."
+                } else {
+                    note = "Galat PIN."
+                }
+                verifyPin = ""
+            }) { Text("PIN verify karo") }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row {
+                Text("Face Lock (ON = Chat PIN verify ke bina nahi khulega)")
+                Spacer(modifier = Modifier.padding(4.dp))
+                Switch(checked = faceLock, onCheckedChange = { value ->
+                    scope.launch {
+                        if (value && !prefs.pinEnabled()) {
+                            note = "Face Lock ke liye pehle PIN set karo."
+                        } else {
+                            faceLock = value
+                            prefs.setFaceLock(value)
+                            note = if (value) "Face Lock ON ho gaya." else "Face Lock OFF ho gaya."
+                        }
+                    }
+                })
+            }
+            Text("Face screen sirf presence check karti hai — unlock hamesha PIN se hota hai, chehre se nahi.")
             Spacer(modifier = Modifier.height(12.dp))
             Button(onClick = {
                 scope.launch {

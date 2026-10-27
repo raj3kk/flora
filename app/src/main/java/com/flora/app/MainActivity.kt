@@ -20,10 +20,10 @@ import com.flora.app.security.PinVault
 import com.flora.app.ui.FloraApp
 
 /**
- * Flora v0.3 — clean-room rebuild.
- * Chat / Settings / Yaadein / Scan / Tools / SOS. Guardian mode
- * PIN-gated hai; voice-match aur Face Lock alag steps me aayenge —
- * is file me unka koi daava nahi hai.
+ * Flora v0.4 — clean-room rebuild.
+ * Chat / Settings / Yaadein / Scan / Tools / SOS / Face (presence).
+ * Unlock hamesha PIN se hota hai; identity Face Lock alag step hai —
+ * is file me uska koi daava nahi hai.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var voice: VoiceEngine
