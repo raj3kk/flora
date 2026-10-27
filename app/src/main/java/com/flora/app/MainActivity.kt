@@ -8,8 +8,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
-import androidx.lifecycle.lifecycleScope
 import com.flora.app.assistant.BrainClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import com.flora.app.assistant.VoiceEngine
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
@@ -31,6 +34,13 @@ class MainActivity : ComponentActivity() {
     private lateinit var voice: VoiceEngine
     private val voiceResult = mutableStateOf("")
 
+    /**
+     * Talk-seconds record karne ke liye apna scope (lifecycleScope
+     * par bharosa nahi — CI par uska launch resolve nahi hua tha).
+     * kotlinx-coroutines-android pehle se dependency me hai.
+     */
+    private val talkScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private val micLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -47,7 +57,7 @@ class MainActivity : ComponentActivity() {
         val prefs = FloraPreferences(applicationContext)
         voice = VoiceEngine(applicationContext)
         voice.onSpoken = { seconds ->
-            lifecycleScope.launch {
+            talkScope.launch {
                 val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
                     .format(java.util.Date())
                 prefs.addTalkSeconds(today, seconds)
