@@ -37,12 +37,13 @@ import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
 import com.flora.app.data.LicenceStatus
 import com.flora.app.data.MemoriesStore
+import com.flora.app.data.SosStore
 import com.flora.app.tools.SearchTools
 import com.flora.app.security.GuardianGate
 import com.flora.app.security.PinVault
 import kotlinx.coroutines.launch
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
 
@@ -57,6 +58,7 @@ fun FloraApp(
     guardian: GuardianGate,
     memoriesStore: MemoriesStore,
     searchTools: SearchTools,
+    sosStore: SosStore,
     voiceResult: MutableState<String>,
     onMicRequest: () -> Unit,
 ) {
@@ -94,6 +96,8 @@ fun FloraApp(
                 Button(onClick = { screen = Screen.SCAN }) { Text("Scan") }
                 Spacer(modifier = Modifier.padding(4.dp))
                 Button(onClick = { screen = Screen.TOOLS }) { Text("Tools") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = { screen = Screen.SOS }) { Text("SOS") }
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -154,6 +158,8 @@ fun FloraApp(
                 MemoriesScreen(memoriesStore)
             } else if (screen == Screen.SCAN) {
                 ScanScreen()
+            } else if (screen == Screen.SOS) {
+                SosScreen(sosStore)
             } else {
                 ToolsScreen(searchTools)
             }
@@ -176,6 +182,7 @@ private fun SettingsScreen(
     var groqKey by remember { mutableStateOf("") }
     var consent by remember { mutableStateOf(false) }
     var pin by remember { mutableStateOf("") }
+    var guardianMode by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
@@ -183,6 +190,7 @@ private fun SettingsScreen(
         geminiKey = prefs.geminiApiKey()
         groqKey = prefs.groqApiKey()
         consent = prefs.automationConsent()
+        guardianMode = prefs.guardianMode()
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -250,6 +258,23 @@ private fun SettingsScreen(
                     pin = ""
                 }
             }) { Text("PIN set karo") }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row {
+                Text("Guardian mode (ON = sensitive kaam ke liye PIN dobara chahiye)")
+                Spacer(modifier = Modifier.padding(4.dp))
+                Switch(checked = guardianMode, onCheckedChange = { value ->
+                    scope.launch {
+                        if (value && !prefs.pinEnabled()) {
+                            note = "Guardian mode ke liye pehle PIN set karo."
+                        } else {
+                            guardianMode = value
+                            prefs.setGuardianMode(value)
+                            note = if (value) "Guardian mode ON ho gaya." else "Guardian mode OFF ho gaya."
+                        }
+                    }
+                })
+            }
+            Text("Voice-match abhi is gate me nahi hai — jab tak aapke consent samples aur model step poora nahi hota, PIN hi gate hai.")
             Spacer(modifier = Modifier.height(12.dp))
             Button(onClick = {
                 scope.launch {

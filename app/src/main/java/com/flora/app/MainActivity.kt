@@ -13,16 +13,17 @@ import com.flora.app.assistant.VoiceEngine
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
 import com.flora.app.data.MemoriesStore
+import com.flora.app.data.SosStore
 import com.flora.app.tools.SearchTools
 import com.flora.app.security.GuardianGate
 import com.flora.app.security.PinVault
 import com.flora.app.ui.FloraApp
 
 /**
- * Flora v0.2 — clean-room rebuild.
- * Chat / Settings / Yaadein / Scan / Tools. Wake-word, Guardian
- * voice-match, Maya Home hardware aur baaki modules alag steps
- * me aayenge — is file me unka koi daava nahi hai.
+ * Flora v0.3 — clean-room rebuild.
+ * Chat / Settings / Yaadein / Scan / Tools / SOS. Guardian mode
+ * PIN-gated hai; voice-match aur Face Lock alag steps me aayenge —
+ * is file me unka koi daava nahi hai.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var voice: VoiceEngine
@@ -49,6 +50,7 @@ class MainActivity : ComponentActivity() {
         val guardian = GuardianGate()
         val memoriesStore = MemoriesStore(applicationContext)
         val searchTools = SearchTools()
+        val sosStore = SosStore(applicationContext)
         setContent {
             FloraApp(
                 prefs = prefs,
@@ -59,6 +61,7 @@ class MainActivity : ComponentActivity() {
                 guardian = guardian,
                 memoriesStore = memoriesStore,
                 searchTools = searchTools,
+                sosStore = sosStore,
                 voiceResult = voiceResult,
                 onMicRequest = {
                     try {

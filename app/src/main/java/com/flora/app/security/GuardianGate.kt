@@ -21,4 +21,13 @@ class GuardianGate {
     }
 
     fun canUnlock(pinEnabled: Boolean): Boolean = pinEnabled && pinVerifiedThisSession
+
+    /**
+     * Sensitive actions (keys, PIN change): when Guardian mode is OFF
+     * they are allowed; when ON they need a PIN verified in this
+     * session. Voice-match is NOT implemented here — PIN is the gate
+     * until the user's consent voice samples + model step is done.
+     */
+    fun canAccessSensitive(pinEnabled: Boolean, guardianMode: Boolean): Boolean =
+        !guardianMode || (pinEnabled && pinVerifiedThisSession)
 }

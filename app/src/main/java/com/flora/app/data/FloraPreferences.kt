@@ -29,6 +29,7 @@ class FloraPreferences(private val context: Context) {
         val GROQ_API_KEY = stringPreferencesKey("groq_api_key")
         val AUTOMATION_CONSENT = booleanPreferencesKey("automation_consent")
         val PIN_ENABLED = booleanPreferencesKey("pin_enabled")
+        val GUARDIAN_MODE = booleanPreferencesKey("guardian_mode")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
     }
@@ -81,6 +82,14 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setPinEnabled(value: Boolean) {
         context.floraDataStore.edit { it[Keys.PIN_ENABLED] = value }
+    }
+
+    /** Guardian mode: OFF by default. ON = sensitive actions need a fresh PIN check. */
+    suspend fun guardianMode(): Boolean =
+        context.floraDataStore.data.map { it[Keys.GUARDIAN_MODE] ?: false }.first()
+
+    suspend fun setGuardianMode(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.GUARDIAN_MODE] = value }
     }
 
     /** Talk seconds used on [today] (yyyy-MM-dd). Rolls over automatically. */
