@@ -1,6 +1,8 @@
 package com.flora.app.ui
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -50,7 +52,7 @@ import com.flora.app.security.GuardianGate
 import com.flora.app.security.PinVault
 import kotlinx.coroutines.launch
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
 
@@ -140,6 +142,10 @@ fun FloraApp(
                 Button(onClick = { screen = Screen.DOCS }) { Text("Docs") }
                 Spacer(modifier = Modifier.padding(4.dp))
                 Button(onClick = { screen = Screen.CONNECT }) { Text("Connect") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = { screen = Screen.PRIVACY }) { Text("Privacy") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = { screen = Screen.TERMS }) { Text("Terms") }
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -318,6 +324,10 @@ fun FloraApp(
                 DocsScreen(docsStore)
             } else if (screen == Screen.CONNECT) {
                 ConnectScreen()
+            } else if (screen == Screen.PRIVACY) {
+                PrivacyScreen()
+            } else if (screen == Screen.TERMS) {
+                TermsScreen()
             } else {
                 ToolsScreen(searchTools)
             }
@@ -380,6 +390,8 @@ private fun SettingsScreen(
     var consent by remember { mutableStateOf(false) }
     var pin by remember { mutableStateOf("") }
     var guardianMode by remember { mutableStateOf(false) }
+    var adminVpa by remember { mutableStateOf("") }
+    var utr by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
@@ -388,6 +400,8 @@ private fun SettingsScreen(
         groqKey = prefs.groqApiKey()
         consent = prefs.automationConsent()
         guardianMode = prefs.guardianMode()
+        adminVpa = prefs.adminUpiVpa()
+        utr = prefs.lastUtr()
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -527,6 +541,48 @@ private fun SettingsScreen(
                     "UTR admin ko verify karwana hoga — tabhi licence active hogi. " +
                     "App khud kabhi payment approve nahi karti."
             )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = adminVpa, onValueChange = { adminVpa = it },
+                label = { Text("Admin UPI VPA (owner yahan apna VPA set karega)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = {
+                scope.launch {
+                    prefs.setAdminUpiVpa(adminVpa.trim())
+                    note = "Admin UPI VPA save ho gaya."
+                }
+            }) { Text("VPA save karo") }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = {
+                scope.launch {
+                    val vpa = prefs.adminUpiVpa()
+                    if (vpa.isBlank()) {
+                        note = "Pehle admin UPI VPA set kijiye, tabhi UPI payment khulega."
+                    } else {
+                        val userId = prefs.userId()
+                        val uri = Uri.parse(
+                            "upi://pay?pa=$vpa&pn=Flora&am=199&cu=INR&tn=FloraPro_$userId"
+                        )
+                        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                        note = "UPI app khul rahi hai — payment ke baad UTR yahan save kijiye."
+                    }
+                }
+            }) { Text("₹199 UPI se pay karo") }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = utr, onValueChange = { utr = it },
+                label = { Text("UTR number (payment ke baad)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = {
+                scope.launch {
+                    prefs.setLastUtr(utr.trim())
+                    note = "UTR save ho gaya (local note). Admin verify karke hi licence active karega — server verification alag step hai."
+                }
+            }) { Text("UTR save karo") }
             Spacer(modifier = Modifier.height(8.dp))
             Text("Data retention: sync/memory 30 din. Licence/payment record alag se rakha jata hai.")
             if (note.isNotEmpty()) {

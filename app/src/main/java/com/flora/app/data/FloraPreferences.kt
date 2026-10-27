@@ -31,6 +31,8 @@ class FloraPreferences(private val context: Context) {
         val PIN_ENABLED = booleanPreferencesKey("pin_enabled")
         val GUARDIAN_MODE = booleanPreferencesKey("guardian_mode")
         val FACE_LOCK = booleanPreferencesKey("face_lock")
+        val ADMIN_UPI_VPA = stringPreferencesKey("admin_upi_vpa")
+        val LAST_UTR = stringPreferencesKey("last_utr")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
     }
@@ -99,6 +101,22 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setFaceLock(value: Boolean) {
         context.floraDataStore.edit { it[Keys.FACE_LOCK] = value }
+    }
+
+    /** Admin UPI VPA (owner enters it; customers pay to this VPA). Empty = not set yet. */
+    suspend fun adminUpiVpa(): String =
+        context.floraDataStore.data.map { it[Keys.ADMIN_UPI_VPA] ?: "" }.first()
+
+    suspend fun setAdminUpiVpa(value: String) {
+        context.floraDataStore.edit { it[Keys.ADMIN_UPI_VPA] = value }
+    }
+
+    /** Last UTR the user entered for Pro activation (local note only; admin verifies it). */
+    suspend fun lastUtr(): String =
+        context.floraDataStore.data.map { it[Keys.LAST_UTR] ?: "" }.first()
+
+    suspend fun setLastUtr(value: String) {
+        context.floraDataStore.edit { it[Keys.LAST_UTR] = value }
     }
 
     /** Talk seconds used on [today] (yyyy-MM-dd). Rolls over automatically. */

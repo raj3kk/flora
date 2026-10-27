@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Flora v0.8 manifest — behaviour-based, no creator manifest copy.
+<!-- Flora v0.9 manifest — behaviour-based, no creator manifest copy.
      CALL_PHONE / SEND_SMS sirf confirmed automation ke liye hain:
      ek baar bolo + ek confirmation, phir poora execution. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">

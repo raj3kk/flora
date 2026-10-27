@@ -21,9 +21,8 @@ import com.flora.app.security.PinVault
 import com.flora.app.ui.FloraApp
 
 /**
- * Flora v0.8 — clean-room rebuild.
- * Audit + confirmed-automation upgrade: ek baar bolo + ek confirmation,
- * phir poora execution, bolte hue commentary, beech me rukna nahi.
+ * Flora v0.9 — clean-room rebuild.
+ * Privacy/Terms screens + UPI Pro payment (deep link + UTR note).
  * Unlock hamesha PIN se hota hai; identity Face Lock alag step hai —
  * is file me uska koi daava nahi hai.
  */
