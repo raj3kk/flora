@@ -39,6 +39,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.flora.app.assistant.BrainClient
 import com.flora.app.assistant.VoiceEngine
+import com.flora.app.automation.AppLauncher
 import com.flora.app.automation.AutoActions
 import com.flora.app.core.FloraConfig
 import com.flora.app.data.FloraPreferences
@@ -52,7 +53,7 @@ import com.flora.app.security.GuardianGate
 import com.flora.app.security.PinVault
 import kotlinx.coroutines.launch
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
 
@@ -83,6 +84,7 @@ fun FloraApp(
     var lockNote by remember { mutableStateOf("") }
     var voiceCallConfirm by remember { mutableStateOf<String?>(null) }
     var voiceSmsConfirm by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var voiceAppConfirm by remember { mutableStateOf<com.flora.app.automation.LaunchableApp?>(null) }
     var pendingVoiceCallRequest by remember { mutableStateOf<String?>(null) }
     var pendingVoiceSmsRequest by remember { mutableStateOf<Pair<String, String>?>(null) }
     val appContext = LocalContext.current
@@ -146,6 +148,8 @@ fun FloraApp(
                 Button(onClick = { screen = Screen.PRIVACY }) { Text("Privacy") }
                 Spacer(modifier = Modifier.padding(4.dp))
                 Button(onClick = { screen = Screen.TERMS }) { Text("Terms") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = { screen = Screen.AUTO }) { Text("Auto") }
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -259,6 +263,56 @@ fun FloraApp(
                                 }
                                 return@Button
                             }
+                            // Voice: "open <app>" / "kholo <app>" — ek confirmation, phir app khul jayegi.
+                            if (lower.startsWith("open ") || lower.startsWith("kholo ")) {
+                                val name = question.substringAfter(" ").trim()
+                                input = ""
+                                val matches = AppLauncher.findByName(appContext, name)
+                                when {
+                                    matches.isEmpty() -> {
+                                        val msg = "'$name' naam ki app nahi mili, naam dobara boliye."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    }
+                                    matches.size == 1 -> {
+                                        val app = matches[0]
+                                        messages = messages + ChatMsg(
+                                            "Flora: Theek hai, ${app.label} khol raha hun — ek baar confirm kijiye.", false
+                                        )
+                                        voice.speak("Theek hai, ${app.label} khol raha hun, ek baar confirm kijiye.")
+                                        voiceAppConfirm = app
+                                    }
+                                    else -> {
+                                        val names = matches.take(3).joinToString(", ") { it.label }
+                                        val msg = "Ek se zyada app mili: $names. Poora naam boliye ya Auto screen se chuniye."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    }
+                                }
+                                return@Button
+                            }
+                            // Voice: "chrome me <site> kholo" / "website kholo <site>".
+                            if (lower.startsWith("chrome me ") || lower.startsWith("website kholo ") ||
+                                lower.startsWith("website ")
+                            ) {
+                                val site = question.substringAfter("kholo", "")
+                                    .trim().ifEmpty { question.substringAfter("me", "").trim() }
+                                input = ""
+                                if (site.isBlank()) {
+                                    val msg = "Kaun si website kholu? Naam boliye, jaise 'chrome me example.com kholo'."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else if (AppLauncher.openWebsite(appContext, site)) {
+                                    val msg = "$site khol raha hun."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else {
+                                    val msg = "Website nahi khul payi."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                }
+                                return@Button
+                            }
                             // Voice navigation: bolte hi screen khul jayegi, beech me koi
                             // step nahi rukega. "photo lo" / "sos bhejo" / "yaadein kholo".
                             if (lower == "photo lo" || lower == "scan karo" || lower == "camera kholo") {
@@ -328,6 +382,8 @@ fun FloraApp(
                 PrivacyScreen()
             } else if (screen == Screen.TERMS) {
                 TermsScreen()
+            } else if (screen == Screen.AUTO) {
+                AutoScreen(voice)
             } else {
                 ToolsScreen(searchTools)
             }
@@ -367,6 +423,25 @@ fun FloraApp(
                     },
                     dismissButton = {
                         TextButton(onClick = { voiceSmsConfirm = null }) { Text("Ruko") }
+                    }
+                )
+            }
+            voiceAppConfirm?.let { app ->
+                AlertDialog(
+                    onDismissRequest = { voiceAppConfirm = null },
+                    title = { Text("App kholu?") },
+                    text = { Text("${app.label} kholna hai?") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            voiceAppConfirm = null
+                            val ok = AppLauncher.launch(appContext, app.packageName)
+                            val msg = if (ok) "${app.label} khol diya." else "${app.label} nahi khul paya."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        }) { Text("Haan, kholo") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { voiceAppConfirm = null }) { Text("Ruko") }
                     }
                 )
             }
