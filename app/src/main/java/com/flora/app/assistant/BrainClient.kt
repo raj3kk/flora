@@ -12,58 +12,91 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 
 /**
- * Brain lane: Gemini (user's own free-tier key, entered in Settings)
- * first, honest local fallback second. No key is bundled with the app.
- * No answer is ever invented as a "server reply" — a failed call says so.
+ * Brain lane order: Gemini (user's free-tier key) first, then Groq
+ * (user's key) as backup, then an honest message. No key is bundled
+ * with the app. A failed lane returns null internally so the next
+ * lane can try; only the final message reaches the user.
  */
 class BrainClient(private val prefs: FloraPreferences) {
 
     suspend fun ask(prompt: String): String = withContext(Dispatchers.IO) {
-        val key = prefs.geminiApiKey()
-        if (key.isEmpty()) {
-            return@withContext "Gemini key abhi set nahi hai. Settings me apni free Gemini key daaliye, " +
-                "tab main poora jawab de paungi. Tab tak: aapka message mil gaya — \"$prompt\"."
-        }
-        try {
-            val url = URL(
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$key"
-            )
-            val conn = url.openConnection() as HttpURLConnection
-            try {
-                conn.requestMethod = "POST"
-                conn.connectTimeout = 20_000
-                conn.readTimeout = 30_000
-                conn.doOutput = true
-                conn.setRequestProperty("Content-Type", "application/json")
-                val body = JSONObject()
-                    .put("contents", JSONArray().put(
-                        JSONObject().put("parts", JSONArray().put(
-                            JSONObject().put(
-                                "text",
-                                "Tum Flora ho, ek friendly aur professional AI assistant. " +
-                                    "Hindi/English mix me, chhota aur saaf jawab do. Sawal: $prompt"
-                            )
-                        ))
-                    ))
-                conn.outputStream.use { it.write(body.toString().toByteArray(StandardCharsets.UTF_8)) }
-                val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
-                val text = BufferedReader(InputStreamReader(stream, StandardCharsets.UTF_8)).readText()
-                if (conn.responseCode !in 200..299) {
-                    return@withContext "Gemini se jawab nahi mila (server error). Key ya network check karke dobara koshish kijiye."
-                }
-                val candidates = JSONObject(text).optJSONArray("candidates")
-                val reply = candidates?.optJSONObject(0)
-                    ?.optJSONObject("content")
-                    ?.optJSONArray("parts")
-                    ?.optJSONObject(0)
-                    ?.optString("text", "")
-                    .orEmpty()
-                if (reply.isBlank()) "Gemini ne khaali jawab diya, dobara koshish kijiye." else reply
-            } finally {
-                conn.disconnect()
-            }
+        val geminiKey = prefs.geminiApiKey()
+        val groqKey = prefs.groqApiKey()
+        geminiAsk(prompt, geminiKey) ?: groqAsk(prompt, groqKey)
+            ?: "Dono brain lane nahi chale. Settings me apni free Gemini key " +
+                "ya Groq key daaliye, phir dobara koshish kijiye."
+    }
+
+    private fun postJson(urlText: String, body: JSONObject, authHeader: String?): String? {
+        val conn = URL(urlText).openConnection() as HttpURLConnection
+        return try {
+            conn.requestMethod = "POST"
+            conn.connectTimeout = 20_000
+            conn.readTimeout = 30_000
+            conn.doOutput = true
+            conn.setRequestProperty("Content-Type", "application/json")
+            if (authHeader != null) conn.setRequestProperty("Authorization", authHeader)
+            conn.outputStream.use { it.write(body.toString().toByteArray(StandardCharsets.UTF_8)) }
+            val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
+            val text = BufferedReader(InputStreamReader(stream, StandardCharsets.UTF_8)).readText()
+            if (conn.responseCode !in 200..299) null else text
         } catch (e: Exception) {
-            "Network ya server ki dikkat se jawab nahi mila. Dobara koshish kijiye."
+            null
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    private fun geminiAsk(prompt: String, key: String): String? {
+        if (key.isEmpty()) return null
+        val body = JSONObject()
+            .put("contents", JSONArray().put(
+                JSONObject().put("parts", JSONArray().put(
+                    JSONObject().put(
+                        "text",
+                        "Tum Flora ho, ek friendly aur professional AI assistant. " +
+                            "Hindi/English mix me, chhota aur saaf jawab do. Sawal: $prompt"
+                    )
+                ))
+            ))
+        val text = postJson(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$key",
+            body, null
+        ) ?: return null
+        return try {
+            val reply = JSONObject(text).optJSONArray("candidates")
+                ?.optJSONObject(0)?.optJSONObject("content")
+                ?.optJSONArray("parts")?.optJSONObject(0)?.optString("text", "")
+                .orEmpty()
+            reply.ifBlank { null }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun groqAsk(prompt: String, key: String): String? {
+        if (key.isEmpty()) return null
+        val body = JSONObject()
+            .put("model", "llama-3.1-8b-instant")
+            .put("messages", JSONArray()
+                .put(JSONObject().put("role", "system").put(
+                    "content",
+                    "Tum Flora ho, ek friendly aur professional AI assistant. " +
+                        "Hindi/English mix me, chhota aur saaf jawab do."
+                ))
+                .put(JSONObject().put("role", "user").put("content", prompt))
+            )
+        val text = postJson(
+            "https://api.groq.com/openai/v1/chat/completions",
+            body, "Bearer $key"
+        ) ?: return null
+        return try {
+            val reply = JSONObject(text).optJSONArray("choices")
+                ?.optJSONObject(0)?.optJSONObject("message")?.optString("content", "")
+                .orEmpty()
+            reply.ifBlank { null }
+        } catch (e: Exception) {
+            null
         }
     }
 }

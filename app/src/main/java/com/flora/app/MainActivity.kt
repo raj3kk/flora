@@ -12,14 +12,16 @@ import com.flora.app.assistant.BrainClient
 import com.flora.app.assistant.VoiceEngine
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
+import com.flora.app.data.MemoriesStore
+import com.flora.app.tools.SearchTools
 import com.flora.app.security.GuardianGate
 import com.flora.app.security.PinVault
 import com.flora.app.ui.FloraApp
 
 /**
- * Flora v0.1 — clean-room rebuild.
- * Home / Chat / Settings only. Wake-word, Guardian voice-match,
- * Scan, Memories, Maya Home hardware aur baaki modules alag steps
+ * Flora v0.2 — clean-room rebuild.
+ * Chat / Settings / Yaadein / Scan / Tools. Wake-word, Guardian
+ * voice-match, Maya Home hardware aur baaki modules alag steps
  * me aayenge — is file me unka koi daava nahi hai.
  */
 class MainActivity : ComponentActivity() {
@@ -45,6 +47,8 @@ class MainActivity : ComponentActivity() {
         val licenceClient = LicenceClient(prefs)
         val pinVault = PinVault(applicationContext)
         val guardian = GuardianGate()
+        val memoriesStore = MemoriesStore(applicationContext)
+        val searchTools = SearchTools()
         setContent {
             FloraApp(
                 prefs = prefs,
@@ -53,6 +57,8 @@ class MainActivity : ComponentActivity() {
                 licenceClient = licenceClient,
                 pinVault = pinVault,
                 guardian = guardian,
+                memoriesStore = memoriesStore,
+                searchTools = searchTools,
                 voiceResult = voiceResult,
                 onMicRequest = {
                     try {

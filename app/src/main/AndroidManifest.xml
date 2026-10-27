@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Flora v0.1 manifest — behaviour-based, no creator manifest copy.
-     Permissions MINIMAL hain; har module ki permission uske spec ke
-     hisaab se tab jodegi jab wo module banega. Sensitive permissions
-     (WRITE_SECURE_SETTINGS, INSTALL/DELETE_PACKAGES, DISABLE_KEYGUARD)
-     default me NAHI hain. -->
+<!-- Flora v0.2 manifest — behaviour-based, no creator manifest copy.
+     CAMERA sirf Scan screen ke liye hai, user ke permission ke baad hi
+     chalega. Sensitive permissions (WRITE_SECURE_SETTINGS,
+     INSTALL/DELETE_PACKAGES, DISABLE_KEYGUARD) default me NAHI hain. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />

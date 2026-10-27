@@ -26,6 +26,7 @@ class FloraPreferences(private val context: Context) {
         val DEVICE_ID = stringPreferencesKey("device_id")
         val SUPABASE_ANON_KEY = stringPreferencesKey("supabase_anon_key")
         val GEMINI_API_KEY = stringPreferencesKey("gemini_api_key")
+        val GROQ_API_KEY = stringPreferencesKey("groq_api_key")
         val AUTOMATION_CONSENT = booleanPreferencesKey("automation_consent")
         val PIN_ENABLED = booleanPreferencesKey("pin_enabled")
         val TALK_DATE = stringPreferencesKey("talk_date")
@@ -59,6 +60,13 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setGeminiApiKey(value: String) {
         context.floraDataStore.edit { it[Keys.GEMINI_API_KEY] = value }
+    }
+
+    suspend fun groqApiKey(): String =
+        context.floraDataStore.data.map { it[Keys.GROQ_API_KEY] ?: "" }.first()
+
+    suspend fun setGroqApiKey(value: String) {
+        context.floraDataStore.edit { it[Keys.GROQ_API_KEY] = value }
     }
 
     suspend fun automationConsent(): Boolean =

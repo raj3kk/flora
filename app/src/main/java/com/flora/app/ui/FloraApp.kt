@@ -36,11 +36,13 @@ import com.flora.app.core.FloraConfig
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
 import com.flora.app.data.LicenceStatus
+import com.flora.app.data.MemoriesStore
+import com.flora.app.tools.SearchTools
 import com.flora.app.security.GuardianGate
 import com.flora.app.security.PinVault
 import kotlinx.coroutines.launch
 
-private enum class Screen { CHAT, SETTINGS }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
 
@@ -53,6 +55,8 @@ fun FloraApp(
     licenceClient: LicenceClient,
     pinVault: PinVault,
     guardian: GuardianGate,
+    memoriesStore: MemoriesStore,
+    searchTools: SearchTools,
     voiceResult: MutableState<String>,
     onMicRequest: () -> Unit,
 ) {
@@ -83,6 +87,13 @@ fun FloraApp(
                 Button(onClick = { screen = Screen.CHAT }) { Text("Chat") }
                 Spacer(modifier = Modifier.padding(4.dp))
                 Button(onClick = { screen = Screen.SETTINGS }) { Text("Settings") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = { screen = Screen.MEMORIES }) { Text("Yaadein") }
+            }
+            Row {
+                Button(onClick = { screen = Screen.SCAN }) { Text("Scan") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = { screen = Screen.TOOLS }) { Text("Tools") }
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -135,10 +146,16 @@ fun FloraApp(
                     "Note: screen, camera aur calls sirf tab jab aap khud kahein — " +
                         "kabhi chupke se record nahi hota. Automation ke liye Settings me consent ON karna hoga."
                 )
-            } else {
+            } else if (screen == Screen.SETTINGS) {
                 SettingsScreen(prefs, licenceClient, pinVault, guardian) { status ->
                     licence = status
                 }
+            } else if (screen == Screen.MEMORIES) {
+                MemoriesScreen(memoriesStore)
+            } else if (screen == Screen.SCAN) {
+                ScanScreen()
+            } else {
+                ToolsScreen(searchTools)
             }
         }
     }
@@ -156,6 +173,7 @@ private fun SettingsScreen(
     val context = LocalContext.current
     var anonKey by remember { mutableStateOf("") }
     var geminiKey by remember { mutableStateOf("") }
+    var groqKey by remember { mutableStateOf("") }
     var consent by remember { mutableStateOf(false) }
     var pin by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
@@ -163,6 +181,7 @@ private fun SettingsScreen(
     LaunchedEffect(Unit) {
         anonKey = prefs.supabaseAnonKey()
         geminiKey = prefs.geminiApiKey()
+        groqKey = prefs.groqApiKey()
         consent = prefs.automationConsent()
     }
 
@@ -184,10 +203,18 @@ private fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = groqKey, onValueChange = { groqKey = it },
+                label = { Text("Groq API key (backup brain, free tier)") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = {
                 scope.launch {
                     prefs.setSupabaseAnonKey(anonKey.trim())
                     prefs.setGeminiApiKey(geminiKey.trim())
+                    prefs.setGroqApiKey(groqKey.trim())
                     note = "Keys is phone par save ho gayi."
                 }
             }) { Text("Keys save karo") }
