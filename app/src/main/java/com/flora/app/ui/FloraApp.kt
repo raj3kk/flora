@@ -44,7 +44,7 @@ import com.flora.app.security.GuardianGate
 import com.flora.app.security.PinVault
 import kotlinx.coroutines.launch
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
 
@@ -115,6 +115,8 @@ fun FloraApp(
                 Button(onClick = { screen = Screen.FACE }) { Text("Face") }
                 Spacer(modifier = Modifier.padding(4.dp))
                 Button(onClick = { screen = Screen.DOCS }) { Text("Docs") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = { screen = Screen.CONNECT }) { Text("Connect") }
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -209,6 +211,8 @@ fun FloraApp(
                 FaceScreen()
             } else if (screen == Screen.DOCS) {
                 DocsScreen(docsStore)
+            } else if (screen == Screen.CONNECT) {
+                ConnectScreen()
             } else {
                 ToolsScreen(searchTools)
             }

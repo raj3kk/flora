@@ -21,10 +21,10 @@ import com.flora.app.security.PinVault
 import com.flora.app.ui.FloraApp
 
 /**
- * Flora v0.5 — clean-room rebuild.
- * Chat / Settings / Yaadein / Scan / Tools / SOS / Face (presence) / Docs.
- * Unlock hamesha PIN se hota hai; identity Face Lock alag step hai —
- * is file me uska koi daava nahi hai.
+ * Flora v0.6 — clean-room rebuild.
+ * Chat / Settings / Yaadein / Scan / Tools / SOS / Face (presence) /
+ * Docs / Connect. Unlock hamesha PIN se hota hai; identity Face Lock
+ * alag step hai — is file me uska koi daava nahi hai.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var voice: VoiceEngine
