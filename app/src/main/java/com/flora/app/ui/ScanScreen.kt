@@ -1,16 +1,22 @@
 package com.flora.app.ui
 
 import android.Manifest
+import android.content.ContentValues
 import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
@@ -25,14 +31,20 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.flora.app.assistant.VoiceEngine
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
- * Scan screen: real CameraX preview, shown only after the user grants
- * the camera permission himself. Nothing is captured, saved, or sent
- * from this screen in v0.2 — preview only, honestly labelled.
+ * Scan screen (v0.8 audit upgrade): pehle sirf preview tha — ab
+ * "Photo lo" dabate hi photo capture + Pictures/Flora me save hoti
+ * hai, bolte hue confirmation ke saath. Button dabana hi ek
+ * confirmation hai; capture ke baad koi doosra step nahi rukta.
+ * Koi photo server par nahi bheji jaati.
  */
 @Composable
-fun ScanScreen() {
+fun ScanScreen(voice: VoiceEngine) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var granted by remember {
@@ -42,6 +54,8 @@ fun ScanScreen() {
         )
     }
     var bound by remember { mutableStateOf(false) }
+    var capture by remember { mutableStateOf<ImageCapture?>(null) }
+    var note by remember { mutableStateOf("") }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -67,11 +81,14 @@ fun ScanScreen() {
                                 val provider = providerFuture.get()
                                 val preview = Preview.Builder().build()
                                 preview.setSurfaceProvider(view.surfaceProvider)
+                                val imageCapture = ImageCapture.Builder().build()
+                                capture = imageCapture
                                 provider.unbindAll()
                                 provider.bindToLifecycle(
                                     lifecycleOwner,
                                     CameraSelector.DEFAULT_BACK_CAMERA,
-                                    preview
+                                    preview,
+                                    imageCapture
                                 )
                                 bound = true
                             } catch (e: Exception) {
@@ -80,9 +97,48 @@ fun ScanScreen() {
                         }, ContextCompat.getMainExecutor(context))
                     }
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.weight(1f).fillMaxWidth()
             )
-            Text("Camera preview only — v0.2 me photo capture/save nahi hota.")
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = {
+                val imageCapture = capture
+                if (imageCapture == null) {
+                    note = "Camera abhi taiyaar nahi hai, ek second ruk kar dobara dabaiye."
+                    return@Button
+                }
+                val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, "Flora_$stamp.jpg")
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Flora")
+                    }
+                }
+                val options = ImageCapture.OutputFileOptions.Builder(
+                    context.contentResolver,
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    values
+                ).build()
+                imageCapture.takePicture(
+                    options,
+                    ContextCompat.getMainExecutor(context),
+                    object : ImageCapture.OnImageSavedCallback {
+                        override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                            note = "Photo save ho gayi: Pictures/Flora me."
+                            voice.speak("Photo save ho gayi.")
+                        }
+
+                        override fun onError(exception: ImageCaptureException) {
+                            note = "Photo save nahi hui, dobara koshish kijiye."
+                            voice.speak("Photo save nahi hui.")
+                        }
+                    }
+                )
+            }) { Text("Photo lo (capture + save)") }
+            if (note.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(note)
+            }
         }
     }
 }

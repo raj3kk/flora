@@ -253,6 +253,32 @@ fun FloraApp(
                                 }
                                 return@Button
                             }
+                            // Voice navigation: bolte hi screen khul jayegi, beech me koi
+                            // step nahi rukega. "photo lo" / "sos bhejo" / "yaadein kholo".
+                            if (lower == "photo lo" || lower == "scan karo" || lower == "camera kholo") {
+                                input = ""
+                                screen = Screen.SCAN
+                                val msg = "Scan khol raha hun, Photo lo dabate hi photo save ho jayegi."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                                return@Button
+                            }
+                            if (lower == "sos" || lower == "sos bhejo" || lower == "madad") {
+                                input = ""
+                                screen = Screen.SOS
+                                val msg = "SOS khol raha hun, Auto SOS se ek confirmation me call aur SMS dono ho jayenge."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                                return@Button
+                            }
+                            if (lower == "yaadein kholo" || lower == "memories kholo") {
+                                input = ""
+                                screen = Screen.MEMORIES
+                                val msg = "Yaadein khol raha hun."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                                return@Button
+                            }
                             messages = messages + ChatMsg(question, true)
                             input = ""
                             busy = true
@@ -283,7 +309,7 @@ fun FloraApp(
             } else if (screen == Screen.MEMORIES) {
                 MemoriesScreen(memoriesStore)
             } else if (screen == Screen.SCAN) {
-                ScanScreen()
+                ScanScreen(voice)
             } else if (screen == Screen.SOS) {
                 SosScreen(sosStore)
             } else if (screen == Screen.FACE) {
