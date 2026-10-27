@@ -36,6 +36,7 @@ import com.flora.app.core.FloraConfig
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
 import com.flora.app.data.LicenceStatus
+import com.flora.app.data.DocsStore
 import com.flora.app.data.MemoriesStore
 import com.flora.app.data.SosStore
 import com.flora.app.tools.SearchTools
@@ -43,7 +44,7 @@ import com.flora.app.security.GuardianGate
 import com.flora.app.security.PinVault
 import kotlinx.coroutines.launch
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
 
@@ -59,6 +60,7 @@ fun FloraApp(
     memoriesStore: MemoriesStore,
     searchTools: SearchTools,
     sosStore: SosStore,
+    docsStore: DocsStore,
     voiceResult: MutableState<String>,
     onMicRequest: () -> Unit,
 ) {
@@ -111,6 +113,8 @@ fun FloraApp(
                 Button(onClick = { screen = Screen.SOS }) { Text("SOS") }
                 Spacer(modifier = Modifier.padding(4.dp))
                 Button(onClick = { screen = Screen.FACE }) { Text("Face") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = { screen = Screen.DOCS }) { Text("Docs") }
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -203,6 +207,8 @@ fun FloraApp(
                 SosScreen(sosStore)
             } else if (screen == Screen.FACE) {
                 FaceScreen()
+            } else if (screen == Screen.DOCS) {
+                DocsScreen(docsStore)
             } else {
                 ToolsScreen(searchTools)
             }

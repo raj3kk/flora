@@ -85,7 +85,7 @@ fun MemoriesScreen(store: MemoriesStore) {
     }
 }
 
-/** Tools: no-key search + weather. Honest errors, never invented data. */
+/** Tools: no-key search + weather + currency + dictionary. Honest errors, never invented data. */
 @Composable
 fun ToolsScreen(tools: SearchTools) {
     val scope = rememberCoroutineScope()
@@ -93,6 +93,12 @@ fun ToolsScreen(tools: SearchTools) {
     var searchResult by remember { mutableStateOf("") }
     var city by remember { mutableStateOf("") }
     var weatherResult by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("100") }
+    var fromCode by remember { mutableStateOf("USD") }
+    var toCode by remember { mutableStateOf("INR") }
+    var currencyResult by remember { mutableStateOf("") }
+    var word by remember { mutableStateOf("") }
+    var wordResult by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -145,6 +151,73 @@ fun ToolsScreen(tools: SearchTools) {
             if (weatherResult.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(weatherResult)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Currency converter (Frankfurter, bina key)")
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = amount, onValueChange = { amount = it },
+                label = { Text("Amount") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row {
+                OutlinedTextField(
+                    value = fromCode, onValueChange = { fromCode = it },
+                    label = { Text("From (USD)") },
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.padding(4.dp))
+                OutlinedTextField(
+                    value = toCode, onValueChange = { toCode = it },
+                    label = { Text("To (INR)") },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    val value = amount.toDoubleOrNull()
+                    if (value != null && !busy) {
+                        busy = true
+                        scope.launch {
+                            currencyResult = tools.convertCurrency(value, fromCode, toCode)
+                            busy = false
+                        }
+                    } else {
+                        currencyResult = "Sahi amount likhiye (sirf number)."
+                    }
+                },
+                enabled = !busy
+            ) { Text("Convert karo") }
+            if (currencyResult.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(currencyResult)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Dictionary — English shabd ka matlab (bina key)")
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = word, onValueChange = { word = it },
+                label = { Text("English word") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    if (word.isNotBlank() && !busy) {
+                        busy = true
+                        scope.launch {
+                            wordResult = tools.defineWord(word.trim())
+                            busy = false
+                        }
+                    }
+                },
+                enabled = !busy
+            ) { Text("Matlab dekho") }
+            if (wordResult.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(wordResult)
             }
         }
     }

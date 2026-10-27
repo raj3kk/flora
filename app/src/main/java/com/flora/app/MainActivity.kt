@@ -12,6 +12,7 @@ import com.flora.app.assistant.BrainClient
 import com.flora.app.assistant.VoiceEngine
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
+import com.flora.app.data.DocsStore
 import com.flora.app.data.MemoriesStore
 import com.flora.app.data.SosStore
 import com.flora.app.tools.SearchTools
@@ -20,8 +21,8 @@ import com.flora.app.security.PinVault
 import com.flora.app.ui.FloraApp
 
 /**
- * Flora v0.4 — clean-room rebuild.
- * Chat / Settings / Yaadein / Scan / Tools / SOS / Face (presence).
+ * Flora v0.5 — clean-room rebuild.
+ * Chat / Settings / Yaadein / Scan / Tools / SOS / Face (presence) / Docs.
  * Unlock hamesha PIN se hota hai; identity Face Lock alag step hai —
  * is file me uska koi daava nahi hai.
  */
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
         val memoriesStore = MemoriesStore(applicationContext)
         val searchTools = SearchTools()
         val sosStore = SosStore(applicationContext)
+        val docsStore = DocsStore(applicationContext)
         setContent {
             FloraApp(
                 prefs = prefs,
@@ -62,6 +64,7 @@ class MainActivity : ComponentActivity() {
                 memoriesStore = memoriesStore,
                 searchTools = searchTools,
                 sosStore = sosStore,
+                docsStore = docsStore,
                 voiceResult = voiceResult,
                 onMicRequest = {
                     try {

@@ -2,6 +2,7 @@ package com.flora.app.tools
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -10,9 +11,10 @@ import java.net.URL
 import java.net.URLEncoder
 
 /**
- * No-key tools: DuckDuckGo instant answer + Open-Meteo weather.
- * No API key is needed or used for either. A failed call returns an
- * honest error string, never an invented answer.
+ * No-key tools: DuckDuckGo instant answer, Open-Meteo weather,
+ * Frankfurter currency rates, free Dictionary API.
+ * No API key is needed or used for any of them. A failed call
+ * returns an honest error string, never an invented answer.
  */
 class SearchTools {
 
@@ -22,7 +24,7 @@ class SearchTools {
             conn.requestMethod = "GET"
             conn.connectTimeout = 15_000
             conn.readTimeout = 20_000
-            conn.setRequestProperty("User-Agent", "Flora/0.2")
+            conn.setRequestProperty("User-Agent", "Flora/0.5")
             if (conn.responseCode !in 200..299) return null
             BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).readText()
         } catch (e: Exception) {
@@ -78,6 +80,44 @@ class SearchTools {
             "$name, $country — abhi $temp°C, humidity $humidity%, hawa $wind km/h."
         } catch (e: Exception) {
             "Mausam ka jawab samajh nahi aaya, dobara koshish kijiye."
+        }
+    }
+
+    suspend fun convertCurrency(amount: Double, from: String, to: String): String =
+        withContext(Dispatchers.IO) {
+            val fromCode = from.trim().uppercase()
+            val toCode = to.trim().uppercase()
+            if (fromCode.isEmpty() || toCode.isEmpty() || fromCode.length != 3 || toCode.length != 3) {
+                return@withContext "Currency code 3 akshar ka likhiye, jaise USD, INR, EUR."
+            }
+            val text = get("https://api.frankfurter.app/latest?amount=$amount&from=$fromCode&to=$toCode")
+                ?: return@withContext "Currency rate nahi mil paya — network ya server ki dikkat hai."
+            try {
+                val rates = JSONObject(text).optJSONObject("rates")
+                val converted = rates?.optDouble(toCode, Double.NaN) ?: Double.NaN
+                if (converted.isNaN()) return@withContext "Ye currency pair nahi mila, code check kijiye."
+                "$amount $fromCode = $converted $toCode (aaj ka rate, Frankfurter API)"
+            } catch (e: Exception) {
+                "Currency ka jawab samajh nahi aaya, dobara koshish kijiye."
+            }
+        }
+
+    suspend fun defineWord(word: String): String = withContext(Dispatchers.IO) {
+        val encoded = URLEncoder.encode(word.trim(), "UTF-8")
+        val text = get("https://api.dictionaryapi.dev/api/v2/entries/en/$encoded")
+            ?: return@withContext "Shabd ka matlab nahi mil paya — network ya server ki dikkat hai."
+        try {
+            val entry = JSONArray(text).optJSONObject(0)
+                ?: return@withContext "Ye shabd dictionary me nahi mila."
+            val meanings = entry.optJSONArray("meanings")
+            val firstMeaning = meanings?.optJSONObject(0)
+            val defs = firstMeaning?.optJSONArray("definitions")
+            val definition = defs?.optJSONObject(0)?.optString("definition", "")
+            if (definition.isNullOrBlank()) return@withContext "Is shabd ka matlab nahi mila."
+            val part = firstMeaning?.optString("partOfSpeech", "") ?: ""
+            "${word.trim()} ($part): $definition"
+        } catch (e: Exception) {
+            "Ye shabd dictionary me nahi mila, spelling check kijiye."
         }
     }
 }
