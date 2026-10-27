@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Flora v0.6 manifest — behaviour-based, no creator manifest copy.
-     CAMERA sirf Scan screen ke liye hai, user ke permission ke baad hi
-     chalega. Sensitive permissions (WRITE_SECURE_SETTINGS,
-     INSTALL/DELETE_PACKAGES, DISABLE_KEYGUARD) default me NAHI hain. -->
+<!-- Flora v0.7 manifest — behaviour-based, no creator manifest copy.
+     CALL_PHONE / SEND_SMS sirf confirmed automation ke liye hain:
+     ek baar bolo + ek confirmation, phir poora execution. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />

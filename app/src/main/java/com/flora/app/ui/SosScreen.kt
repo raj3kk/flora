@@ -1,8 +1,10 @@
 package com.flora.app.ui
 
+import android.Manifest
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.layout.Column
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,16 +28,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.flora.app.automation.AutoActions
 import com.flora.app.data.SosStore
 import kotlinx.coroutines.launch
 
 /**
  * SOS screen: up to 3 emergency contacts, stored on-device only.
- * SOS button asks for confirmation, then opens the dialer for the
- * first contact AND an SMS draft with a help message — the user
- * presses Call / Send themselves. The app never calls, texts,
- * records, or tracks silently. Face Lock / Guardian voice-match
- * are separate later steps; nothing here claims them.
+ * Manual SOS asks confirmation, then opens dialer + SMS draft.
+ * Auto SOS (v0.7, confirmed automation) asks ONE confirmation,
+ * then places a direct call AND sends a direct SMS — no draft,
+ * no manual step. Nothing runs without that confirmation, and
+ * Auto SOS needs CALL_PHONE + SEND_SMS granted once by the user.
  */
 @Composable
 fun SosScreen(sosStore: SosStore) {
@@ -46,6 +49,19 @@ fun SosScreen(sosStore: SosStore) {
     var number by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var confirmSos by remember { mutableStateOf(false) }
+    var confirmAutoSos by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        if (grants[Manifest.permission.CALL_PHONE] == true &&
+            grants[Manifest.permission.SEND_SMS] == true
+        ) {
+            confirmAutoSos = true
+        } else {
+            note = "Auto SOS ke liye call + SMS permission chahiye — manual SOS button use kijiye."
+        }
+    }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
@@ -78,11 +94,25 @@ fun SosScreen(sosStore: SosStore) {
             Button(
                 onClick = { confirmSos = true },
                 enabled = contacts.isNotEmpty()
-            ) { Text("SOS — Madad mangao") }
+            ) { Text("SOS — Madad mangao (manual dialer/SMS draft)") }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    if (!AutoActions.hasCallPermission(context) ||
+                        !AutoActions.hasSmsPermission(context)
+                    ) {
+                        permissionLauncher.launch(
+                            arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.SEND_SMS)
+                        )
+                    } else {
+                        confirmAutoSos = true
+                    }
+                },
+                enabled = contacts.isNotEmpty()
+            ) { Text("Auto SOS — ek confirmation, seedha call + SMS") }
             Text(
-                "SOS dabane par pehle confirmation poochi jayegi, phir dialer aur " +
-                    "SMS draft khulenge — Call / Send aap khud dabayenge. App chupke " +
-                    "se call ya message kabhi nahi karti."
+                "Auto SOS: confirm karne par pehle contact ko seedha call lagegi aur " +
+                    "SMS bhi seedha jayega — koi draft nahi. Manual SOS me dialer/SMS draft khulta hai."
             )
             if (note.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -126,6 +156,35 @@ fun SosScreen(sosStore: SosStore) {
             },
             dismissButton = {
                 TextButton(onClick = { confirmSos = false }) { Text("Ruko") }
+            }
+        )
+    }
+
+    if (confirmAutoSos && contacts.isNotEmpty()) {
+        val first = contacts[0]
+        AlertDialog(
+            onDismissRequest = { confirmAutoSos = false },
+            title = { Text("Auto SOS bhejna hai?") },
+            text = {
+                Text(
+                    "${first.name} (${first.number}) ko seedha call lagegi aur " +
+                        "SMS bhi seedha jayega. Confirm karne par dono ho jayenge."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmAutoSos = false
+                    val called = AutoActions.placeCall(context, first.number)
+                    val texted = AutoActions.sendSms(
+                        context, first.number,
+                        "Flora SOS: mujhe madad chahiye, kripya call kijiye."
+                    )
+                    note = "Auto SOS: call ${if (called) "lag gayi" else "nahi lagi"}, " +
+                        "SMS ${if (texted) "bhej diya gaya" else "nahi gaya"}."
+                }) { Text("Haan, bhejo") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmAutoSos = false }) { Text("Ruko") }
             }
         )
     }

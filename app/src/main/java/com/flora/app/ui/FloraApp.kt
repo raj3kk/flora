@@ -1,5 +1,8 @@
 package com.flora.app.ui
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,12 +12,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import android.provider.Settings
@@ -32,6 +37,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.flora.app.assistant.BrainClient
 import com.flora.app.assistant.VoiceEngine
+import com.flora.app.automation.AutoActions
 import com.flora.app.core.FloraConfig
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
@@ -73,6 +79,23 @@ fun FloraApp(
     var chatUnlocked by remember { mutableStateOf(false) }
     var pinInput by remember { mutableStateOf("") }
     var lockNote by remember { mutableStateOf("") }
+    var voiceCallConfirm by remember { mutableStateOf<String?>(null) }
+    var voiceSmsConfirm by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var pendingVoiceCallRequest by remember { mutableStateOf<String?>(null) }
+    var pendingVoiceSmsRequest by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val appContext = LocalContext.current
+    val voicePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        if (grants[Manifest.permission.CALL_PHONE] == true) {
+            pendingVoiceCallRequest?.let { voiceCallConfirm = it }
+            pendingVoiceCallRequest = null
+        }
+        if (grants[Manifest.permission.SEND_SMS] == true) {
+            pendingVoiceSmsRequest?.let { voiceSmsConfirm = it }
+            pendingVoiceSmsRequest = null
+        }
+    }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -174,6 +197,62 @@ fun FloraApp(
                         onClick = {
                             val question = input.trim()
                             if (question.isEmpty() || busy) return@Button
+                            // Voice command, one confirmation, full execution, spoken
+                            // commentary — no stopping at intermediate steps to ask again.
+                            // "call <number>" / "sms <number> <message>".
+                            val lower = question.lowercase()
+                            if (lower.startsWith("call ")) {
+                                val number = question.substring(5).trim()
+                                    .filter { it.isDigit() || it == '+' }
+                                input = ""
+                                if (number.length < 7) {
+                                    val msg = "Number poora likhiye, jaise 'call 9876543210'."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else {
+                                    messages = messages + ChatMsg(
+                                        "Flora: Theek hai, $number par call laga raha hun — ek baar confirm kijiye.", false
+                                    )
+                                    voice.speak("Theek hai, call laga raha hun, ek baar confirm kijiye.")
+                                    if (AutoActions.hasCallPermission(appContext)) {
+                                        voiceCallConfirm = number
+                                    } else {
+                                        pendingVoiceCallRequest = number
+                                        voicePermissionLauncher.launch(
+                                            arrayOf(Manifest.permission.CALL_PHONE)
+                                        )
+                                    }
+                                }
+                                return@Button
+                            }
+                            if (lower.startsWith("sms ")) {
+                                val rest = question.substring(4).trim()
+                                val parts = rest.split(" ", limit = 2)
+                                input = ""
+                                if (parts.size < 2 ||
+                                    parts[0].filter { it.isDigit() || it == '+' }.length < 7
+                                ) {
+                                    val msg = "Aise likhiye: 'sms 9876543210 aapka message'."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else {
+                                    val number = parts[0].filter { it.isDigit() || it == '+' }
+                                    val text = parts[1]
+                                    messages = messages + ChatMsg(
+                                        "Flora: Theek hai, $number par SMS bhej raha hun — ek baar confirm kijiye.", false
+                                    )
+                                    voice.speak("Theek hai, SMS bhej raha hun, ek baar confirm kijiye.")
+                                    if (AutoActions.hasSmsPermission(appContext)) {
+                                        voiceSmsConfirm = number to text
+                                    } else {
+                                        pendingVoiceSmsRequest = number to text
+                                        voicePermissionLauncher.launch(
+                                            arrayOf(Manifest.permission.SEND_SMS)
+                                        )
+                                    }
+                                }
+                                return@Button
+                            }
                             messages = messages + ChatMsg(question, true)
                             input = ""
                             busy = true
@@ -215,6 +294,45 @@ fun FloraApp(
                 ConnectScreen()
             } else {
                 ToolsScreen(searchTools)
+            }
+
+            voiceCallConfirm?.let { number ->
+                AlertDialog(
+                    onDismissRequest = { voiceCallConfirm = null },
+                    title = { Text("Call lagau?") },
+                    text = { Text("$number par seedha call lagega.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            voiceCallConfirm = null
+                            val ok = AutoActions.placeCall(appContext, number)
+                            val msg = if (ok) "Call laga di gayi: $number" else "Call nahi lagi, permission ya number check kijiye."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        }) { Text("Haan, call lagao") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { voiceCallConfirm = null }) { Text("Ruko") }
+                    }
+                )
+            }
+            voiceSmsConfirm?.let { (number, text) ->
+                AlertDialog(
+                    onDismissRequest = { voiceSmsConfirm = null },
+                    title = { Text("SMS bheju?") },
+                    text = { Text("$number par ye SMS jayega: \"$text\"") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            voiceSmsConfirm = null
+                            val ok = AutoActions.sendSms(appContext, number, text)
+                            val msg = if (ok) "SMS bhej diya gaya: $number" else "SMS nahi gaya, permission ya number check kijiye."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        }) { Text("Haan, bhejo") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { voiceSmsConfirm = null }) { Text("Ruko") }
+                    }
+                )
             }
         }
     }

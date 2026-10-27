@@ -21,7 +21,9 @@ import com.flora.app.security.PinVault
 import com.flora.app.ui.FloraApp
 
 /**
- * Flora v0.6 — clean-room rebuild.
+ * Flora v0.7 — clean-room rebuild.
+ * Confirmed automation: ek baar bolo + ek confirmation, phir poora
+ * execution, bolte hue commentary ke saath, beech me rukna nahi.
  * Chat / Settings / Yaadein / Scan / Tools / SOS / Face (presence) /
  * Docs / Connect. Unlock hamesha PIN se hota hai; identity Face Lock
  * alag step hai — is file me uska koi daava nahi hai.
