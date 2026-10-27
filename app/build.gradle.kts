@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.getmaya.android"
+    namespace = "com.flora.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.getmaya.android"
+        applicationId = "com.flora.app"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -19,7 +19,9 @@ android {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.6.14"
+        // Compose UI 1.6.8 + Kotlin 1.9.24 pair with compiler 1.5.14.
+        // (1.6.14 is not a valid compose-compiler version for this stack.)
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
 
     compileOptions {

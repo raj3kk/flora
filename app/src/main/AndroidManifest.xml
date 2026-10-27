@@ -1,22 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Rebuild skeleton manifest — behaviour-based, no creator manifest copy.
-     Permissions yahan MINIMAL hain; har module ki permission uske spec ke
+<!-- Flora v0.1 manifest — behaviour-based, no creator manifest copy.
+     Permissions MINIMAL hain; har module ki permission uske spec ke
      hisaab se tab jodegi jab wo module banega. Sensitive permissions
      (WRITE_SECURE_SETTINGS, INSTALL/DELETE_PACKAGES, DISABLE_KEYGUARD)
      default me NAHI hain. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
-        android:name=".MayaApplication"
-        android:label="Maya Rebuild"
+        android:name="com.flora.app.FloraApplication"
+        android:label="Flora"
         android:theme="@android:style/Theme.Material">
         <activity
-            android:name=".MainActivity"
+            android:name="com.flora.app.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
