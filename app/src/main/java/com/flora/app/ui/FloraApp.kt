@@ -85,6 +85,22 @@ fun FloraApp(
     var voiceCallConfirm by remember { mutableStateOf<String?>(null) }
     var voiceSmsConfirm by remember { mutableStateOf<Pair<String, String>?>(null) }
     var voiceAppConfirm by remember { mutableStateOf<com.flora.app.automation.LaunchableApp?>(null) }
+    var pendingVoiceCallRequest by remember { mutableStateOf<String?>(null) }
+    var pendingVoiceSmsRequest by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val appContext = LocalContext.current
+    val voicePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        if (grants[Manifest.permission.CALL_PHONE] == true) {
+            pendingVoiceCallRequest?.let { voiceCallConfirm = it }
+            pendingVoiceCallRequest = null
+        }
+        if (grants[Manifest.permission.SEND_SMS] == true) {
+            pendingVoiceSmsRequest?.let { voiceSmsConfirm = it }
+            pendingVoiceSmsRequest = null
+        }
+    }
+    val scope = rememberCoroutineScope()
     // Routine auto-run (v1.1): Routines screen se ek confirmation ke
     // baad queue yahan chalti hai — har step bol kar, bina ruke.
     // Call/SMS steps queue me nahi chalte (unke liye Chat se alag
@@ -161,22 +177,7 @@ fun FloraApp(
         kotlinx.coroutines.delay(1500)
         routineQueue = routineQueue.drop(1)
     }
-    var pendingVoiceCallRequest by remember { mutableStateOf<String?>(null) }
-    var pendingVoiceSmsRequest by remember { mutableStateOf<Pair<String, String>?>(null) }
-    val appContext = LocalContext.current
-    val voicePermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { grants ->
-        if (grants[Manifest.permission.CALL_PHONE] == true) {
-            pendingVoiceCallRequest?.let { voiceCallConfirm = it }
-            pendingVoiceCallRequest = null
-        }
-        if (grants[Manifest.permission.SEND_SMS] == true) {
-            pendingVoiceSmsRequest?.let { voiceSmsConfirm = it }
-            pendingVoiceSmsRequest = null
-        }
-    }
-    val scope = rememberCoroutineScope()
+
 
     LaunchedEffect(Unit) {
         faceLockOn = prefs.faceLock()
@@ -582,6 +583,7 @@ private fun SettingsScreen(
     var adminVpa by remember { mutableStateOf("") }
     var utr by remember { mutableStateOf("") }
     var callAnnounce by remember { mutableStateOf(false) }
+    var eventAnnounce by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf("") }
     val phonePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -603,6 +605,7 @@ private fun SettingsScreen(
         adminVpa = prefs.adminUpiVpa()
         utr = prefs.lastUtr()
         callAnnounce = prefs.callAnnounce()
+        eventAnnounce = prefs.eventAnnounce()
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -661,7 +664,17 @@ private fun SettingsScreen(
                     }
                 })
             }
-            Text("Default OFF. Naam batana aur bol kar receive/reject v1.2 me (CallScreening role ke saath). Naye Android par background broadcast rok diya ja sakta hai.")
+            Text("Default OFF. Naam batana aur bol kar receive/reject v1.3 me (CallScreening/dialer role ke saath). Naye Android par background broadcast rok diya ja sakta hai.")
+            Spacer(modifier = Modifier.height(12.dp))
+            Row {
+                Text("Event announce (charger lagna/nikalna, battery low)")
+                Spacer(modifier = Modifier.padding(4.dp))
+                Switch(checked = eventAnnounce, onCheckedChange = { value ->
+                    eventAnnounce = value
+                    scope.launch { prefs.setEventAnnounce(value) }
+                })
+            }
+            Text("Default OFF.")
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedTextField(
                 value = pin, onValueChange = { pin = it },

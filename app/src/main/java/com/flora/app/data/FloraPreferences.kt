@@ -34,6 +34,7 @@ class FloraPreferences(private val context: Context) {
         val ADMIN_UPI_VPA = stringPreferencesKey("admin_upi_vpa")
         val LAST_UTR = stringPreferencesKey("last_utr")
         val CALL_ANNOUNCE = booleanPreferencesKey("call_announce")
+        val EVENT_ANNOUNCE = booleanPreferencesKey("event_announce")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
     }
@@ -126,6 +127,14 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setCallAnnounce(value: Boolean) {
         context.floraDataStore.edit { it[Keys.CALL_ANNOUNCE] = value }
+    }
+
+    /** Event announcement toggle (charger/battery). Default OFF. */
+    suspend fun eventAnnounce(): Boolean =
+        context.floraDataStore.data.map { it[Keys.EVENT_ANNOUNCE] ?: false }.first()
+
+    suspend fun setEventAnnounce(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.EVENT_ANNOUNCE] = value }
     }
 
     /** Talk seconds used on [today] (yyyy-MM-dd). Rolls over automatically. */
