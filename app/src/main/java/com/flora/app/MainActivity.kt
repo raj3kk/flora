@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.lifecycleScope
 import com.flora.app.assistant.BrainClient
 import com.flora.app.assistant.VoiceEngine
 import com.flora.app.data.FloraPreferences
@@ -21,10 +22,10 @@ import com.flora.app.security.PinVault
 import com.flora.app.ui.FloraApp
 
 /**
- * Flora v1.2 — clean-room rebuild.
- * Live Screen vision (MediaProjection frame + Gemini vision, sirf
- * text nahi poori tasveer) + swipe gestures (WhatsApp answer swipe
- * foundation) + v1.1 ka sab kuch.
+ * Flora v1.3 — clean-room rebuild.
+ * Audit gaps fix: free talk-limit enforce (600 sec/day, Pro
+ * unlimited), Memories export + delete-all, event triggers.
+ * Dialer call-talk + continuous live + driving mode abhi baaki hain.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var voice: VoiceEngine
@@ -45,6 +46,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val prefs = FloraPreferences(applicationContext)
         voice = VoiceEngine(applicationContext)
+        voice.onSpoken = { seconds ->
+            lifecycleScope.launch {
+                val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                    .format(java.util.Date())
+                prefs.addTalkSeconds(today, seconds)
+            }
+        }
         val brain = BrainClient(prefs)
         val licenceClient = LicenceClient(prefs)
         val pinVault = PinVault(applicationContext)

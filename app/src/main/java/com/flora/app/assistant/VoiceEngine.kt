@@ -13,6 +13,14 @@ class VoiceEngine(context: Context) {
     private var tts: TextToSpeech? = null
     private var ready = false
 
+    /**
+     * Har bolne par andaza seconds (Hindi TTS ~13 chars/sec).
+     * Free talk-limit (600 sec/day) isi se record hota hai — ye
+     * andaza hai, stopwatch nahi; limit ke paas pahunchne par Flora
+     * pehle batayegi, achanak nahi rokegi.
+     */
+    var onSpoken: ((Long) -> Unit)? = null
+
     init {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -28,6 +36,8 @@ class VoiceEngine(context: Context) {
     fun speak(text: String) {
         if (!ready) return
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "flora-reply")
+        val seconds = maxOf(1L, (text.length / 13).toLong())
+        onSpoken?.invoke(seconds)
     }
 
     fun stop() {

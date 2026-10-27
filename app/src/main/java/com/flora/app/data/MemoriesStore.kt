@@ -61,4 +61,9 @@ class MemoriesStore(private val context: Context) {
             save(current)
         }
     }
+
+    /** Sab kuch delete (user ke clear confirmation ke baad hi call hota hai). */
+    suspend fun clearAll() {
+        save(emptyList())
+    }
 }

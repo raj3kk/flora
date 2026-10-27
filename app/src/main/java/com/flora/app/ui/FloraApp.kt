@@ -169,9 +169,17 @@ fun FloraApp(
                 voice.speak("Call ya SMS step routine me nahi chalta, iske liye Chat se alag confirmation chahiye. Step chhod diya.")
             }
             else -> {
-                val reply = brain.ask(cmd)
-                messages = messages + ChatMsg("Flora: $reply", false)
-                voice.speak(reply.take(500))
+                val today = java.text.SimpleDateFormat(
+                    "yyyy-MM-dd", java.util.Locale.US
+                ).format(java.util.Date())
+                val used = prefs.talkSecondsUsed(today)
+                if (licence?.plan != "pro" && used >= 600) {
+                    voice.speak("Free talk time khatam ho gaya hai, isliye ye step chhod diya.")
+                } else {
+                    val reply = brain.ask(cmd)
+                    messages = messages + ChatMsg("Flora: $reply", false)
+                    voice.speak(reply.take(500))
+                }
             }
         }
         kotlinx.coroutines.delay(1500)
@@ -445,6 +453,20 @@ fun FloraApp(
                             input = ""
                             busy = true
                             scope.launch {
+                                // Free talk limit (v1.3 audit gap fix): Pro nahi
+                                // to 600 sec/day ke baad brain jawab nahi dega.
+                                // Licence null = free mana jaata hai (safe default).
+                                val today = java.text.SimpleDateFormat(
+                                    "yyyy-MM-dd", java.util.Locale.US
+                                ).format(java.util.Date())
+                                val used = prefs.talkSecondsUsed(today)
+                                if (licence?.plan != "pro" && used >= 600) {
+                                    val msg = "Aaj ka free talk time (10 minute) khatam ho gaya hai. Kal phir milega, ya Pro (₹199/month) lijiye."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                    busy = false
+                                    return@launch
+                                }
                                 val reply = brain.ask(question)
                                 messages = messages + ChatMsg(reply, false)
                                 voice.speak(reply)
