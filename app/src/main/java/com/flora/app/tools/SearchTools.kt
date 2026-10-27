@@ -71,7 +71,7 @@ class SearchTools {
                 "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,relative_humidity_2m,wind_speed_10m"
             ) ?: return@withContext "Mausam ka data nahi mila."
             val current = JSONObject(fcText).optJSONObject("current")
-            val temp = current?.optDouble("temperature_2m", Double.NaN)
+            val temp = current?.optDouble("temperature_2m", Double.NaN) ?: Double.NaN
             val humidity = current?.optInt("relative_humidity_2m", -1)
             val wind = current?.optDouble("wind_speed_10m", Double.NaN)
             if (temp.isNaN()) return@withContext "Mausam ka data nahi mila."
