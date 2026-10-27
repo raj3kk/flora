@@ -53,7 +53,7 @@ import com.flora.app.security.GuardianGate
 import com.flora.app.security.PinVault
 import kotlinx.coroutines.launch
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
 
@@ -85,6 +85,82 @@ fun FloraApp(
     var voiceCallConfirm by remember { mutableStateOf<String?>(null) }
     var voiceSmsConfirm by remember { mutableStateOf<Pair<String, String>?>(null) }
     var voiceAppConfirm by remember { mutableStateOf<com.flora.app.automation.LaunchableApp?>(null) }
+    // Routine auto-run (v1.1): Routines screen se ek confirmation ke
+    // baad queue yahan chalti hai — har step bol kar, bina ruke.
+    // Call/SMS steps queue me nahi chalte (unke liye Chat se alag
+    // confirmation chahiye); payment ka koi step routine me hai hi nahi.
+    var routineQueue by remember { mutableStateOf<List<String>>(emptyList()) }
+    var routineName by remember { mutableStateOf("") }
+    var routineRunning by remember { mutableStateOf(false) }
+    LaunchedEffect(routineQueue) {
+        if (routineQueue.isEmpty()) {
+            if (routineRunning) {
+                routineRunning = false
+                val done = "Routine '$routineName' poori ho gayi."
+                messages = messages + ChatMsg("Flora: $done", false)
+                voice.speak(done)
+            }
+            return@LaunchedEffect
+        }
+        val cmd = routineQueue.first()
+        val lower = cmd.lowercase().trim()
+        messages = messages + ChatMsg("Flora: Routine step: $cmd", false)
+        voice.speak("Step: $cmd")
+        when {
+            lower.startsWith("open ") || lower.startsWith("kholo ") -> {
+                val name = cmd.substringAfter(" ").trim()
+                val match = AppLauncher.findByName(appContext, name).firstOrNull()
+                if (match != null && AppLauncher.launch(appContext, match.packageName)) {
+                    voice.speak("${match.label} khol diya.")
+                } else {
+                    voice.speak("'$name' naam ki app nahi mili, step chhod diya.")
+                }
+            }
+            lower.startsWith("chrome me ") || lower.startsWith("website ") -> {
+                val site = cmd.substringAfter("kholo", "").trim()
+                    .ifEmpty { cmd.substringAfter("me", "").trim() }
+                if (site.isNotBlank() && AppLauncher.openWebsite(appContext, site)) {
+                    voice.speak("$site khol raha hun.")
+                } else {
+                    voice.speak("Website nahi khul payi, step chhod diya.")
+                }
+            }
+            lower.startsWith("gaana bajao ") || lower.startsWith("gaana chalao ") -> {
+                val song = cmd.substringAfter("bajao", "").trim()
+                    .ifEmpty { cmd.substringAfter("chalao", "").trim() }
+                if (song.isNotBlank()) {
+                    AppLauncher.openWebsite(
+                        appContext,
+                        "https://www.youtube.com/results?search_query=" +
+                            android.net.Uri.encode(song)
+                    )
+                    voice.speak("$song YouTube par khol raha hun.")
+                }
+            }
+            lower == "photo lo" || lower == "scan karo" || lower == "camera kholo" -> {
+                screen = Screen.SCAN
+                voice.speak("Scan khol raha hun.")
+            }
+            lower == "sos" || lower == "sos bhejo" || lower == "madad" -> {
+                screen = Screen.SOS
+                voice.speak("SOS screen khol raha hun.")
+            }
+            lower == "yaadein kholo" -> {
+                screen = Screen.MEMORIES
+                voice.speak("Yaadein khol raha hun.")
+            }
+            lower.startsWith("call ") || lower.startsWith("sms ") -> {
+                voice.speak("Call ya SMS step routine me nahi chalta, iske liye Chat se alag confirmation chahiye. Step chhod diya.")
+            }
+            else -> {
+                val reply = brain.ask(cmd)
+                messages = messages + ChatMsg("Flora: $reply", false)
+                voice.speak(reply.take(500))
+            }
+        }
+        kotlinx.coroutines.delay(1500)
+        routineQueue = routineQueue.drop(1)
+    }
     var pendingVoiceCallRequest by remember { mutableStateOf<String?>(null) }
     var pendingVoiceSmsRequest by remember { mutableStateOf<Pair<String, String>?>(null) }
     val appContext = LocalContext.current
@@ -150,6 +226,8 @@ fun FloraApp(
                 Button(onClick = { screen = Screen.TERMS }) { Text("Terms") }
                 Spacer(modifier = Modifier.padding(4.dp))
                 Button(onClick = { screen = Screen.AUTO }) { Text("Auto") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = { screen = Screen.ROUTINES }) { Text("Routines") }
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -313,6 +391,27 @@ fun FloraApp(
                                 }
                                 return@Button
                             }
+                            // Voice: "gaana bajao <song>" — YouTube search kholo.
+                            if (lower.startsWith("gaana bajao ") || lower.startsWith("gaana chalao ")) {
+                                val song = question.substringAfter("bajao", "").trim()
+                                    .ifEmpty { question.substringAfter("chalao", "").trim() }
+                                input = ""
+                                if (song.isBlank()) {
+                                    val msg = "Kaun sa gaana bajau? Naam boliye."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else {
+                                    AppLauncher.openWebsite(
+                                        appContext,
+                                        "https://www.youtube.com/results?search_query=" +
+                                            android.net.Uri.encode(song)
+                                    )
+                                    val msg = "$song YouTube par khol raha hun."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                }
+                                return@Button
+                            }
                             // Voice navigation: bolte hi screen khul jayegi, beech me koi
                             // step nahi rukega. "photo lo" / "sos bhejo" / "yaadein kholo".
                             if (lower == "photo lo" || lower == "scan karo" || lower == "camera kholo") {
@@ -384,6 +483,17 @@ fun FloraApp(
                 TermsScreen()
             } else if (screen == Screen.AUTO) {
                 AutoScreen(voice)
+            } else if (screen == Screen.ROUTINES) {
+                RoutinesScreen(voice) { routine ->
+                    screen = Screen.CHAT
+                    routineName = routine.name
+                    routineRunning = true
+                    messages = messages + ChatMsg(
+                        "Flora: Routine '${routine.name}' chalu — ${routine.commands.size} steps, ek-ek karke chalenge.", false
+                    )
+                    voice.speak("Routine ${routine.name} chalu kar raha hun.")
+                    routineQueue = routine.commands
+                }
             } else {
                 ToolsScreen(searchTools)
             }
@@ -467,7 +577,18 @@ private fun SettingsScreen(
     var guardianMode by remember { mutableStateOf(false) }
     var adminVpa by remember { mutableStateOf("") }
     var utr by remember { mutableStateOf("") }
+    var callAnnounce by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf("") }
+    val phonePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            callAnnounce = true
+            scope.launch { prefs.setCallAnnounce(true) }
+        } else {
+            note = "Phone permission ke bina call announce nahi chalega."
+        }
+    }
 
     LaunchedEffect(Unit) {
         anonKey = prefs.supabaseAnonKey()
@@ -477,6 +598,7 @@ private fun SettingsScreen(
         guardianMode = prefs.guardianMode()
         adminVpa = prefs.adminUpiVpa()
         utr = prefs.lastUtr()
+        callAnnounce = prefs.callAnnounce()
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -522,6 +644,20 @@ private fun SettingsScreen(
                 })
             }
             Text("Consent OFF ho to koi app khud nahi kholegi, kuch auto-post nahi hoga.")
+            Spacer(modifier = Modifier.height(12.dp))
+            Row {
+                Text("Call announce (aane wali call ka number bol kar batana)")
+                Spacer(modifier = Modifier.padding(4.dp))
+                Switch(checked = callAnnounce, onCheckedChange = { value ->
+                    if (value) {
+                        phonePermissionLauncher.launch(Manifest.permission.READ_PHONE_STATE)
+                    } else {
+                        callAnnounce = false
+                        scope.launch { prefs.setCallAnnounce(false) }
+                    }
+                })
+            }
+            Text("Default OFF. Naam batana aur bol kar receive/reject v1.2 me (CallScreening role ke saath). Naye Android par background broadcast rok diya ja sakta hai.")
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedTextField(
                 value = pin, onValueChange = { pin = it },

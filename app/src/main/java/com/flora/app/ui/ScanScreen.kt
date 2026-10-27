@@ -32,16 +32,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.flora.app.assistant.VoiceEngine
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.devanagari.DevanagariTextRecognizerOptions
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
- * Scan screen (v0.8 audit upgrade): pehle sirf preview tha — ab
- * "Photo lo" dabate hi photo capture + Pictures/Flora me save hoti
- * hai, bolte hue confirmation ke saath. Button dabana hi ek
- * confirmation hai; capture ke baad koi doosra step nahi rukta.
- * Koi photo server par nahi bheji jaati.
+ * Scan screen (v1.1 vision): photo capture + save ke saath ab
+ * "dekh kar padhna" bhi — ML Kit Text Recognition SIRF phone par
+ * chalti hai (Latin + Devanagari), photo kabhi server par nahi
+ * jaati. Photo dikhake poocho to Flora usme likha text padh kar
+ * bol degi — yehi wo "Maya dekhti thi" wala hissa tha jo v1.0
+ * tak miss tha. Live camera se sawaal-jawaab (video samajhna)
+ * abhi bhi agla step hai, is screen me uska daava nahi hai.
  */
 @Composable
 fun ScanScreen(voice: VoiceEngine) {
@@ -56,6 +62,8 @@ fun ScanScreen(voice: VoiceEngine) {
     var bound by remember { mutableStateOf(false) }
     var capture by remember { mutableStateOf<ImageCapture?>(null) }
     var note by remember { mutableStateOf("") }
+    var savedUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var readText by remember { mutableStateOf("") }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -124,6 +132,8 @@ fun ScanScreen(voice: VoiceEngine) {
                     ContextCompat.getMainExecutor(context),
                     object : ImageCapture.OnImageSavedCallback {
                         override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                            savedUri = output.savedUri
+                            readText = ""
                             note = "Photo save ho gayi: Pictures/Flora me."
                             voice.speak("Photo save ho gayi.")
                         }
@@ -135,6 +145,53 @@ fun ScanScreen(voice: VoiceEngine) {
                     }
                 )
             }) { Text("Photo lo (capture + save)") }
+            if (savedUri != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(onClick = {
+                    val uri = savedUri ?: return@Button
+                    note = "Photo padh rahi hun..."
+                    try {
+                        val image = InputImage.fromFilePath(context, uri)
+                        val latin = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                        latin.process(image)
+                            .addOnSuccessListener { visionText ->
+                                if (visionText.text.isNotBlank()) {
+                                    readText = visionText.text
+                                    note = "Padh liya."
+                                    voice.speak(visionText.text.take(500))
+                                } else {
+                                    // Devanagari (Hindi) try karo — Latin khaali ho to.
+                                    val dev = TextRecognition.getClient(
+                                        DevanagariTextRecognizerOptions.Builder().build()
+                                    )
+                                    dev.process(image)
+                                        .addOnSuccessListener { devText ->
+                                            if (devText.text.isNotBlank()) {
+                                                readText = devText.text
+                                                note = "Padh liya."
+                                                voice.speak(devText.text.take(500))
+                                            } else {
+                                                note = "Is photo me koi padhne layak text nahi mila."
+                                                voice.speak("Is photo me koi text nahi mila.")
+                                            }
+                                        }
+                                        .addOnFailureListener {
+                                            note = "Photo padhi nahi gayi, dobara koshish kijiye."
+                                        }
+                                }
+                            }
+                            .addOnFailureListener {
+                                note = "Photo padhi nahi gayi, dobara koshish kijiye."
+                            }
+                    } catch (e: Exception) {
+                        note = "Photo padhi nahi gayi, dobara koshish kijiye."
+                    }
+                }) { Text("Is photo me kya likha hai, padh kar batao") }
+            }
+            if (readText.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(readText)
+            }
             if (note.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(note)

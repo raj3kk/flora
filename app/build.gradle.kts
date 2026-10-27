@@ -11,8 +11,8 @@ android {
         applicationId = "com.flora.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 10
-        versionName = "1.0.0-rebuild"
+        versionCode = 11
+        versionName = "1.1.0-rebuild"
     }
 
     buildFeatures {
@@ -49,5 +49,7 @@ dependencies {
     implementation("androidx.camera:camera-view:1.3.4")
     implementation("org.tensorflow:tensorflow-lite:2.14.0")
     implementation("com.google.mlkit:face-detection:16.1.7")
+    implementation("com.google.mlkit:text-recognition:16.0.0")
+    implementation("com.google.mlkit:text-recognition-devanagari:16.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }

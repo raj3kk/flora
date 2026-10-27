@@ -21,10 +21,9 @@ import com.flora.app.security.PinVault
 import com.flora.app.ui.FloraApp
 
 /**
- * Flora v1.0 — clean-room rebuild.
- * Universal automation foundation: koi bhi app kholo, Accessibility
- * click/scroll/type, Chrome website, voice commands — sab on-device,
- * ek confirmation ke baad, bolte hue commentary ke saath.
+ * Flora v1.1 — clean-room rebuild.
+ * Vision (Scan se on-device text padhna) + routines auto-run +
+ * call announcement + gaana command. Heap fix (4096m) isi tree me hai.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var voice: VoiceEngine

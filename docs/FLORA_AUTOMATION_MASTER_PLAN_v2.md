@@ -113,6 +113,9 @@ apna phone, apni permission se).
 ## Phases + gates (har phase: implement → build verify → audit → agla)
 - v1.0 (is batch): A1 + A2 foundation + A3 open + A4 Chat commands.
 - v1.1: A3 full form-fill + A6 routines + live conversation mode.
+- v1.1 vision (user audit 2026-10-28 — miss tha, ab add): Scan se
+  on-device text padhna (Latin + Devanagari), photo kabhi server
+  par nahi; uske baad opt-in photo Q&A + live camera Q&A.
 - v1.2: FCM wake (Firebase milne par) + wake-word model (phrase +
   dataset decision ke baad).
 - v1.3: Admin panel + payment webhook (UTR auto-verify) + final

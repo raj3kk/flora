@@ -33,6 +33,7 @@ class FloraPreferences(private val context: Context) {
         val FACE_LOCK = booleanPreferencesKey("face_lock")
         val ADMIN_UPI_VPA = stringPreferencesKey("admin_upi_vpa")
         val LAST_UTR = stringPreferencesKey("last_utr")
+        val CALL_ANNOUNCE = booleanPreferencesKey("call_announce")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
     }
@@ -117,6 +118,14 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setLastUtr(value: String) {
         context.floraDataStore.edit { it[Keys.LAST_UTR] = value }
+    }
+
+    /** Call announcement toggle (video #65 ka Flora version). Default OFF. */
+    suspend fun callAnnounce(): Boolean =
+        context.floraDataStore.data.map { it[Keys.CALL_ANNOUNCE] ?: false }.first()
+
+    suspend fun setCallAnnounce(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.CALL_ANNOUNCE] = value }
     }
 
     /** Talk seconds used on [today] (yyyy-MM-dd). Rolls over automatically. */
