@@ -65,4 +65,3 @@ insert into public.plans (id, name, price_paise, billing, features) values
   ('free', 'Flora Free', 0, 'free', '{"talk_seconds_per_day": 600, "tools": "basic_15", "characters": ["default"]}'::jsonb),
   ('pro', 'Flora Pro', 19900, 'monthly', '{"talk": "unlimited", "tools": "all", "characters": "all_plus_future", "live_wallpaper": true, "conversation_mode": true, "fcm_push": true}'::jsonb)
 on conflict (id) do nothing;
-on conflict (id) do nothing;
