@@ -110,7 +110,26 @@ apna phone, apni permission se).
 7. Failure honesty: button/field na mile to guess-click nahi, spoken
    "nahi mila" + agla option (user bataye ya manual).
 
-## Phases + gates (har phase: implement → build verify → audit → agla)
+## v1.2 add — Live Screen Vision + Call Talk (user order 2026-10-28)
+- Live screen: MediaProjection se EK frame on-demand (user ke system
+  dialog se permission, frame ke baad projection band). Vision
+  (Gemini, user ki key) poori tasveer samajhta hai — sirf text nahi,
+  icon/button/colour/layout sab. Isse icon-only button wali limit bhi
+  kam hoti hai: Flora dekh kar samajh sakegi kya dabaana hai.
+  Continuous chhup kar screen dekhna kabhi nahi hoga.
+- Call talk — imaandaari se limits: (1) SIM call Flora khud uthaye
+  aur baat kare — iske liye Flora ko default dialer banana hoga
+  (ROLE_DIALER, user khud set karega) — ye v1.3 ka kaam hai;
+  CallScreening akela call utha nahi sakta, sirf allow/block kar
+  sakta hai. (2) WhatsApp call ka koi official API nahi hai —
+  Accessibility swipe se answer button tak pahuncha ja sakta hai,
+  aur baat speaker+mic loop se hogi (crude, echo ho sakta hai) —
+  saaf in-call awaaz ka daava nahi. (3) Android ke public API se
+  TTS ko call ke uplink me daalna reliably possible nahi hai —
+  doosri taraf wale ko Flora ki awaaz saaf sunai degi, ye guarantee
+  nahi di ja sakti. Isliye v1.2 me: call announce (number bolna)
+  + swipe gesture foundation; poora call-talk v1.3 me dialer role
+  ke saath, phone par test karke hi "done" bola jayega.
 - v1.0 (is batch): A1 + A2 foundation + A3 open + A4 Chat commands.
 - v1.1: A3 full form-fill + A6 routines + live conversation mode.
 - v1.1 vision (user audit 2026-10-28 — miss tha, ab add): Scan se

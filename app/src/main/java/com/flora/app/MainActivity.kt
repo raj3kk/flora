@@ -21,9 +21,10 @@ import com.flora.app.security.PinVault
 import com.flora.app.ui.FloraApp
 
 /**
- * Flora v1.1 — clean-room rebuild.
- * Vision (Scan se on-device text padhna) + routines auto-run +
- * call announcement + gaana command. Heap fix (4096m) isi tree me hai.
+ * Flora v1.2 — clean-room rebuild.
+ * Live Screen vision (MediaProjection frame + Gemini vision, sirf
+ * text nahi poori tasveer) + swipe gestures (WhatsApp answer swipe
+ * foundation) + v1.1 ka sab kuch.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var voice: VoiceEngine

@@ -53,7 +53,7 @@ import com.flora.app.security.GuardianGate
 import com.flora.app.security.PinVault
 import kotlinx.coroutines.launch
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
 
@@ -228,6 +228,8 @@ fun FloraApp(
                 Button(onClick = { screen = Screen.AUTO }) { Text("Auto") }
                 Spacer(modifier = Modifier.padding(4.dp))
                 Button(onClick = { screen = Screen.ROUTINES }) { Text("Routines") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = { screen = Screen.LIVE }) { Text("Live Screen") }
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -494,6 +496,8 @@ fun FloraApp(
                     voice.speak("Routine ${routine.name} chalu kar raha hun.")
                     routineQueue = routine.commands
                 }
+            } else if (screen == Screen.LIVE) {
+                LiveScreen(voice, prefs)
             } else {
                 ToolsScreen(searchTools)
             }

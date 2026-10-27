@@ -100,6 +100,29 @@ class FloraAutomationService : AccessibilityService() {
         return false
     }
 
+    /**
+     * Swipe gesture (WhatsApp incoming call answer swipe jaisi
+     * jagahon ke liye). Dispatch sirf tab jab service ON ho.
+     */
+    fun swipeUp(): Boolean = swipe(0.5f, 0.8f, 0.5f, 0.3f)
+
+    fun swipeDown(): Boolean = swipe(0.5f, 0.3f, 0.5f, 0.8f)
+
+    private fun swipe(x1: Float, y1: Float, x2: Float, y2: Float): Boolean {
+        val metrics = resources.displayMetrics
+        val startX = (x1 * metrics.widthPixels).toInt()
+        val startY = (y1 * metrics.heightPixels).toInt()
+        val endX = (x2 * metrics.widthPixels).toInt()
+        val endY = (y2 * metrics.heightPixels).toInt()
+        val path = android.graphics.Path()
+        path.moveTo(startX.toFloat(), startY.toFloat())
+        path.lineTo(endX.toFloat(), endY.toFloat())
+        val stroke = android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 300)
+        val gesture = android.accessibilityservice.GestureDescription.Builder()
+            .addStroke(stroke).build()
+        return dispatchGesture(gesture, null, null)
+    }
+
     fun goBack(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
 
     fun goHome(): Boolean = performGlobalAction(GLOBAL_ACTION_HOME)
