@@ -41,6 +41,8 @@ class FloraPreferences(private val context: Context) {
         val PERSONA = stringPreferencesKey("persona")
         val THEME = stringPreferencesKey("theme")
         val MODELS_MANIFEST_URL = stringPreferencesKey("models_manifest_url")
+        val DEEPGRAM_API_KEY = stringPreferencesKey("deepgram_api_key")
+        val VOICE_MATCH_THRESHOLD = stringPreferencesKey("voice_match_threshold")
         val GEMINI_API_KEY2 = stringPreferencesKey("gemini_api_key_2")
         val GROQ_API_KEY2 = stringPreferencesKey("groq_api_key_2")
         val TAVILY_API_KEY = stringPreferencesKey("tavily_api_key")
@@ -121,6 +123,24 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setModelsManifestUrl(value: String) {
         context.floraDataStore.edit { it[Keys.MODELS_MANIFEST_URL] = value }
+    }
+
+    /** Deepgram key (mega build, user faisla: Deepgram hi rahega).
+     *  Khali = system STT fallback; key aate hi sachhi barge-in. */
+    suspend fun deepgramApiKey(): String =
+        context.floraDataStore.data.map { it[Keys.DEEPGRAM_API_KEY] ?: "" }.first()
+
+    suspend fun setDeepgramApiKey(value: String) {
+        context.floraDataStore.edit { it[Keys.DEEPGRAM_API_KEY] = value }
+    }
+
+    /** Voice-match threshold — 0.50 STARTING GUESS hai, lock nahi
+     *  (validation: same-speaker min 0.558, noise max 0.380). */
+    suspend fun voiceMatchThreshold(): Float =
+        context.floraDataStore.data.map { it[Keys.VOICE_MATCH_THRESHOLD] ?: "0.50" }.first().toFloatOrNull() ?: 0.50f
+
+    suspend fun setVoiceMatchThreshold(value: Float) {
+        context.floraDataStore.edit { it[Keys.VOICE_MATCH_THRESHOLD] = value.toString() }
     }
 
     suspend fun setSupabaseAnonKey(value: String) {

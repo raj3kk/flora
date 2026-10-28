@@ -119,6 +119,28 @@ screen dekhna. Flora me isse ZYADA hoga:
   sake (cancel); mobile data par badi file se pehle
   poochha jayega (ek confirmation — money/data rule).
 
+## Deploy strategy — SINGLE MEGA DEPLOY (user order 2026-10-28 ~16:47 IST)
+- "Sab ko ek sath kar ke tab deploy karna": ab se koi
+  beech ka version release NAHI hoga. v2.21 ka SwissTransfer
+  link publish nahi hoga; download page v2.20 par hi rahega.
+- Code pushes sirf CI safety check ke liye honge (compile +
+  APK verify), release nahi. Final release ek hi baar: sab
+  kuch complete + audit 0 → ek APK upload + download page
+  update + live verify.
+- Mega build version: v2.22.0-rebuild (versionCode 44) — ye
+  number final release tak ek hi rahega, chunk-wise bump nahi.
+
+## Faisle — CLOSED (user order 2026-10-28 ~16:47 IST)
+- Naam: **Flora hi rahega** (rename question CLOSED — wapas
+  Maya naam nahi).
+- STT/barge-in provider: **Deepgram hi rahega** (key abhi
+  pending hai — user dega; tab tak system STT fallback).
+- Key/recording-gated items ka "anyhow complete" matlab:
+  code 100% complete + wired + fallback ke saath hoga; key
+  ya recording aate hi bina code change ke chalne lagega.
+  Bina key ke "kaam kar raha hai" ka jhootha daava kabhi
+  nahi hoga — gated items ki list R3 me khuli rahegi.
+
 ## E. Phase order (koi phase skip nahi, har phase ke baad audit)
 
 1. M1 (v2.21): ModelDownloader + Models screen + manifest.

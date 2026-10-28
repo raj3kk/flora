@@ -563,3 +563,26 @@ maujood, index bhi 200. Download page ab live hai.
 
 ## v2.21 test-entry naam collision — pakda aur sudhara (2026-10-28 ~16:42 IST)
 - FLORA_V221_TEST_ENTRY.md pehle se maujood thi (purani v2.2.1 stale-fix ki) — usko overwrite NAHI kiya; nayi file docs/FLORA_V2_21_TEST_ENTRY.md banayi (v2.21 ke liye). Purani file ka content commit 277d1056 me v2.21 ke saath chala gaya tha (docs-only, code par asar nahi) — sahi test entry is naye commit me hai.
+
+## v2.21 CI PASS + APK verify (2026-10-28 ~16:45 IST)
+- Run 40677725705 completed SUCCESS (commit 277d1056). Artifact 12811835263, zip 59,073,025 bytes (exact match).
+- Real APK: 111,282,441 bytes, sha256 6fa725ed5e851be53e2a92d02a7e55cbb6edc165349d38d19fe8ec14e310dbfa, aapt2: com.flora.app, versionCode 43, versionName 2.21.0-rebuild.
+- Dex content check: ModelDownloader / ModelsScreen / flora-models strings classes4+5+10.dex me — M1 code APK me confirm.
+- SwissTransfer upload in progress; link milte hi download page update hoga.
+
+## M1 server LIVE (2026-10-28 ~16:45 IST)
+- Supabase Storage bucket flora-models (PUBLIC) ban gaya; manifest.json root par upload hua; public URL khud fetch karke verify kiya: dono bundled models (face-match, wakeword-template) + note — 200 OK.
+- Koi paisa nahi, koi paid resource nahi, project me aur kuch chheda nahi (pehle koi bucket tha hi nahi).
+- Ab app ka ModelDownloader isi URL se manifest lega (bucket banne se pehle bundled fallback chal raha tha).
+
+## v2.22 mega build chunk 1 — VoiceMatcher port + refresh-renew + Deepgram/Flora faisle (2026-10-28 ~16:50 IST, CI PENDING)
+- Single-deploy order (user 16:47 IST): v2.21 link publish NAHI hoga; download page v2.20 par rahega; final release ek hi baar. Code push sirf CI check ke liye.
+- Naam CLOSED: Flora hi rahega. Provider CLOSED: Deepgram hi rahega (key pending; tab tak system STT).
+- VoiceMatcher.kt (validated Python protocol ka port): 16kHz PCM → 512/hop160 → preemph 0.97 → Hann 511 → rfft 1024 magnitude → TF mel matrix asset (513x128, TF se generate, 262,656 bytes) → log(max(1,mel)) → repeat-first x3 + window 4 stride 3 → VAD 528-d (exp>0.1) → encoder chunks of 2, states carry, d-vector = aakhri row. Threshold 0.50 STARTING GUESS (lock nahi).
+- Assets (Apache-2.0, HF tflite-hub, creator ke nahi): conformer_tisid_medium.tflite (22MB), vad_long_model.tflite, vad_long_mean_stddev.csv, mel_matrix_f32.bin + README.
+- VoiceVault.kt: enrolled vector KeyStore AES/GCM (PinVault pattern, alag alias) — kabhi plain/server/backup nahi; akela PIN unlock nahi karega (Guardian bhi chahiye).
+- LicenceClient.refreshSession(): refresh_token grant se naya token (rotation); access token kabhi save nahi.
+- Prefs: DEEPGRAM_API_KEY, VOICE_MATCH_THRESHOLD (0.50 default guess).
+- Fixes is chunk me: encoder chunk ko [1,2,512] wrap karne ki galti sudhari ([2,512] sahi hai); VAD output shape dynamic se allocate; DEEPGRAM typo sudhara.
+- Baaki is chunk me NAHI (agle chunks me): enrol UI (AudioRecord), Guardian wiring, Deepgram streaming client, P1 ke baaki items, P2–P5, U1–U3, brain-proxy step 2, S2 avatar catalog.
+- Audit: 4 files brace/paren balance; mel matrix size exact; assets maujood. Phone test enrol/match UI ke baad (test entry agle chunk me).

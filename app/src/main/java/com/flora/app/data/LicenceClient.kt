@@ -50,6 +50,24 @@ class LicenceClient(private val prefs: FloraPreferences) {
             LinkResult(uid, refresh, "")
         }
 
+    // Session renew (v2.22, mega build): saved refresh token se
+    // naya refresh token lao (rotation par naya wala save karna
+    // caller ka kaam hai). Access token kabhi save nahi hota —
+    // ye sirf session zinda rakhne ke liye hai, licence/usage
+    // calls par iska asar nahi (wo anon key se chalte hain).
+    // Fail ho to null — app local mode me chalti rahegi, koi
+    // error user ko nahi dikhega.
+    suspend fun refreshSession(refreshToken: String): String? =
+        withContext(Dispatchers.IO) {
+            val key = prefs.supabaseAnonKey()
+            if (key.isEmpty() || refreshToken.isEmpty()) return@withContext null
+            val body = JSONObject().put("refresh_token", refreshToken)
+            val res = post("/auth/v1/token?grant_type=refresh_token", body, key)
+                ?: return@withContext null
+            val next = res.optString("refresh_token", "")
+            if (next.isEmpty()) null else next
+        }
+
     // verify() se aakhri jaana hua plan (memory me hi). countUsage
     // isi se decide karta hai ki server count bhejna hai ya nahi:
     // pro = unlimited, server count ki zaroorat nahi.
