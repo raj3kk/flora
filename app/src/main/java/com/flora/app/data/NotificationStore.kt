@@ -30,8 +30,14 @@ object NotificationStore {
     private val KEY = stringPreferencesKey("notifs_json")
     private const val MAX = 20
 
+    /** Ciphertext ko plain me badlo; fail ho to raw (purana plain). */
+    private fun decode(raw: String): String = MemoryCrypto.decrypt(raw) ?: raw
+
+    /** Plain ko ciphertext me badlo; fail ho to plain (data safe). */
+    private fun encode(json: String): String = MemoryCrypto.encrypt(json) ?: json
+
     suspend fun load(context: Context): List<NotifItem> {
-        val raw = context.notifStore.data.map { it[KEY] ?: "[]" }.first()
+        val raw = decode(context.notifStore.data.map { it[KEY] ?: "[]" }.first())
         val out = mutableListOf<NotifItem>()
         try {
             val arr = JSONArray(raw)
@@ -64,7 +70,7 @@ object NotificationStore {
             )
         }
         try {
-            context.notifStore.edit { prefs -> prefs[KEY] = arr.toString() }
+            context.notifStore.edit { prefs -> prefs[KEY] = encode(arr.toString()) }
         } catch (e: Exception) {
         }
     }

@@ -25,8 +25,14 @@ class AutoLogStore(private val context: Context) {
 
     private val key = stringPreferencesKey("autolog_json")
 
+    /** Ciphertext ko plain me badlo; fail ho to raw (purana plain). */
+    private fun decode(raw: String): String = MemoryCrypto.decrypt(raw) ?: raw
+
+    /** Plain ko ciphertext me badlo; fail ho to plain (data safe). */
+    private fun encode(json: String): String = MemoryCrypto.encrypt(json) ?: json
+
     val items: Flow<List<Pair<String, Long>>> = context.autoLogDataStore.data.map { prefs ->
-        val raw = prefs[key] ?: "[]"
+        val raw = decode(prefs[key] ?: "[]")
         val out = mutableListOf<Pair<String, Long>>()
         try {
             val arr = JSONArray(raw)
@@ -42,7 +48,7 @@ class AutoLogStore(private val context: Context) {
     }
 
     suspend fun add(text: String) {
-        val raw = context.autoLogDataStore.data.map { it[key] ?: "[]" }.first()
+        val raw = decode(context.autoLogDataStore.data.map { it[key] ?: "[]" }.first())
         val list = mutableListOf<Pair<String, Long>>()
         try {
             val arr = JSONArray(raw)
@@ -57,7 +63,7 @@ class AutoLogStore(private val context: Context) {
         list.takeLast(500).forEach { (t, ts) ->
             arr.put(JSONObject().put("text", t).put("ts", ts))
         }
-        context.autoLogDataStore.edit { it[key] = arr.toString() }
+        context.autoLogDataStore.edit { it[key] = encode(arr.toString()) }
     }
 
     suspend fun clear() {
@@ -65,7 +71,7 @@ class AutoLogStore(private val context: Context) {
     }
 
     suspend fun pruneOlderThan(cutoffMs: Long) {
-        val raw = context.autoLogDataStore.data.map { it[key] ?: "[]" }.first()
+        val raw = decode(context.autoLogDataStore.data.map { it[key] ?: "[]" }.first())
         val kept = JSONArray()
         try {
             val arr = JSONArray(raw)
@@ -75,6 +81,6 @@ class AutoLogStore(private val context: Context) {
             }
         } catch (e: Exception) {
         }
-        context.autoLogDataStore.edit { it[key] = kept.toString() }
+        context.autoLogDataStore.edit { it[key] = encode(kept.toString()) }
     }
 }

@@ -26,8 +26,14 @@ class SosStore(private val context: Context) {
 
     private val key = stringPreferencesKey("sos_contacts_json")
 
+    /** Ciphertext ko plain me badlo; fail ho to raw (purana plain). */
+    private fun decode(raw: String): String = MemoryCrypto.decrypt(raw) ?: raw
+
+    /** Plain ko ciphertext me badlo; fail ho to plain (data safe). */
+    private fun encode(json: String): String = MemoryCrypto.encrypt(json) ?: json
+
     val contacts: Flow<List<SosContact>> = context.sosDataStore.data.map { prefs ->
-        val raw = prefs[key] ?: "[]"
+        val raw = decode(prefs[key] ?: "[]")
         val out = mutableListOf<SosContact>()
         try {
             val arr = JSONArray(raw)
@@ -46,7 +52,7 @@ class SosStore(private val context: Context) {
         list.forEach {
             arr.put(JSONObject().put("name", it.name).put("number", it.number))
         }
-        context.sosDataStore.edit { it[key] = arr.toString() }
+        context.sosDataStore.edit { it[key] = encode(arr.toString()) }
     }
 
     /** Returns false when the list is already full (max 3) or input is blank. */

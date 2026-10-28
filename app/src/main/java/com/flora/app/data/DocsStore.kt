@@ -25,8 +25,14 @@ class DocsStore(private val context: Context) {
 
     private val key = stringPreferencesKey("docs_json")
 
+    /** Ciphertext ko plain me badlo; fail ho to raw (purana plain). */
+    private fun decode(raw: String): String = MemoryCrypto.decrypt(raw) ?: raw
+
+    /** Plain ko ciphertext me badlo; fail ho to plain (data safe). */
+    private fun encode(json: String): String = MemoryCrypto.encrypt(json) ?: json
+
     val docs: Flow<List<FloraDoc>> = context.docsDataStore.data.map { prefs ->
-        val raw = prefs[key] ?: "[]"
+        val raw = decode(prefs[key] ?: "[]")
         val out = mutableListOf<FloraDoc>()
         try {
             val arr = JSONArray(raw)
@@ -43,7 +49,7 @@ class DocsStore(private val context: Context) {
     private suspend fun save(list: List<FloraDoc>) {
         val arr = JSONArray()
         list.forEach { arr.put(JSONObject().put("title", it.title).put("body", it.body)) }
-        context.docsDataStore.edit { it[key] = arr.toString() }
+        context.docsDataStore.edit { it[key] = encode(arr.toString()) }
     }
 
     suspend fun add(title: String, body: String) {
