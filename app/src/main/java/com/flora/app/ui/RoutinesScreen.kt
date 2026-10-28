@@ -22,6 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.flora.app.assistant.VoiceEngine
+import com.flora.app.automation.JobScheduler
+import com.flora.app.data.Job
+import com.flora.app.data.JobStore
 import com.flora.app.data.Routine
 import com.flora.app.data.RoutineStore
 import kotlinx.coroutines.launch
@@ -33,12 +36,20 @@ import kotlinx.coroutines.launch
  * commands baari-baari Chat ko bheji jayengi, har step bol kar.
  * Payment/delete step par dobara confirmation hoga — routine us
  * rule ko override nahi karti.
+ *
+ * v2.22 (chunk 4): routine ko roz ek waqt par bhi lagaya ja
+ * sakta hai (JobScheduler alarm + CHAT khulte hi auto-run).
+ * Auto Mode ON ho to waqt par khud chalegi, warna Flora
+ * sirf batayegi. Reboot ke baad alarms BootReceiver dobara
+ * lagata hai.
  */
 @Composable
 fun RoutinesScreen(voice: VoiceEngine, onRunRoutine: (Routine) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var routines by remember { mutableStateOf<List<Routine>>(emptyList()) }
+    var jobs by remember { mutableStateOf<List<Job>>(emptyList()) }
+    var timeInputs by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var name by remember { mutableStateOf("") }
     var commandsText by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
@@ -46,6 +57,7 @@ fun RoutinesScreen(voice: VoiceEngine, onRunRoutine: (Routine) -> Unit) {
 
     LaunchedEffect(Unit) {
         routines = RoutineStore.load(context)
+        jobs = JobStore.load(context)
     }
 
     fun say(message: String) {
@@ -96,6 +108,47 @@ fun RoutinesScreen(voice: VoiceEngine, onRunRoutine: (Routine) -> Unit) {
             Text("${routine.name} (${routine.commands.size} steps)")
             Spacer(modifier = Modifier.height(4.dp))
             Button(onClick = { confirmRun = routine }) { Text("Chalao: ${routine.name}") }
+            Spacer(modifier = Modifier.height(4.dp))
+            val job = jobs.firstOrNull { it.routineName == routine.name }
+            Text(
+                if (job != null) "Roz ${String.format("%02d:%02d", job.hour, job.minute)} par chalegi."
+                else "Roz ka waqt abhi nahi laga hai."
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            OutlinedTextField(
+                value = timeInputs[routine.name] ?: "",
+                onValueChange = { timeInputs = timeInputs + (routine.name to it) },
+                label = { Text("Waqt (HH:MM, jaise 08:00)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Button(onClick = {
+                val parts = (timeInputs[routine.name] ?: "").split(":")
+                val h = parts.getOrNull(0)?.toIntOrNull()
+                val m = parts.getOrNull(1)?.toIntOrNull()
+                if (h == null || m == null || h !in 0..23 || m !in 0..59) {
+                    say("Waqt galat hai — HH:MM me likho, jaise 08:00.")
+                } else {
+                    val newJob = Job(routine.name, h, m, true)
+                    scope.launch {
+                        JobStore.upsert(context, newJob)
+                        JobScheduler.schedule(context, newJob)
+                        jobs = JobStore.load(context)
+                        say("Routine '${routine.name}' roz ${String.format("%02d:%02d", h, m)} par chalegi.")
+                    }
+                }
+            }) { Text("Roz is waqt chalao") }
+            if (job != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Button(onClick = {
+                    scope.launch {
+                        JobScheduler.cancel(context, job)
+                        JobStore.remove(context, routine.name)
+                        jobs = JobStore.load(context)
+                        say("Routine '${routine.name}' ka roz ka waqt hata diya.")
+                    }
+                }) { Text("Schedule hatao") }
+            }
             Spacer(modifier = Modifier.height(8.dp))
         }
     }

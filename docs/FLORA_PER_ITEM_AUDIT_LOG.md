@@ -616,3 +616,12 @@ maujood, index bhi 200. Download page ab live hai.
 - Settings: Deepgram key field + load + save (baaki keys jaisa hi pattern).
 - Audit: 5 files brace/paren balance; VOICE_ENROL wiring (enum+title+menu+branch) grep-verify.
 - Baaki: Deepgram streaming WS, wake tune, job runner, auto-memory, voice-per-persona, P2–P5, S2/S3, R3.
+
+## v2.22 chunk 4 — AutoMemory + voice-per-persona + job runner (2026-10-28 ~17:05 IST, CI PENDING)
+- AutoMemory: sendChat se user ke fact-statements seekhe jate hain (naam, pasand, rishtedaar ka naam, rehne ki jagah) — MemoriesStore me, phone par hi, duplicate nahi. Sawaal (?) kabhi learn nahi hote; commands pattern match hi nahi karte.
+- Voice-per-persona: VoiceEngine.setPersona + speak par apply — romantic: pitch 1.25/rate 0.90; baaki (flora/saathi/guru): 1.1/0.95. Wiring: romantic/normal voice commands + Settings persona row. Sirf tone, koi voice copy nahi.
+- Job runner: JobStore (DataStore, ek routine = ek roz ka schedule) + JobScheduler (AlarmManager, exact mile to exact warna inexact fallback; WorkManager nahi — v2.19 me hata tha) + JobAlarmReceiver (due-flag SharedPreferences + notification + agle din reschedule) + BootReceiver reschedule + manifest (receiver + SCHEDULE_EXACT_ALARM).
+- Routines screen: har routine par HH:MM field + "Roz is waqt chalao" + "Schedule hatao" + schedule status.
+- CHAT khulte hi due-check: Auto Mode ON ho to due routines auto-run (wahi queue path), OFF ho to sirf message. Payment/delete steps routine me hain hi nahi; call/SMS steps pehle wale Auto Mode rule par.
+- Audit: 8 files brace/paren balance; manifest receiver + permission grep-verify; String.format Java-static form (Kotlin .format route se bacha gaya).
+- Baaki P1: wake tune, Deepgram streaming barge-in, brain-context me memories ka istemal; phir P2–P5, S2/S3, R3, EK final deploy.

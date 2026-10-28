@@ -29,6 +29,26 @@ class VoiceEngine(context: Context) {
      * liye — taaki user ko baari ka pata rahe. */
     var onSpeechStart: (() -> Unit)? = null
 
+    /** Voice-per-persona (v2.22, chunk 4): persona ke hisaab se
+     *  pitch/rate — flora: saaf aur halki; romantic: thodi narm
+     *  aur dheemi. Sirf tone badalta hai, koi voice copy nahi. */
+    @Volatile
+    var persona: String = "flora"
+
+    fun setPersona(p: String) {
+        persona = p
+    }
+
+    private fun applyPersona() {
+        if (persona == "romantic") {
+            tts?.setPitch(1.25f)
+            tts?.setSpeechRate(0.90f)
+        } else {
+            tts?.setPitch(1.1f)
+            tts?.setSpeechRate(0.95f)
+        }
+    }
+
     init {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -59,6 +79,7 @@ class VoiceEngine(context: Context) {
 
     fun speak(text: String) {
         if (!ready) return
+        applyPersona()
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "flora-reply")
         val seconds = maxOf(1L, (text.length / 13).toLong())
         onSpoken?.invoke(seconds)

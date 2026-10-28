@@ -21,6 +21,10 @@ import kotlinx.coroutines.launch
  * hi activity khud sunegi). Boot se FGS start kuch phones par
  * block ho sakta hai, isliye try/catch hai; fail ho to agle
  * app-open par mic ON karte hi service wapas aa jayegi.
+ *
+ * v2.22 (chunk 4): routine jobs ke alarms bhi dobara lagte
+ * hain — warna reboot ke baad roz ke waqt wale routine
+ * chupchaap band ho jate.
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -41,6 +45,10 @@ class BootReceiver : BroadcastReceiver() {
                         )
                     } catch (e: Exception) {
                     }
+                }
+                try {
+                    JobScheduler.rescheduleAll(context.applicationContext)
+                } catch (e: Exception) {
                 }
             } catch (e: Exception) {
                 // Boot par fail: user ke agle app-open par Wake Word

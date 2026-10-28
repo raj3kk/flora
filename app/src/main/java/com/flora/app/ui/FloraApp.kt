@@ -618,6 +618,36 @@ fun FloraApp(
             }
 
             if (screen == Screen.CHAT) {
+                // Due jobs (v2.22, chunk 4): alarm par flag laga tha —
+                // CHAT khulte hi routine chalegi (Auto Mode ON ho to
+                // khud, warna sirf batayegi). Ek se zyada due hon to
+                // sabke steps ek queue me jud jate hain.
+                LaunchedEffect(screen) {
+                    try {
+                        val duePrefs = appContext.getSharedPreferences("flora_job_due", android.content.Context.MODE_PRIVATE)
+                        val due = duePrefs.getStringSet("due", emptySet())?.toList() ?: emptyList()
+                        if (due.isNotEmpty()) {
+                            duePrefs.edit().putStringSet("due", emptySet()).apply()
+                            val routines = com.flora.app.data.RoutineStore.load(appContext)
+                            val found = due.mapNotNull { name -> routines.firstOrNull { it.name == name } }
+                            if (found.isNotEmpty()) {
+                                if (autoMode) {
+                                    routineName = found.joinToString(", ") { it.name }
+                                    routineQueue = found.flatMap { it.commands }
+                                    routineRunning = true
+                                    val msg = "Waqt ho gaya — routine '${routineName}' chalu kar raha hun."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else {
+                                    val msg = "Routine '${found.joinToString(", ") { it.name }}' ka waqt ho gaya hai — chalane ke liye Routines screen se chalao (Auto Mode OFF hai)."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                    }
+                }
                 if (faceLockOn && !chatUnlocked) {
                     Text("Chat locked hai (Face Lock ON). PIN daal kar unlock kijiye. Face presence check se unlock nahi hota — sirf PIN se.")
                     Spacer(modifier = Modifier.height(8.dp))
@@ -1011,6 +1041,14 @@ fun FloraApp(
                     // Voice command, one confirmation, full execution, spoken
                     // commentary — no stopping at intermediate steps to ask again.
                     // "call <number>" / "call <naam>" / "sms <number|naam> <message>".
+                    // AutoMemory (v2.22): user apne baare me jo bataye, wo
+                    // chupchaap yaad rakho (Memories screen me dikhega).
+                    scope.launch {
+                        try {
+                            com.flora.app.assistant.AutoMemory.learn(memoriesStore, question)
+                        } catch (e: Exception) {
+                        }
+                    }
                     val lower = question.lowercase()
                     // Auto Mode + persona voice commands (v2.17, user order).
                     if (lower == "auto mode on" || lower == "auto mode chalu" ||
@@ -1050,6 +1088,7 @@ fun FloraApp(
                         scope.launch {
                             try { prefs.setPersona("romantic") } catch (e: Exception) { }
                         }
+                        voice.setPersona("romantic")
                         voice.speak("Romantic mode ON ho gaya hai.")
                         return
                     }
@@ -1058,6 +1097,7 @@ fun FloraApp(
                         scope.launch {
                             try { prefs.setPersona("flora") } catch (e: Exception) { }
                         }
+                        voice.setPersona("flora")
                         voice.speak("Normal mode wapas aa gaya hai.")
                         return
                     }
@@ -2160,6 +2200,7 @@ private fun SettingsScreen(
                 listOf("flora" to "Flora", "saathi" to "Saathi", "guru" to "Guru", "romantic" to "Romantic").forEach { (id, label) ->
                     Button(onClick = {
                         persona = id
+                        voice.setPersona(id)
                         scope.launch { prefs.setPersona(id) }
                     }) { Text(if (persona == id) "✓ $label" else label) }
                     Spacer(modifier = Modifier.padding(2.dp))
