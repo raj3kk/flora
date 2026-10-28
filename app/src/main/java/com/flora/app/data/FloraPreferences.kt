@@ -38,6 +38,12 @@ class FloraPreferences(private val context: Context) {
         val DRIVING_MODE = booleanPreferencesKey("driving_mode")
         val PERSONA = stringPreferencesKey("persona")
         val THEME = stringPreferencesKey("theme")
+        val GEMINI_API_KEY2 = stringPreferencesKey("gemini_api_key_2")
+        val GROQ_API_KEY2 = stringPreferencesKey("groq_api_key_2")
+        val TAVILY_API_KEY = stringPreferencesKey("tavily_api_key")
+        val BRAVE_API_KEY = stringPreferencesKey("brave_api_key")
+        val SERPAPI_API_KEY = stringPreferencesKey("serpapi_api_key")
+        val MAPS_API_KEY = stringPreferencesKey("maps_api_key")
         val CALL_TALK = booleanPreferencesKey("call_talk")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
@@ -77,6 +83,49 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setGroqApiKey(value: String) {
         context.floraDataStore.edit { it[Keys.GROQ_API_KEY] = value }
+    }
+
+    /** Optional second keys + optional search keys (v2.1): khali = lane band. */
+    suspend fun geminiApiKey2(): String =
+        context.floraDataStore.data.map { it[Keys.GEMINI_API_KEY2] ?: "" }.first()
+
+    suspend fun setGeminiApiKey2(value: String) {
+        context.floraDataStore.edit { it[Keys.GEMINI_API_KEY2] = value }
+    }
+
+    suspend fun groqApiKey2(): String =
+        context.floraDataStore.data.map { it[Keys.GROQ_API_KEY2] ?: "" }.first()
+
+    suspend fun setGroqApiKey2(value: String) {
+        context.floraDataStore.edit { it[Keys.GROQ_API_KEY2] = value }
+    }
+
+    suspend fun tavilyApiKey(): String =
+        context.floraDataStore.data.map { it[Keys.TAVILY_API_KEY] ?: "" }.first()
+
+    suspend fun setTavilyApiKey(value: String) {
+        context.floraDataStore.edit { it[Keys.TAVILY_API_KEY] = value }
+    }
+
+    suspend fun braveApiKey(): String =
+        context.floraDataStore.data.map { it[Keys.BRAVE_API_KEY] ?: "" }.first()
+
+    suspend fun setBraveApiKey(value: String) {
+        context.floraDataStore.edit { it[Keys.BRAVE_API_KEY] = value }
+    }
+
+    suspend fun serpApiKey(): String =
+        context.floraDataStore.data.map { it[Keys.SERPAPI_API_KEY] ?: "" }.first()
+
+    suspend fun setSerpApiKey(value: String) {
+        context.floraDataStore.edit { it[Keys.SERPAPI_API_KEY] = value }
+    }
+
+    suspend fun mapsApiKey(): String =
+        context.floraDataStore.data.map { it[Keys.MAPS_API_KEY] ?: "" }.first()
+
+    suspend fun setMapsApiKey(value: String) {
+        context.floraDataStore.edit { it[Keys.MAPS_API_KEY] = value }
     }
 
     suspend fun automationConsent(): Boolean =

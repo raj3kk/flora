@@ -21,8 +21,13 @@ class BrainClient(private val prefs: FloraPreferences) {
 
     suspend fun ask(prompt: String): String = withContext(Dispatchers.IO) {
         val geminiKey = prefs.geminiApiKey()
+        val geminiKey2 = prefs.geminiApiKey2()
         val groqKey = prefs.groqApiKey()
-        geminiAsk(prompt, geminiKey) ?: groqAsk(prompt, groqKey)
+        val groqKey2 = prefs.groqApiKey2()
+        // Fixed-order rotation (v2.1): Gemini 1 -> Gemini 2 -> Groq 1 -> Groq 2.
+        // Key value kabhi log/print nahi hoti, sirf lane try hota hai.
+        geminiAsk(prompt, geminiKey) ?: geminiAsk(prompt, geminiKey2)
+            ?: groqAsk(prompt, groqKey) ?: groqAsk(prompt, groqKey2)
             ?: "Dono brain lane nahi chale. Settings me apni free Gemini key " +
                 "ya Groq key daaliye, phir dobara koshish kijiye."
     }

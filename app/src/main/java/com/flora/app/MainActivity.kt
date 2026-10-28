@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity() {
         val guardian = GuardianGate()
         val memoriesStore = MemoriesStore(applicationContext)
         val journalStore = JournalStore(applicationContext)
-        val searchTools = SearchTools()
+        val searchTools = SearchTools(prefs)
         val sosStore = SosStore(applicationContext)
         val docsStore = DocsStore(applicationContext)
         setContent {

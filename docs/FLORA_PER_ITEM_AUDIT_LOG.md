@@ -46,12 +46,31 @@
   FloraOrb(busy), floraColorScheme, versionCode 20 sab maujood).
 - Test-plan entry: docs/FLORA_THEMES_TEST_ENTRY.md (7 steps).
 
-## v2.0 Study/Coding/Market — push hua, CI result pending
+## v2.0 Study/Coding/Market — AUDIT PASS
 - Code audit: study (DuckDuckGo, 5 sources + Source note),
   stockPrice (Yahoo Finance + stale-price note), websiteStarter
   (sirf local text, file save nahi); braces 0; koi key use nahi.
-  Tavily lane is push me NAHI hai (v2.1 ke liye alag rakha hai).
+  Tavily lane is push me NAHI tha (v2.1 ke liye alag rakha gaya).
+- Build test: run 40624515878 completed success, artifact 54,338,988
+  bytes.
 - Test-plan entry: docs/FLORA_TOOLS_TEST_ENTRY.md (6 steps).
+
+## v2.1 Keys + rotation — push hua, CI result pending
+- Code audit: rotation order Gemini 1, 2, Groq 1, 2; khali key
+  skip; key values kabhi log nahi hoti; Tavily lane key ho to
+  pehle, fail ho to DuckDuckGo fallback; Brave/SerpAPI/Maps sirf
+  save, lane nahi (UI me saaf likha hai); states launcher se
+  pehle (775 < 793); braces 0 sab files me.
+- Test-plan entry: docs/FLORA_KEYS_TEST_ENTRY.md (6 steps).
+
+## v2.1 Keys + rotation — code audit done, push v2.0 audit ke baad
+- Code audit: rotation order Gemini 1, 2, Groq 1, 2; khali key
+  skip; key values kabhi log nahi hoti; Tavily lane key ho to
+  pehle, fail ho to DuckDuckGo fallback; Brave/SerpAPI/Maps sirf
+  save, lane nahi (UI me saaf likha hai); states launcher se
+  pehle (775 < 793); braces 0 sab files me.
+- Test-plan entry: docs/FLORA_KEYS_TEST_ENTRY.md (6 steps).
+- Push plan: docs/FLORA_V21_PUSH_PLAN.md; pre-push checklist pass.
 
 ## v2.0 Study/Coding/Market + v2.1 Keys — code local taiyaar, push themes audit ke baad
 - v2.0: SearchTools study/stockPrice/websiteStarter + ToolsScreen

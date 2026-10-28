@@ -771,6 +771,13 @@ private fun SettingsScreen(
     var anonKey by remember { mutableStateOf("") }
     var geminiKey by remember { mutableStateOf("") }
     var groqKey by remember { mutableStateOf("") }
+    // Optional keys (v2.1, local): rotation ke second keys + optional search keys.
+    var geminiKey2 by remember { mutableStateOf("") }
+    var groqKey2 by remember { mutableStateOf("") }
+    var tavilyKey by remember { mutableStateOf("") }
+    var braveKey by remember { mutableStateOf("") }
+    var serpKey by remember { mutableStateOf("") }
+    var mapsKey by remember { mutableStateOf("") }
     var consent by remember { mutableStateOf(false) }
     var pin by remember { mutableStateOf("") }
     var guardianMode by remember { mutableStateOf(false) }
@@ -798,6 +805,12 @@ private fun SettingsScreen(
         anonKey = prefs.supabaseAnonKey()
         geminiKey = prefs.geminiApiKey()
         groqKey = prefs.groqApiKey()
+        geminiKey2 = prefs.geminiApiKey2()
+        groqKey2 = prefs.groqApiKey2()
+        tavilyKey = prefs.tavilyApiKey()
+        braveKey = prefs.braveApiKey()
+        serpKey = prefs.serpApiKey()
+        mapsKey = prefs.mapsApiKey()
         consent = prefs.automationConsent()
         guardianMode = prefs.guardianMode()
         adminVpa = prefs.adminUpiVpa()
@@ -833,11 +846,61 @@ private fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = geminiKey2, onValueChange = { geminiKey2 = it },
+                label = { Text("Gemini key 2 (optional, rotation ke liye)") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = groqKey2, onValueChange = { groqKey2 = it },
+                label = { Text("Groq key 2 (optional, rotation ke liye)") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = tavilyKey, onValueChange = { tavilyKey = it },
+                label = { Text("Tavily key (optional, search lane)") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = braveKey, onValueChange = { braveKey = it },
+                label = { Text("Brave key (optional, future lane)") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = serpKey, onValueChange = { serpKey = it },
+                label = { Text("SerpAPI key (optional, future lane)") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = mapsKey, onValueChange = { mapsKey = it },
+                label = { Text("Maps key (optional, future lane)") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Rotation order: Gemini 1, Gemini 2, Groq 1, Groq 2. Key values kabhi log nahi hoti. Brave/SerpAPI/Maps keys sirf save hoti hain, unka lane abhi nahi bana hai.")
+            Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = {
                 scope.launch {
                     prefs.setSupabaseAnonKey(anonKey.trim())
                     prefs.setGeminiApiKey(geminiKey.trim())
                     prefs.setGroqApiKey(groqKey.trim())
+                    prefs.setGeminiApiKey2(geminiKey2.trim())
+                    prefs.setGroqApiKey2(groqKey2.trim())
+                    prefs.setTavilyApiKey(tavilyKey.trim())
+                    prefs.setBraveApiKey(braveKey.trim())
+                    prefs.setSerpApiKey(serpKey.trim())
+                    prefs.setMapsApiKey(mapsKey.trim())
                     note = "Keys is phone par save ho gayi."
                 }
             }) { Text("Keys save karo") }

@@ -1,5 +1,6 @@
 package com.flora.app.tools
 
+import com.flora.app.data.FloraPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -9,14 +10,16 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 /**
  * No-key tools: DuckDuckGo instant answer, Open-Meteo weather,
  * Frankfurter currency rates, free Dictionary API.
  * No API key is needed or used for any of them. A failed call
  * returns an honest error string, never an invented answer.
+ * v2.1: optional Tavily lane (key ho to pehle, warna DuckDuckGo).
  */
-class SearchTools {
+class SearchTools(private val prefs: FloraPreferences? = null) {
 
     private fun get(urlText: String): String? {
         val conn = URL(urlText).openConnection() as HttpURLConnection
@@ -35,6 +38,12 @@ class SearchTools {
     }
 
     suspend fun search(query: String): String = withContext(Dispatchers.IO) {
+        // Tavily lane (v2.1): key ho to pehle try karo, fail ho to DuckDuckGo.
+        val tavilyKey = prefs?.tavilyApiKey() ?: ""
+        if (tavilyKey.isNotEmpty()) {
+            val tavilyResult = tavilySearch(query, tavilyKey)
+            if (tavilyResult != null) return@withContext tavilyResult
+        }
         val encoded = URLEncoder.encode(query, "UTF-8")
         val text = get("https://api.duckduckgo.com/?q=$encoded&format=json&no_html=1&skip_disambig=1")
             ?: return@withContext "Search nahi ho paya — network ya server ki dikkat hai."
@@ -54,6 +63,46 @@ class SearchTools {
             "Is sawal ka seedha jawab nahi mila."
         } catch (e: Exception) {
             "Search ka jawab samajh nahi aaya, dobara koshish kijiye."
+        }
+    }
+
+    private fun tavilySearch(query: String, key: String): String? {
+        val body = JSONObject()
+            .put("api_key", key)
+            .put("query", query)
+            .put("max_results", 3)
+            .put("include_answer", true)
+        val text = postJson("https://api.tavily.com/search", body) ?: return null
+        return try {
+            val json = JSONObject(text)
+            val answer = json.optString("answer", "")
+            if (answer.isNotBlank()) return answer + "\n\nSource: Tavily"
+            val results = json.optJSONArray("results")
+            if (results != null && results.length() > 0) {
+                val first = results.optJSONObject(0)?.optString("content", "") ?: ""
+                if (first.isNotBlank()) return first + "\n\nSource: Tavily"
+            }
+            null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun postJson(urlText: String, body: JSONObject): String? {
+        val conn = URL(urlText).openConnection() as HttpURLConnection
+        return try {
+            conn.requestMethod = "POST"
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 20_000
+            conn.doOutput = true
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.outputStream.use { it.write(body.toString().toByteArray(StandardCharsets.UTF_8)) }
+            if (conn.responseCode !in 200..299) return null
+            BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).readText()
+        } catch (e: Exception) {
+            null
+        } finally {
+            conn.disconnect()
         }
     }
 
