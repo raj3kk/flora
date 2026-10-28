@@ -460,3 +460,7 @@ maujood, index bhi 200. Download page ab live hai.
 - ImageTools (Pollinations, bina key): "image banao <prompt>" -> Gallery > Flora me save.
 - Audit: 11 kt files brace/paren/bracket 0/0; launcher/state declaration order verify (PermissionsScreen launchers upar, FloraApp voiceView state TopAppBar se pehle).
 - Test entry: docs/FLORA_V215_TEST_ENTRY.md (7 sections).
+
+## Screenshot feature plan (2026-10-28 ~15:45 IST, user ke 2 screenshots se)
+- Dono screenshots ke 22 feature cards + latest-updates ke 10 points, sab ka audit: code grep se haalat verify (LiveScreen vision HAI, notification listener/watchlist/whiteboard/game/PC-link NAHI, website starter stub, routines teach NAHI, docs voice-create NAHI, torch/brightness NAHI, sleep phrase NAHI, email NAHI).
+- Natija: HAI-poora 0, AADHA 16, NAHI 9, romantic persona EXCLUDED (standing rule). Plan doc: docs/FLORA_SCREENSHOT_FEATURE_PLAN_20261028.md — har feature par frontend + backend + database + workflow + gates, 5 phases me order (P1 → P5), har item ka gate (audit → CI → phone test).
