@@ -53,6 +53,7 @@ class FloraPreferences(private val context: Context) {
         val CALL_TALK = booleanPreferencesKey("call_talk")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
+        val PERMISSIONS_GATE_DONE = booleanPreferencesKey("permissions_gate_done")
     }
 
     suspend fun userId(): String {
@@ -281,6 +282,19 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setCallTalk(value: Boolean) {
         context.floraDataStore.edit { it[Keys.CALL_TALK] = value }
+    }
+
+    /** Permission gate (v2.12): pehli baar app khulte hi sab
+     * permissions ek saath maange jaate hain; gate poora hone ke
+     * baad ye flag true ho jata hai aur dobara gate nahi khulta
+     * (Settings se "Permissions dobara dekho" se phir khul sakta
+     * hai). Deny ki hui permission feature ko band karti hai,
+     * poora app kabhi band nahi karti. */
+    suspend fun permissionsGateDone(): Boolean =
+        context.floraDataStore.data.map { it[Keys.PERMISSIONS_GATE_DONE] ?: false }.first()
+
+    suspend fun setPermissionsGateDone(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.PERMISSIONS_GATE_DONE] = value }
     }
 
     /** Talk seconds used on [today] (yyyy-MM-dd). Rolls over automatically. */

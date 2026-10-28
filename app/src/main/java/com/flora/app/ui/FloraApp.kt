@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -62,9 +64,31 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import android.content.pm.PackageManager
+import android.content.ComponentName
+import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
 private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL }
+
+/** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
+private fun screenTitle(screen: Screen): String = when (screen) {
+    Screen.CHAT -> "Chat"
+    Screen.SETTINGS -> "Settings"
+    Screen.MEMORIES -> "Yaadein"
+    Screen.SCAN -> "Scan"
+    Screen.TOOLS -> "Tools"
+    Screen.SOS -> "SOS"
+    Screen.FACE -> "Face"
+    Screen.DOCS -> "Docs"
+    Screen.CONNECT -> "Connect"
+    Screen.PRIVACY -> "Privacy"
+    Screen.TERMS -> "Terms"
+    Screen.AUTO -> "Auto"
+    Screen.ROUTINES -> "Routines"
+    Screen.LIVE -> "Live Screen"
+    Screen.DRIVING -> "Gaadi"
+    Screen.JOURNAL -> "Journal"
+}
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
 
@@ -137,6 +161,15 @@ fun FloraApp(
             pendingVoiceSmsRequest = null
         }
     }
+    // Permission gate (v2.12): states + launcher — baaki states ke
+    // saath, upar declare (gate UI neeche Scaffold me inhe use
+    // karega, isliye launcher yahan hona chahiye).
+    var showGate by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var gateGrants by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    val gateLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants -> gateGrants = grants }
     val scope = rememberCoroutineScope()
     val vision = remember { VisionClient() }
     val attachLauncher = rememberLauncherForActivityResult(
@@ -163,6 +196,9 @@ fun FloraApp(
      * tab bhi enforce hota hai. Manual Settings check waisa hi hai.
      */
     LaunchedEffect(Unit) {
+        // Permission gate (v2.12): pehli baar app khulte hi gate
+        // dikhega; gate poora hone ke baad dobara nahi.
+        try { showGate = !prefs.permissionsGateDone() } catch (e: Exception) { }
         try {
             theme = prefs.theme()
             if (prefs.supabaseAnonKey().isNotEmpty()) {
@@ -311,47 +347,142 @@ fun FloraApp(
         }
     }
 
+    // Permission gate (v2.12): gate khula ho to sirf gate dikhega;
+    // baaki UI tabhi banega jab gate band ho. Saare remember /
+    // launcher / effect is return se PEHLE hain, isliye hook order
+    // nahi tootega.
+    if (showGate) {
+        androidx.compose.material3.MaterialTheme(colorScheme = floraColorScheme(theme)) {
+            PermissionGateScreen(
+                granted = { perm ->
+                    gateGrants[perm] ?: (ContextCompat.checkSelfPermission(
+                        appContext, perm
+                    ) == PackageManager.PERMISSION_GRANTED)
+                },
+                onRequestAll = {
+                    gateLauncher.launch(
+                        FLORA_GATE_PERMISSIONS.map { it.permission }.toTypedArray()
+                    )
+                },
+                onProceed = {
+                    scope.launch {
+                        try { prefs.setPermissionsGateDone(true) } catch (e: Exception) { }
+                        showGate = false
+                    }
+                },
+            )
+        }
+        return
+    }
+
     androidx.compose.material3.MaterialTheme(colorScheme = floraColorScheme(theme)) {
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Flora") })
+            TopAppBar(
+                title = { Text("Flora — " + screenTitle(screen)) },
+                actions = {
+                    TextButton(onClick = { menuOpen = true }) { Text("Menu ▾") }
+                    DropdownMenu(
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false },
+                    ) {
+                        DropdownMenuItem(
+                            enabled = false,
+                            text = { Text("— Baat-cheet —") },
+                            onClick = { },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Chat") },
+                            onClick = { screen = Screen.CHAT; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            enabled = false,
+                            text = { Text("— Tools —") },
+                            onClick = { },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Scan") },
+                            onClick = { screen = Screen.SCAN; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Tools") },
+                            onClick = { screen = Screen.TOOLS; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Docs") },
+                            onClick = { screen = Screen.DOCS; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Live Screen") },
+                            onClick = { screen = Screen.LIVE; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Gaadi") },
+                            onClick = { screen = Screen.DRIVING; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            enabled = false,
+                            text = { Text("— Meri cheezein —") },
+                            onClick = { },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Yaadein") },
+                            onClick = { screen = Screen.MEMORIES; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Journal") },
+                            onClick = { screen = Screen.JOURNAL; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("SOS") },
+                            onClick = { screen = Screen.SOS; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Face") },
+                            onClick = { screen = Screen.FACE; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            enabled = false,
+                            text = { Text("— Setup —") },
+                            onClick = { },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Settings") },
+                            onClick = { screen = Screen.SETTINGS; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Connect") },
+                            onClick = { screen = Screen.CONNECT; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Auto") },
+                            onClick = { screen = Screen.AUTO; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Routines") },
+                            onClick = { screen = Screen.ROUTINES; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            enabled = false,
+                            text = { Text("— Kanooni —") },
+                            onClick = { },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Privacy") },
+                            onClick = { screen = Screen.PRIVACY; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Terms") },
+                            onClick = { screen = Screen.TERMS; menuOpen = false },
+                        )
+                    }
+                },
+            )
         }
     ) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)
         ) {
-            Row {
-                Button(onClick = { screen = Screen.CHAT }) { Text("Chat") }
-                Spacer(modifier = Modifier.padding(4.dp))
-                Button(onClick = { screen = Screen.SETTINGS }) { Text("Settings") }
-                Spacer(modifier = Modifier.padding(4.dp))
-                Button(onClick = { screen = Screen.MEMORIES }) { Text("Yaadein") }
-            }
-            Row {
-                Button(onClick = { screen = Screen.SCAN }) { Text("Scan") }
-                Spacer(modifier = Modifier.padding(4.dp))
-                Button(onClick = { screen = Screen.TOOLS }) { Text("Tools") }
-                Spacer(modifier = Modifier.padding(4.dp))
-                Button(onClick = { screen = Screen.SOS }) { Text("SOS") }
-                Spacer(modifier = Modifier.padding(4.dp))
-                Button(onClick = { screen = Screen.FACE }) { Text("Face") }
-                Spacer(modifier = Modifier.padding(4.dp))
-                Button(onClick = { screen = Screen.DOCS }) { Text("Docs") }
-                Spacer(modifier = Modifier.padding(4.dp))
-                Button(onClick = { screen = Screen.CONNECT }) { Text("Connect") }
-                Spacer(modifier = Modifier.padding(4.dp))
-                Button(onClick = { screen = Screen.PRIVACY }) { Text("Privacy") }
-                Spacer(modifier = Modifier.padding(4.dp))
-                Button(onClick = { screen = Screen.TERMS }) { Text("Terms") }
-                Spacer(modifier = Modifier.padding(4.dp))
-                Button(onClick = { screen = Screen.AUTO }) { Text("Auto") }
-                Spacer(modifier = Modifier.padding(4.dp))
-                Button(onClick = { screen = Screen.ROUTINES }) { Text("Routines") }
-                Spacer(modifier = Modifier.padding(4.dp))
-                Button(onClick = { screen = Screen.LIVE }) { Text("Live Screen") }
-                Button(onClick = { screen = Screen.DRIVING }) { Text("Gaadi") }
-                Button(onClick = { screen = Screen.JOURNAL }) { Text("Journal") }
-            }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 "Free: 10 min/day, app me maujood saare tools  •  Pro: ${FloraConfig.PRO_PRICE_TEXT}  •  " +
@@ -696,7 +827,7 @@ fun FloraApp(
                 )
                 }
             } else if (screen == Screen.SETTINGS) {
-                SettingsScreen(prefs, licenceClient, pinVault, guardian) { status ->
+                SettingsScreen(prefs, licenceClient, pinVault, guardian, brain, { showGate = true }) { status ->
                     licence = status
                 }
             } else if (screen == Screen.MEMORIES) {
@@ -806,6 +937,8 @@ private fun SettingsScreen(
     licenceClient: LicenceClient,
     pinVault: PinVault,
     guardian: GuardianGate,
+    brain: BrainClient,
+    onShowPermissions: () -> Unit,
     onLicence: (LicenceStatus) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -844,6 +977,11 @@ private fun SettingsScreen(
     var linkPassword by remember { mutableStateOf("") }
     var linkedEmailDisplay by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
+    // Keys-check + background status (v2.12): launcher se PEHLE.
+    var keyCheckNote by remember { mutableStateOf("") }
+    var bgNote by remember { mutableStateOf("") }
+    var notifGranted by remember { mutableStateOf(false) }
+    var batteryIgnored by remember { mutableStateOf(false) }
     val phonePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -867,6 +1005,17 @@ private fun SettingsScreen(
             }
         } else {
             wakeStatus = "Mic permission ke bina Wake Word nahi chalega."
+        }
+    }
+    // Notification permission launcher (v2.12): bg states upar hain.
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        notifGranted = granted
+        bgNote = if (granted) {
+            "Notification permission mil gaya — ab push dikhega."
+        } else {
+            "Notification permission nahi mila — tab tak koi notification nahi aayega."
         }
     }
 
@@ -897,6 +1046,16 @@ private fun SettingsScreen(
         wakeEnrolled = BiometricTemplates(context).hasWake()
         wakeStatus = if (wakeEnabled) "Wake Word ON hai — sun raha hun." else "Wake Word: band hai"
         linkedEmailDisplay = prefs.linkedEmail()
+        // Background status (v2.12): system se live padha jata hai.
+        notifGranted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        batteryIgnored = try {
+            context.getSystemService(PowerManager::class.java)
+                ?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+        } catch (e: Exception) {
+            false
+        }
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -1022,20 +1181,148 @@ private fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Text("Rotation order: Gemini 1, Gemini 2, Groq 1, Groq 2. Key values kabhi log nahi hoti. Brave/SerpAPI/Maps keys sirf save hoti hain, unka lane abhi nahi bana hai.")
             Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = {
-                scope.launch {
-                    prefs.setSupabaseAnonKey(anonKey.trim())
-                    prefs.setGeminiApiKey(geminiKey.trim())
-                    prefs.setGroqApiKey(groqKey.trim())
-                    prefs.setGeminiApiKey2(geminiKey2.trim())
-                    prefs.setGroqApiKey2(groqKey2.trim())
-                    prefs.setTavilyApiKey(tavilyKey.trim())
-                    prefs.setBraveApiKey(braveKey.trim())
-                    prefs.setSerpApiKey(serpKey.trim())
-                    prefs.setMapsApiKey(mapsKey.trim())
-                    note = "Keys is phone par save ho gayi."
+            Row {
+                Button(onClick = {
+                    scope.launch {
+                        prefs.setSupabaseAnonKey(anonKey.trim())
+                        prefs.setGeminiApiKey(geminiKey.trim())
+                        prefs.setGroqApiKey(groqKey.trim())
+                        prefs.setGeminiApiKey2(geminiKey2.trim())
+                        prefs.setGroqApiKey2(groqKey2.trim())
+                        prefs.setTavilyApiKey(tavilyKey.trim())
+                        prefs.setBraveApiKey(braveKey.trim())
+                        prefs.setSerpApiKey(serpKey.trim())
+                        prefs.setMapsApiKey(mapsKey.trim())
+                        note = "Keys is phone par save ho gayi."
+                    }
+                }) { Text("Keys save karo") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = {
+                    scope.launch {
+                        keyCheckNote = "Keys check ho rahi hain..."
+                        val results = try {
+                            brain.checkKeys()
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                        keyCheckNote = if (results.isEmpty()) {
+                            "Check nahi ho paya — internet dekh kar dobara karo."
+                        } else {
+                            results.joinToString(" • ") { "${it.name}: ${it.note}" }
+                        }
+                    }
+                }) { Text("Keys check karo") }
+            }
+            if (keyCheckNote.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(keyCheckNote)
+            }
+            Text("Save dabaye bina key kaam nahi karegi — pehle Save, phir Check. Check sirf key ki validity batata hai, key ki value kabhi screen par nahi aati.")
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Background aur notifications — app band hone par bhi chale")
+            Text(
+                "Notification permission: " + if (notifGranted) "mila hua ✓" else "nahi mila — bina iske koi push nahi dikhega"
+            )
+            Text(
+                "Battery optimization: " + if (batteryIgnored) {
+                    "band hai ✓ (background chalega)"
+                } else {
+                    "on hai — phone background me app rok sakta hai"
                 }
-            }) { Text("Keys save karo") }
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row {
+                Button(onClick = {
+                    if (notifGranted) {
+                        bgNote = "Notification permission pehle se mila hua hai."
+                    } else {
+                        notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }) { Text("Notification permission do") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = {
+                    try {
+                        val pm = context.getSystemService(PowerManager::class.java)
+                        if (pm != null && pm.isIgnoringBatteryOptimizations(context.packageName)) {
+                            batteryIgnored = true
+                            bgNote = "Battery optimization pehle se band hai."
+                        } else {
+                            val intent = Intent(
+                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                Uri.parse("package:" + context.packageName),
+                            )
+                            context.startActivity(intent)
+                            bgNote = "System dialog me 'Allow' dabao — phir wapas aakar Status refresh karo."
+                        }
+                    } catch (e: Exception) {
+                        try {
+                            context.startActivity(
+                                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                            )
+                            bgNote = "Battery settings khul rahi hain — wahan Flora ko 'Don't optimize' karo."
+                        } catch (e2: Exception) {
+                            bgNote = "Battery settings nahi khul payi — phone ki Settings > Apps > Flora > Battery se karo."
+                        }
+                    }
+                }) { Text("Battery optimization band karo") }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row {
+                Button(onClick = {
+                    try {
+                        val vivoIntents = listOf(
+                            Intent().setClassName(
+                                "com.vivo.permissionmanager",
+                                "com.vivo.permissionmanager.activity.BgStartUpManagerActivity",
+                            ),
+                            Intent().setClassName(
+                                "com.iqoo.secure",
+                                "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity",
+                            ),
+                        )
+                        var opened = false
+                        for (intent in vivoIntents) {
+                            try {
+                                context.startActivity(intent)
+                                opened = true
+                                break
+                            } catch (e: Exception) {
+                            }
+                        }
+                        if (!opened) {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.parse("package:" + context.packageName),
+                                )
+                            )
+                        }
+                        bgNote = "Auto-start/app-info khul rahi hai — wahan Flora ka auto-start ON karo."
+                    } catch (e: Exception) {
+                        bgNote = "Auto-start settings nahi khul payi — phone ki Settings > Apps > Flora se karo."
+                    }
+                }) { Text("Auto-start settings kholo (Vivo/iQOO)") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = {
+                    notifGranted = ContextCompat.checkSelfPermission(
+                        context, Manifest.permission.POST_NOTIFICATIONS
+                    ) == PackageManager.PERMISSION_GRANTED
+                    batteryIgnored = try {
+                        context.getSystemService(PowerManager::class.java)
+                            ?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+                    } catch (e: Exception) {
+                        false
+                    }
+                    bgNote = "Status refresh ho gaya."
+                }) { Text("Status refresh karo") }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = { onShowPermissions() }) { Text("Permissions dobara dekho") }
+            if (bgNote.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(bgNote)
+            }
+            Text("Reboot ke baad Wake Word apne aap wapas chalu ho jayega (agar pehle ON tha). Accessibility aur dialer role hamesha tumhari marzi se, alag se milenge.")
             Spacer(modifier = Modifier.height(12.dp))
             Text("Website account link — website se khareeda Pro isi app me dikhane ke liye")
             Text("Link karne se pehle jaan lo: purane random-UUID wali koi licence (agar hoti) orphan ho jayegi; refresh token sirf is phone par save hoga; password change par link tootega aur dobara login karna hoga.")

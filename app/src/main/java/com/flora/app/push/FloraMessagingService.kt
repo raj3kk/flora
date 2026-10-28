@@ -82,6 +82,6 @@ class FloraMessagingService : FirebaseMessagingService() {
             .setContentIntent(pending)
             .setAutoCancel(true)
             .build()
-        manager.notify(1001, notification)
+        manager.notify(2001, notification)
     }
 }

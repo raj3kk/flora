@@ -377,3 +377,33 @@ maujood, index bhi 200. Download page ab live hai.
   ~0.45-0.50; final phone test + doosre speaker data se.
 - Baaki: Kotlin port + enrol/match UI + phone test (ye item
   phone test ke bina PASS nahi mana jayega).
+
+## v2.12 user-report fixes — CODE DONE, CI PENDING (2026-10-28 ~13:20 IST)
+- Shikayat: (1) app khulte hi permissions nahi maangta, (2) key
+  daalne par bhi "key daaliye" bolta hai, (3) 16 buttons bikhre
+  pade hain, koi arrangement nahi, (4) background me nahi chalta,
+  notification nahi aata.
+- Jad (code se pakki): (1) startup par koi permission flow tha hi
+  nahi — sirf lazy per-feature maanga jata tha; (2) har failure
+  par ek hi generic message tha — key saved hai ya nahi, galat
+  hai ya quota khatam, farq nahi bataya jata tha; (3) 16 buttons
+  2 rows me the, koi menu/group nahi; (4) POST_NOTIFICATIONS
+  kabhi startup par maanga hi nahi gaya (Android 13+ par bina
+  iske notification dikhta hi nahi), BOOT receiver nahi tha,
+  battery-opt flow nahi tha, aur push notification ka id 1001
+  Wake Word ke foreground id se takra raha tha.
+- Fix: PermissionGateScreen (pehli baar 6 permissions kaaran ke
+  saath + Aage badho; deny sirf feature band karta hai, app
+  nahi) + Settings se dobara; BrainClient me alag messages
+  (khali / galat-expired / quota / network) + Keys-check button
+  (models-list GET, koi generation cost nahi, key value kabhi
+  screen par nahi); TopAppBar me grouped DropdownMenu (5 groups)
+  + screen title; BootReceiver (sirf Wake ON tha to restart);
+  Settings me Background section (notification/battery status
+  live + battery-opt dialog + Vivo auto-start + refresh);
+  push notify id 1001 -> 2001.
+- NAHI badla: Accessibility/dialer role/battery hamesha user ki
+  marzi se manual hi rahenge (kabhi gate me zabardasti nahi);
+  payment hamesha alag approval; koi key value kabhi log nahi.
+- Test entry: docs/FLORA_V212_TEST_ENTRY.md (6 sections).
+  Phone test + asli push test abhi bhi user-gated hain.
