@@ -6,6 +6,7 @@ import com.flora.app.core.FloraConfig
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -52,6 +53,7 @@ class FloraPreferences(private val context: Context) {
         val MAPS_API_KEY = stringPreferencesKey("maps_api_key")
         val FCM_TOKEN = stringPreferencesKey("fcm_token")
         val WAKE_ENABLED = booleanPreferencesKey("wake_enabled")
+        val WAKE_THRESHOLD = floatPreferencesKey("wake_threshold")
         val LINKED_USER_ID = stringPreferencesKey("linked_user_id")
         val LINKED_EMAIL = stringPreferencesKey("linked_email")
         val LINKED_REFRESH_TOKEN = stringPreferencesKey("linked_refresh_token")
@@ -244,6 +246,18 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setWakeEnabled(value: Boolean) {
         context.floraDataStore.edit { it[Keys.WAKE_ENABLED] = value }
+    }
+
+    // Wake sensitivity (v2.22, chunk 6): 0.60 default (prototype
+    // positives 0.732-0.896, noise ≤0.314). Kam = 0.70 (kam galat
+    // trigger, saaf awaaz chahiye); Zyada = 0.50 (aasani se
+    // sunega, galat trigger zyada ho sakta hai). Service har
+    // window par ye value padhta hai — restart ki zaroorat nahi.
+    suspend fun wakeThreshold(): Float =
+        context.floraDataStore.data.map { it[Keys.WAKE_THRESHOLD] ?: 0.60f }.first()
+
+    suspend fun setWakeThreshold(value: Float) {
+        context.floraDataStore.edit { it[Keys.WAKE_THRESHOLD] = value }
     }
 
     suspend fun automationConsent(): Boolean =

@@ -10,6 +10,7 @@ import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.flora.app.MainActivity
+import com.flora.app.data.FloraPreferences
 import com.flora.app.security.BiometricTemplates
 import com.flora.app.voice.MicOwner
 import kotlinx.coroutines.CoroutineScope
@@ -28,10 +29,12 @@ import java.util.Locale
  *   sunna kabhi nahi: notification hamesha dikhegi, Settings se
  *   OFF karte hi service ruk jayegi.
  * - Har 2 second ki window ka MFCC mean nikalta hai, enrolled
- *   template se cosine nikalta hai. Threshold 0.60 sirf shuruaati
- *   guess hai (Python prototype: positives 0.732-0.896, silence/
- *   noise 0.232-0.314) — phone par asli speech se tune hona baaki
- *   hai, isliye v0 me false trigger ho sakta hai.
+ *   template se cosine nikalta hai. Threshold default 0.60
+ *   (Python prototype: positives 0.732-0.896, silence/
+ *   noise 0.232-0.314) — v2.22 se user Settings se sensitivity
+ *   badal sakta hai (Kam 0.70 / Medium 0.60 / Zyada 0.50);
+ *   phone par asli speech se tune hona abhi bhi baaki hai,
+ *   isliye v0 me false trigger ho sakta hai.
  * - Wake par sirf TTS "Haan, boliye" bolta hai, phir 10 second
  *   cooldown — koi action, koi unlock, koi posting nahi karta.
  * - Template sirf encrypted on-device hai (BiometricTemplates),
@@ -103,7 +106,12 @@ class WakeWordService : Service() {
             val audio = WakeWordRecorder.recordMillis(2000) ?: continue
             val mean = WakeWordMFCC.mfccMean(audio) ?: continue
             val score = WakeWordMFCC.cosine(mean, template)
-            if (score >= WAKE_THRESHOLD) {
+            val threshold = try {
+                FloraPreferences(this@WakeWordService).wakeThreshold().toDouble()
+            } catch (e: Exception) {
+                WAKE_THRESHOLD
+            }
+            if (score >= threshold) {
                 val now = System.currentTimeMillis()
                 if (now - lastWakeMs > 10_000) {
                     lastWakeMs = now

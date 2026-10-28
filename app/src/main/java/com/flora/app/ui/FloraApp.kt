@@ -1756,6 +1756,7 @@ private fun SettingsScreen(
     var wakeEnabled by remember { mutableStateOf(false) }
     var wakeEnrolled by remember { mutableStateOf(false) }
     var wakeStatus by remember { mutableStateOf("Wake Word: band hai") }
+    var wakeThreshold by remember { mutableStateOf(0.60f) }
     // App-link state (v2.8, PREP — push v2.7 PASS ke baad): launcher
     // se PEHLE declare (order trap). Password state screen par hi
     // rahega, kabhi save/log nahi hoga.
@@ -1832,6 +1833,7 @@ private fun SettingsScreen(
         wakeEnabled = prefs.wakeEnabled()
         wakeEnrolled = BiometricTemplates(context).hasWake()
         wakeStatus = if (wakeEnabled) "Wake Word ON hai — sun raha hun." else "Wake Word: band hai"
+        wakeThreshold = prefs.wakeThreshold()
         linkedEmailDisplay = prefs.linkedEmail()
         // Background status (v2.12): system se live padha jata hai.
         notifGranted = ContextCompat.checkSelfPermission(
@@ -1881,6 +1883,17 @@ private fun SettingsScreen(
                 })
             }
             Text(wakeStatus)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("Wake sensitivity — galat trigger zyada ho to 'Kam' karo, sunna mushkil ho to 'Zyada' karo.")
+            Row {
+                listOf(0.70f to "Kam", 0.60f to "Medium", 0.50f to "Zyada").forEach { (value, label) ->
+                    Button(onClick = {
+                        wakeThreshold = value
+                        scope.launch { prefs.setWakeThreshold(value) }
+                    }) { Text(if (wakeThreshold == value) "✓ $label" else label) }
+                    Spacer(modifier = Modifier.padding(2.dp))
+                }
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Button(onClick = {
                 scope.launch {

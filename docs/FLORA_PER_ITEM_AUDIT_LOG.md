@@ -637,3 +637,10 @@ maujood, index bhi 200. Download page ab live hai.
 - Privacy: facts sirf is phone par hain; brain ko sirf us waqt ke jawab ke liye context milta hai (prompt me), koi alag sync nahi.
 - Audit: 2 files brace/paren balance; brain.ask callers grep-verify (chat path memory ke saath, routine paths default).
 - Baaki P1: wake tune, Deepgram streaming barge-in; phir P2–P5, S2/S3, R3, EK final deploy.
+
+## v2.22 chunk 6 — Wake tune: user-adjustable sensitivity (2026-10-28 ~17:20 IST, CI PENDING)
+- Pehle threshold hardcoded 0.60 tha (sirf shuruaati guess). Ab FloraPreferences me wakeThreshold (default 0.60f, float key) + Settings me Kam (0.70) / Medium (0.60) / Zyada (0.50) buttons.
+- WakeWordService har 2s window par fresh threshold padhta hai — Settings badalte hi lagu, restart ki zaroorat nahi; read fail ho to 0.60 fallback.
+- Imaandari: ye abhi bhi tuning ka pehla kadam hai — asli phone-speech tune tab hoga jab user "Hey Flora" recordings dega (tab tak false trigger possible hai, ye baat service comment me khuli hai).
+- Audit: 3 files brace/paren balance; sensitivity row Settings me wakeStatus ke neeche, enrol button se pehle (grep-verify); declaration order: wakeThreshold state launcher se pehle wale block me.
+- Baaki P1: Deepgram streaming barge-in; phir P2–P5, S2/S3, R3, EK final deploy.
