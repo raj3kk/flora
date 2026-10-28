@@ -689,7 +689,7 @@ fun FloraApp(
                     }
                 }
                 if (faceLockOn && !chatUnlocked) {
-                    Text("Chat locked hai (Face Lock ON). PIN daal kar unlock kijiye. Face presence check se unlock nahi hota — sirf PIN se.")
+                    Text("Chat locked hai (Face Lock ON). PIN daal kar unlock kijiye. Face presence check se unlock nahi hota — PIN chahiye, aur awaaz enrolled ho to uske baad awaaz ka check bhi lagega.")
                     Spacer(modifier = Modifier.height(8.dp))
                     if (pendingVoiceUnlock) {
                         // PIN sahi ho gaya; ab awaaz ka check (v2.22).

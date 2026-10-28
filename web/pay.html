@@ -12,6 +12,12 @@
 bhejo (app ke Settings me owner ka UPI ID hota hai). Step 2: yahan
 login karke UTR + note submit karo. Step 3: admin approve karega —
 tab licence active hoga. Koi auto-charge nahi.</p>
+<p class="note"><b>Zaroori — pehle app link karo:</b> approval par licence
+tabhi active hogi jab tumhara app account website account se juda
+ho. App ke Settings me "Website account link" me wahi email aur
+password daalo, phir UTR submit karo. Bina link ke submit kiya
+UTR approval par rukega (admin ko "user device unknown" milega),
+kyunki licence tumhare phone ke device se judti hai.</p>
 <label>UTR number <input id="utr" type="text"></label>
 <label>Note (optional) <input id="note" type="text"></label>
 <button id="btn" type="button">UTR submit karo</button>
@@ -30,7 +36,8 @@ document.getElementById('btn').addEventListener('click', async () => {
   const { error } = await client.from("payment_submissions").insert({
     user_id: session.user.id, amount_paisa: 19900, utr, note, status: "pending",
   });
-  st.textContent = error ? ("Submit fail: " + error.message) : "UTR submit ho gaya. Admin approval ka intezar karo.";
+  if (error) { st.textContent = "Submit fail: " + error.message; return; }
+  st.innerHTML = 'UTR submit ho gaya. Admin approval ka intezar karo. Status <a href="account.html">Account page</a> par dekh sakte ho.';
 });
 </script>
 </body>

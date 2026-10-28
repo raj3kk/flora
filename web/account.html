@@ -8,26 +8,54 @@
 </head>
 <body>
 <h1>Flora account</h1>
-<button id="btn" type="button">Licence status dekho</button>
+<p id="who" class="note">Login ke baad tumhara email yahan aayega.</p>
+<button id="btn" type="button">Meri payments dekho</button>
+<button id="logout" type="button">Logout</button>
 <p id="status" class="note">Login ke baad status yahan aayega.</p>
-<p class="note">Licence status licence-verify function se aata hai.
-Agar website Pro approve ho gaya hai lekin app me nahi dikh raha,
-to wajah app-link step ka baaki hona hai (website account aur app
-ka random user id abhi alag hain) — ye gap khula hua darj hai.</p>
+<div id="payments"></div>
+<p class="note">Licence app me dikhta hai — website par nahi. App ke
+Settings me "Website account link" me wahi email aur password
+daalo (jo yahan login me hai). Link hone ke baad hi admin
+approval par Pro licence app me active hogi. Bina link ke
+UTR approval rukega — isliye pehle link karo, phir
+<a href="pay.html">UTR submit karo</a>.</p>
+<p class="note"><a href="login.html">Login</a> | <a href="pricing.html">Pricing</a> | <a href="download.html">App download</a></p>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const client = supabase.createClient("https://keomyweghrmhqglaxmyv.supabase.co", "sb_publishable_qMjX-cw11dB_Y9nT8IlVzw_nPup-Yxe");
+(async () => {
+  const { data: { session } } = await client.auth.getSession();
+  if (session) document.getElementById('who').textContent = "Login hai: " + session.user.email;
+})();
+document.getElementById('logout').addEventListener('click', async () => {
+  await client.auth.signOut();
+  window.location.href = "login.html";
+});
 document.getElementById('btn').addEventListener('click', async () => {
   const st = document.getElementById('status');
+  const el = document.getElementById('payments');
   const { data: { session } } = await client.auth.getSession();
   if (!session) { st.textContent = "Pehle login karo."; return; }
-  const res = await fetch("https://keomyweghrmhqglaxmyv.supabase.co/functions/v1/licence-verify", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + session.access_token },
-    body: JSON.stringify({ user_id: session.user.id, device_id: "" }),
+  st.textContent = "Payments load ho rahi hain...";
+  const { data, error } = await client
+    .from("payment_submissions")
+    .select("amount_paisa,utr,note,status,created_at")
+    .eq("user_id", session.user.id)
+    .order("created_at", { ascending: false });
+  if (error) {
+    st.textContent = "Load fail: " + error.message +
+      " (Agar ye RLS/policy error hai to admin ko dashboard se policy check karni hogi.)";
+    return;
+  }
+  if (!data.length) { st.textContent = "Abhi koi UTR submit nahi hua hai."; el.innerHTML = ""; return; }
+  st.textContent = "Tumhari UTR submissions:";
+  el.innerHTML = "";
+  data.forEach(row => {
+    const div = document.createElement('div');
+    div.textContent = "₹" + (row.amount_paisa / 100) + " | UTR " + row.utr +
+      " | " + row.status + " | " + (row.note || "") + " | " + row.created_at;
+    el.appendChild(div);
   });
-  const data = await res.json().catch(() => ({}));
-  st.textContent = "Plan: " + (data.plan || "?") + ", status: " + (data.status || "?");
 });
 </script>
 </body>

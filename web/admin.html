@@ -35,8 +35,8 @@ input, button { padding: 8px; font-size: 15px; }
 </head>
 <body>
 <h1>Flora Admin (Phase A)</h1>
-<p class="note">Login ke baad hi sections dikhenge. Admin check server-side
-RLS se hota hai — is page ka JavaScript kisi ko admin nahi banata.</p>
+<p class="note">Login ke baad sections me data aayega. Admin check server-side
+function/RLS se hota hai — is page ka JavaScript kisi ko admin nahi banata.</p>
 
 <section id="login-section">
   <h2>Login</h2>
@@ -48,8 +48,9 @@ RLS se hota hai — is page ka JavaScript kisi ko admin nahi banata.</p>
 
 <section id="users-section">
   <h2>Users &amp; Licences</h2>
-  <p class="note">List/search, plan, status, device, activate/revoke.
-  Har action admin_audit me darj hoga.</p>
+  <p class="note">List, plan, status, device. Licence activate/revoke is
+  page se nahi hota — licence sirf payment approval (admin-approve
+  function) se active hoti hai. Har approval admin_audit me darj hoga.</p>
   <div id="users-list">Login ke baad list yahan aayegi.</div>
 </section>
 
@@ -121,7 +122,11 @@ async function loadPayments() {
     .select("id,user_id,amount_paisa,utr,note,status,created_at")
     .eq("status", "pending").order("created_at", { ascending: true });
   const el = document.getElementById('payments-list');
-  if (error) { el.textContent = "Load fail: " + error.message; return; }
+  if (error) {
+    el.textContent = "Load fail: " + error.message +
+      " (Agar ye RLS/policy error hai to admin ke users row par is_admin=true hona chahiye — dashboard/SQL se check karo.)";
+    return;
+  }
   if (!data.length) { el.textContent = "Koi pending payment nahi hai."; return; }
   el.innerHTML = "";
   data.forEach(row => {
@@ -199,7 +204,11 @@ async function loadAudit() {  const { data, error } = await client
     .select("id,admin_user_id,action,target_user_id,created_at")
     .order("created_at", { ascending: false }).limit(50);
   const el = document.getElementById('audit-list');
-  if (error) { el.textContent = "Load fail: " + error.message; return; }
+  if (error) {
+    el.textContent = "Load fail: " + error.message +
+      " (Agar ye RLS/policy error hai to admin ke users row par is_admin=true hona chahiye — dashboard/SQL se check karo.)";
+    return;
+  }
   if (!data.length) { el.textContent = "Koi audit entry nahi hai."; return; }
   el.innerHTML = "";
   data.forEach(row => {
@@ -219,6 +228,8 @@ document.getElementById('login-btn').addEventListener('click', async () => {
   adminSession = data.session;
   st.textContent = "Login ho gaya: " + data.user.email +
     " (admin check server-side function me hoga — non-admin ko approve/reject par 403 milega).";
+  document.getElementById('secrets-list').textContent =
+    "By design: secrets ki values is page par kabhi nahi aayengi. Status sirf Supabase dashboard (owner-only) se dekha ja sakta hai.";
   loadPayments();
   loadAudit();
   loadAdminList();

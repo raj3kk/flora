@@ -16,12 +16,23 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const client = supabase.createClient("https://keomyweghrmhqglaxmyv.supabase.co", "sb_publishable_qMjX-cw11dB_Y9nT8IlVzw_nPup-Yxe");
+(async () => {
+  const { data: { session } } = await client.auth.getSession();
+  if (session) window.location.href = "account.html";
+})();
 document.getElementById('btn').addEventListener('click', async () => {
   const email = document.getElementById('email').value;
   const password = document.getElementById('password').value;
   const st = document.getElementById('status');
+  if (!email || !password) { st.textContent = "Email aur password dono daalo."; return; }
   const { error } = await client.auth.signInWithPassword({ email, password });
-  st.textContent = error ? ("Login fail: " + error.message) : "Login ho gaya. Account page kholo.";
+  if (error) {
+    st.textContent = "Login fail: " + error.message +
+      " (Agar abhi signup kiya hai to pehle email ka confirmation link click karo.)";
+    return;
+  }
+  st.textContent = "Login ho gaya. Account page khul raha hai...";
+  window.location.href = "account.html";
 });
 </script>
 </body>

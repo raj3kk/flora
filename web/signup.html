@@ -12,11 +12,14 @@
 <label>Password <input id="password" type="password"></label>
 <button id="btn" type="button">Signup</button>
 <p id="status" class="note"></p>
+<p class="note"><a href="login.html">Login</a> | <a href="pricing.html">Pricing</a> | <a href="download.html">App download</a></p>
 <p class="note">Account banne ke baad: <a href="pricing.html">Pro (₹199/mahina)</a> dekh lo.
-Imandari se ek baat: website account aur app ka account abhi alag pehchaan
-hain — app me website account link karne ka step abhi baaki hai, isliye
-website se kharida Pro tabhi app me dikhega jab app-link aa jayega.
-Tab tak website account se UTR submit karke approval liya ja sakta hai.</p>
+Zaroori step: app me Pro dikhane ke liye app ke Settings me
+"Website account link" me wahi email aur password daalo —
+tab website account aur app ka account jud jayenge aur
+approval ke baad Pro app me dikhega. Bina link ke approval
+par licence active nahi hoga, isliye pehle link karo, phir
+<a href="pay.html">UTR submit karo</a>.</p>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const client = supabase.createClient("https://keomyweghrmhqglaxmyv.supabase.co", "sb_publishable_qMjX-cw11dB_Y9nT8IlVzw_nPup-Yxe");
@@ -24,8 +27,14 @@ document.getElementById('btn').addEventListener('click', async () => {
   const email = document.getElementById('email').value;
   const password = document.getElementById('password').value;
   const st = document.getElementById('status');
-  const { error } = await client.auth.signUp({ email, password });
-  st.textContent = error ? ("Signup fail: " + error.message) : "Account ban gaya. Ab login karo.";
+  if (!email || !password) { st.textContent = "Email aur password dono daalo."; return; }
+  const { data, error } = await client.auth.signUp({ email, password });
+  if (error) { st.textContent = "Signup fail: " + error.message; return; }
+  if (data.session) {
+    st.innerHTML = 'Account ban gaya aur login bhi ho gaya. <a href="account.html">Account page kholo</a>.';
+  } else {
+    st.innerHTML = 'Account ban gaya. Email me confirmation link aaya hoga — us par click karo, phir <a href="login.html">login karo</a>. (Link inbox/spam me na mile to dobara signup mat karo, pehle thoda intezar karo.)';
+  }
 });
 </script>
 </body>
