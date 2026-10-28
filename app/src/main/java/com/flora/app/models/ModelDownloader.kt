@@ -78,8 +78,17 @@ object ModelDownloader {
         return File(modelDir(context, model.id), name)
     }
 
-    fun status(context: Context, model: FloraModel): ModelStatus {
-        if (model.bundled) return ModelStatus.READY
+    /** Download ho chuka model ka file (valid .ok ke saath) — na ho to null.
+     *  VoiceMatcher isse bada encoder model load karta hai (APK me
+     *  bundle karne ke bajay server se download — M1 system). */
+    fun downloadedModelFile(context: Context, modelId: String, fileName: String): File? {
+        val dir = File(modelsDir(context), modelId)
+        val ok = File(dir, ".ok")
+        val data = File(dir, fileName)
+        return if (ok.exists() && data.exists()) data else null
+    }
+
+    fun status(context: Context, model: FloraModel): ModelStatus {        if (model.bundled) return ModelStatus.READY
         synchronized(downloading) {
             if (model.id in downloading) return ModelStatus.DOWNLOADING
         }

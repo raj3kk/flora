@@ -586,3 +586,10 @@ maujood, index bhi 200. Download page ab live hai.
 - Fixes is chunk me: encoder chunk ko [1,2,512] wrap karne ki galti sudhari ([2,512] sahi hai); VAD output shape dynamic se allocate; DEEPGRAM typo sudhara.
 - Baaki is chunk me NAHI (agle chunks me): enrol UI (AudioRecord), Guardian wiring, Deepgram streaming client, P1 ke baaki items, P2–P5, U1–U3, brain-proxy step 2, S2 avatar catalog.
 - Audit: 4 files brace/paren balance; mel matrix size exact; assets maujood. Phone test enrol/match UI ke baad (test entry agle chunk me).
+
+## v2.22 chunk 1b — 22MB encoder APK se hatakar server download par (2026-10-28 ~16:55 IST)
+- Wajah: 22MB conformer ke saath GraphQL push 499 se fail hua (payload bahut bada). Hal: encoder APK me bundle NAHI hoga — M1 model-download system se server (flora-models bucket) se aayega, SHA verify ke saath. APK ~22MB halka rahega.
+- VoiceMatcher: loadModel pehle downloaded file (filesDir/models/voice-encoder/) dekhta hai, phir assets; isAvailable bhi dono raaste maanta hai.
+- ModelDownloader.downloadedModelFile() naya public helper (valid .ok ke saath).
+- Manifest v2: voice-encoder entry (url = bucket public URL, size 22134696, sha256 7781a316…) + bundled 2 entries.
+- Bucket me upload (conformer tflite + manifest v2) browser dashboard task se hoga; tab tak matcher "server par abhi nahi" batayega (koi fake match nahi).

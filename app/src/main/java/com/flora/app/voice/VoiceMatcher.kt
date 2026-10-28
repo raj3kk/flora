@@ -48,17 +48,44 @@ object VoiceMatcher {
     private const val MEL_COLS = 128
 
     fun isAvailable(context: Context): Boolean {
+        val encoderOk = downloadedEncoderFile(context) != null ||
+            assetExists(context, "conformer_tisid_medium.tflite")
+        return encoderOk &&
+            assetExists(context, "vad_long_model.tflite") &&
+            assetExists(context, "mel_matrix_f32.bin")
+    }
+
+    private fun assetExists(context: Context, name: String): Boolean {
         return try {
-            context.assets.open("$ASSET_DIR/conformer_tisid_medium.tflite").close()
-            context.assets.open("$ASSET_DIR/vad_long_model.tflite").close()
-            context.assets.open("$ASSET_DIR/mel_matrix_f32.bin").close()
+            context.assets.open("$ASSET_DIR/$name").close()
             true
         } catch (e: Exception) {
             false
         }
     }
 
+    /** Server se download hua encoder (M1) — na ho to null. */
+    fun downloadedEncoderFile(context: Context): File? {
+        return try {
+            com.flora.app.models.ModelDownloader.downloadedModelFile(
+                context, "voice-encoder", "conformer_tisid_medium.tflite"
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private fun loadModel(context: Context, name: String): Interpreter {
+        val downloaded = if (name == "conformer_tisid_medium.tflite") {
+            downloadedEncoderFile(context)
+        } else {
+            null
+        }
+        if (downloaded != null) {
+            val input = FileInputStream(downloaded)
+            val mapped = input.channel.map(FileChannel.MapMode.READ_ONLY, 0, downloaded.length())
+            return Interpreter(mapped)
+        }
         val fd = context.assets.openFd("$ASSET_DIR/$name")
         val input = FileInputStream(fd.fileDescriptor)
         val mapped = input.channel.map(FileChannel.MapMode.READ_ONLY, fd.startOffset, fd.declaredLength)
