@@ -1,6 +1,7 @@
 package com.flora.app.tools
 
 import com.flora.app.data.FloraPreferences
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -118,15 +119,61 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             val lon = first.optDouble("longitude")
             val name = first.optString("name", city)
             val country = first.optString("country", "")
-            val fcText = get(
-                "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,relative_humidity_2m,wind_speed_10m"
-            ) ?: return@withContext "Mausam ka data nahi mila."
+            forecast(lat, lon, "$name, $country")
+        } catch (e: Exception) {
+            "Mausam ka jawab samajh nahi aaya, dobara koshish kijiye."
+        }
+    }
+
+    /** Yahan ka mausam (v2.13): phone ki last-known location se,
+     * bina koi location server par bheje — lat/lon sirf Open-Meteo
+     * forecast call me jata hai, kahin save nahi hota. */
+    suspend fun weatherHere(context: android.content.Context): String =
+        withContext(Dispatchers.IO) {
+            if (ContextCompat.checkSelfPermission(
+                    context, android.Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return@withContext "Yahan ka mausam batane ke liye Location " +
+                    "permission chahiye — Setup ya Settings se de dijiye."
+            }
+            try {
+                val manager = context.getSystemService(
+                    android.content.Context.LOCATION_SERVICE
+                ) as? android.location.LocationManager
+                    ?: return@withContext "Location service nahi mili."
+                val providers = listOf(
+                    android.location.LocationManager.GPS_PROVIDER,
+                    android.location.LocationManager.NETWORK_PROVIDER,
+                )
+                var best: android.location.Location? = null
+                for (provider in providers) {
+                    try {
+                        val loc = manager.getLastKnownLocation(provider)
+                        if (loc != null && (best == null || loc.time > best.time)) best = loc
+                    } catch (e: Exception) {
+                    }
+                }
+                val loc = best
+                    ?: return@withContext "Location abhi nahi mili — GPS/Location " +
+                        "ON karke thodi der baad dobara poochhiye."
+                forecast(loc.latitude, loc.longitude, "Yahan")
+            } catch (e: Exception) {
+                "Yahan ka mausam nahi mil paya."
+            }
+        }
+
+    private fun forecast(lat: Double, lon: Double, place: String): String {
+        val fcText = get(
+            "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,relative_humidity_2m,wind_speed_10m"
+        ) ?: return "Mausam ka data nahi mila."
+        return try {
             val current = JSONObject(fcText).optJSONObject("current")
             val temp = current?.optDouble("temperature_2m", Double.NaN) ?: Double.NaN
             val humidity = current?.optInt("relative_humidity_2m", -1)
             val wind = current?.optDouble("wind_speed_10m", Double.NaN)
-            if (temp.isNaN()) return@withContext "Mausam ka data nahi mila."
-            "$name, $country — abhi $temp°C, humidity $humidity%, hawa $wind km/h."
+            if (temp.isNaN()) return "Mausam ka data nahi mila."
+            "$place — abhi $temp°C, humidity $humidity%, hawa $wind km/h."
         } catch (e: Exception) {
             "Mausam ka jawab samajh nahi aaya, dobara koshish kijiye."
         }

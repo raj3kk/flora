@@ -378,7 +378,9 @@ maujood, index bhi 200. Download page ab live hai.
 - Baaki: Kotlin port + enrol/match UI + phone test (ye item
   phone test ke bina PASS nahi mana jayega).
 
-## v2.12 user-report fixes — CODE DONE, CI PENDING (2026-10-28 ~13:20 IST)
+## v2.12 user-report fixes — PASS (2026-10-28 ~13:20 IST)
+- CI run 40651357407 completed success; asli APK 111,653,485 bytes, sha256 1d37653186faf937414596c3a0115a5a74465b5f62126b14540c5ff731ef9181, aapt2: com.flora.app vCode 34 / 2.12.0-rebuild, sdk 26/34. SwissTransfer upload (v2.12) browser task se chal raha hai — v2.13 isko supersede karega.
+- Artifact download note: GitHub 302 ko urllib follow karne par blob host 401 deta hai (surrogate auth header aage badh jata hai) — pehle 302 ka Location pakdo, phir use bina auth header ke fetch karo. Ye pattern agli baar bhi use hoga.
 - Shikayat: (1) app khulte hi permissions nahi maangta, (2) key
   daalne par bhi "key daaliye" bolta hai, (3) 16 buttons bikhre
   pade hain, koi arrangement nahi, (4) background me nahi chalta,
@@ -407,3 +409,11 @@ maujood, index bhi 200. Download page ab live hai.
   payment hamesha alag approval; koi key value kabhi log nahi.
 - Test entry: docs/FLORA_V212_TEST_ENTRY.md (6 sections).
   Phone test + asli push test abhi bhi user-gated hain.
+
+## v2.13 setup wizard + contacts + location — CODE DONE, CI PENDING (2026-10-28 ~13:35 IST)
+- SetupWizard.kt (new, 3 steps): Step 1 Welcome; Step 2 Permissions — 8 rows (Mic, Notifications, Camera, Call, Contacts, SMS, Phone state, Location), har row tap = akeli permission, "Sab allow karo" = RequestMultiplePermissions (system dialogs ek-ek karke), "App settings kholo" fallback, mic-zaroori gate ("Aage badho" sirf mic ke baad); Step 3 Background — battery-opt status + dialog, Vivo auto-start, Accessibility status (service list check) + settings. FloraApp gate block wizard se replace; Settings "Permissions dobara dekho" wizard kholta hai.
+- Contacts (new ContactLookup.kt): naam se number (exact match pehle, phir partial), koi data save/log/server nahi; Chat "call <naam>" / "sms <naam> <msg>" pehle lookup, phir wahi ek-confirmation flow; na mile to saaf message. Manifest: READ_CONTACTS, ACCESS_FINE_LOCATION.
+- Location weather (SearchTools.weatherHere): last-known GPS/NETWORK location se Open-Meteo forecast; lat/lon kahin save nahi; Chat "yahan ka mausam" bina brain key ke jawab deta hai; permission na ho to saaf message, galat mausam nahi.
+- 178 audit (docs/FLORA_178_AUDIT_20261028.md): module-wise hai/aadha/nahi/excluded — Default assistant, WhatsApp auto-reply, email, Marketing/Hosting/Whiteboard, live wallpaper, floating charm, skills/sub-agents, Maya Home app UI, neural wake model NAHI likha hai (fake complete nahi).
+- Arrangement: dropdown navigation (v2.12) se har page full-screen hai; Settings ka section-filter is push me nahi hua (LazyColumn single-item refactor bada hai — alag item me hoga, yahan jhootha daava nahi).
+- Pre-push audit: brace/paren 0/0 (FloraApp, SetupWizard, PermissionGate, SearchTools, ContactLookup); declaration order: lastRequested line 105 < callback 110 < use 166; wizard ke saare launcher step branches ke bahar declare; test entry docs/FLORA_V213_TEST_ENTRY.md (4 sections). Excluded list intact: Maya design/character copy nahi (wizard Flora ke apne shabdon me hai), silent posting nahi (call/SMS confirmation-gated), koi key value log nahi.

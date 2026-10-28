@@ -17,6 +17,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 /**
+ * v2.12 ka permission gate — v2.13 me SetupWizard ne isko replace
+ * kar diya hai (3 steps, per-item tap, settings fallback). Ye file
+ * ab use nahi hoti; push helper me delete support nahi hai, isliye
+ * file repo me padi hai — dobara use mat karo.
+ */
  * Permission gate (v2.12): app pehli baar khulte hi sab zaroori
  * permissions ek saath, ek screen par, kaaran ke saath maange
  * jaate hain — phir hi aage badha jata hai. Deny ki hui

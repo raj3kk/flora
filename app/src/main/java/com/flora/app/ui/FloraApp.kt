@@ -45,6 +45,7 @@ import com.flora.app.assistant.VoiceEngine
 import com.google.firebase.messaging.FirebaseMessaging
 import com.flora.app.automation.AppLauncher
 import com.flora.app.automation.AutoActions
+import com.flora.app.automation.ContactLookup
 import com.flora.app.core.FloraConfig
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
@@ -161,15 +162,10 @@ fun FloraApp(
             pendingVoiceSmsRequest = null
         }
     }
-    // Permission gate (v2.12): states + launcher — baaki states ke
-    // saath, upar declare (gate UI neeche Scaffold me inhe use
-    // karega, isliye launcher yahan hona chahiye).
+    // Setup wizard (v2.13): states — baaki states ke saath, upar
+    // declare (wizard UI neeche inhe use karega).
     var showGate by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
-    var gateGrants by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
-    val gateLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { grants -> gateGrants = grants }
     val scope = rememberCoroutineScope()
     val vision = remember { VisionClient() }
     val attachLauncher = rememberLauncherForActivityResult(
@@ -196,8 +192,8 @@ fun FloraApp(
      * tab bhi enforce hota hai. Manual Settings check waisa hi hai.
      */
     LaunchedEffect(Unit) {
-        // Permission gate (v2.12): pehli baar app khulte hi gate
-        // dikhega; gate poora hone ke baad dobara nahi.
+        // Setup wizard (v2.13): pehli baar app khulte hi wizard
+        // dikhega; wizard poora hone ke baad dobara nahi.
         try { showGate = !prefs.permissionsGateDone() } catch (e: Exception) { }
         try {
             theme = prefs.theme()
@@ -347,24 +343,14 @@ fun FloraApp(
         }
     }
 
-    // Permission gate (v2.12): gate khula ho to sirf gate dikhega;
-    // baaki UI tabhi banega jab gate band ho. Saare remember /
+    // Setup wizard (v2.13): gate khula ho to sirf wizard dikhega;
+    // baaki UI tabhi banega jab wizard poora ho. Saare remember /
     // launcher / effect is return se PEHLE hain, isliye hook order
     // nahi tootega.
     if (showGate) {
         androidx.compose.material3.MaterialTheme(colorScheme = floraColorScheme(theme)) {
-            PermissionGateScreen(
-                granted = { perm ->
-                    gateGrants[perm] ?: (ContextCompat.checkSelfPermission(
-                        appContext, perm
-                    ) == PackageManager.PERMISSION_GRANTED)
-                },
-                onRequestAll = {
-                    gateLauncher.launch(
-                        FLORA_GATE_PERMISSIONS.map { it.permission }.toTypedArray()
-                    )
-                },
-                onProceed = {
+            SetupWizard(
+                onDone = {
                     scope.launch {
                         try { prefs.setPermissionsGateDone(true) } catch (e: Exception) { }
                         showGate = false
@@ -543,17 +529,13 @@ fun FloraApp(
                             if (question.isEmpty() || busy) return@Button
                             // Voice command, one confirmation, full execution, spoken
                             // commentary — no stopping at intermediate steps to ask again.
-                            // "call <number>" / "sms <number> <message>".
+                            // "call <number>" / "call <naam>" / "sms <number|naam> <message>".
                             val lower = question.lowercase()
                             if (lower.startsWith("call ")) {
-                                val number = question.substring(5).trim()
-                                    .filter { it.isDigit() || it == '+' }
+                                val raw = question.substring(5).trim()
+                                val number = raw.filter { it.isDigit() || it == '+' }
                                 input = ""
-                                if (number.length < 7) {
-                                    val msg = "Number poora likhiye, jaise 'call 9876543210'."
-                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                    voice.speak(msg)
-                                } else {
+                                if (number.length >= 7) {
                                     messages = messages + ChatMsg(
                                         "Flora: Theek hai, $number par call laga raha hun — ek baar confirm kijiye.", false
                                     )
@@ -566,6 +548,36 @@ fun FloraApp(
                                             arrayOf(Manifest.permission.CALL_PHONE)
                                         )
                                     }
+                                } else if (raw.isNotEmpty()) {
+                                    // Naam se number (v2.13): Contacts me dhoondho,
+                                    // phir wahi confirmation flow.
+                                    scope.launch {
+                                        val found = ContactLookup.findNumber(appContext, raw)
+                                        val foundDigits = found?.filter { it.isDigit() || it == '+' } ?: ""
+                                        if (foundDigits.length < 7) {
+                                            val msg = "Contacts me '$raw' nahi mila — poora number " +
+                                                "likhiye, ya Contacts permission dijiye."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        } else {
+                                            messages = messages + ChatMsg(
+                                                "Flora: Theek hai, $raw ($foundDigits) par call laga raha hun — ek baar confirm kijiye.", false
+                                            )
+                                            voice.speak("Theek hai, call laga raha hun, ek baar confirm kijiye.")
+                                            if (AutoActions.hasCallPermission(appContext)) {
+                                                voiceCallConfirm = foundDigits
+                                            } else {
+                                                pendingVoiceCallRequest = foundDigits
+                                                voicePermissionLauncher.launch(
+                                                    arrayOf(Manifest.permission.CALL_PHONE)
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    val msg = "Number poora likhiye, jaise 'call 9876543210'."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
                                 }
                                 return@Button
                             }
@@ -573,26 +585,50 @@ fun FloraApp(
                                 val rest = question.substring(4).trim()
                                 val parts = rest.split(" ", limit = 2)
                                 input = ""
-                                if (parts.size < 2 ||
-                                    parts[0].filter { it.isDigit() || it == '+' }.length < 7
-                                ) {
+                                if (parts.size < 2) {
                                     val msg = "Aise likhiye: 'sms 9876543210 aapka message'."
                                     messages = messages + ChatMsg("Flora: $msg", false)
                                     voice.speak(msg)
                                 } else {
-                                    val number = parts[0].filter { it.isDigit() || it == '+' }
+                                    val firstDigits = parts[0].filter { it.isDigit() || it == '+' }
                                     val text = parts[1]
-                                    messages = messages + ChatMsg(
-                                        "Flora: Theek hai, $number par SMS bhej raha hun — ek baar confirm kijiye.", false
-                                    )
-                                    voice.speak("Theek hai, SMS bhej raha hun, ek baar confirm kijiye.")
-                                    if (AutoActions.hasSmsPermission(appContext)) {
-                                        voiceSmsConfirm = number to text
-                                    } else {
-                                        pendingVoiceSmsRequest = number to text
-                                        voicePermissionLauncher.launch(
-                                            arrayOf(Manifest.permission.SEND_SMS)
+                                    if (firstDigits.length >= 7) {
+                                        messages = messages + ChatMsg(
+                                            "Flora: Theek hai, $firstDigits par SMS bhej raha hun — ek baar confirm kijiye.", false
                                         )
+                                        voice.speak("Theek hai, SMS bhej raha hun, ek baar confirm kijiye.")
+                                        if (AutoActions.hasSmsPermission(appContext)) {
+                                            voiceSmsConfirm = firstDigits to text
+                                        } else {
+                                            pendingVoiceSmsRequest = firstDigits to text
+                                            voicePermissionLauncher.launch(
+                                                arrayOf(Manifest.permission.SEND_SMS)
+                                            )
+                                        }
+                                    } else {
+                                        scope.launch {
+                                            val found = ContactLookup.findNumber(appContext, parts[0])
+                                            val foundDigits = found?.filter { it.isDigit() || it == '+' } ?: ""
+                                            if (foundDigits.length < 7) {
+                                                val msg = "Contacts me '${parts[0]}' nahi mila — poora " +
+                                                    "number likhiye, ya Contacts permission dijiye."
+                                                messages = messages + ChatMsg("Flora: $msg", false)
+                                                voice.speak(msg)
+                                            } else {
+                                                messages = messages + ChatMsg(
+                                                    "Flora: Theek hai, ${parts[0]} ($foundDigits) par SMS bhej raha hun — ek baar confirm kijiye.", false
+                                                )
+                                                voice.speak("Theek hai, SMS bhej raha hun, ek baar confirm kijiye.")
+                                                if (AutoActions.hasSmsPermission(appContext)) {
+                                                    voiceSmsConfirm = foundDigits to text
+                                                } else {
+                                                    pendingVoiceSmsRequest = foundDigits to text
+                                                    voicePermissionLauncher.launch(
+                                                        arrayOf(Manifest.permission.SEND_SMS)
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                                 return@Button
@@ -782,6 +818,19 @@ fun FloraApp(
                             input = ""
                             busy = true
                             scope.launch {
+                                // Yahan ka mausam (v2.13): bina brain key ke,
+                                // phone ki location se seedha Open-Meteo.
+                                val weatherHere = lower == "yahan ka mausam" ||
+                                    lower == "mausam yahan ka" ||
+                                    lower.startsWith("yahan ka mausam ") ||
+                                    lower == "weather here"
+                                if (weatherHere) {
+                                    val reply = searchTools.weatherHere(appContext)
+                                    messages = messages + ChatMsg("Flora: $reply", false)
+                                    voice.speak(reply)
+                                    busy = false
+                                    return@launch
+                                }
                                 // Free talk limit (v1.3 audit gap fix): Pro nahi
                                 // to 600 sec/day ke baad brain jawab nahi dega.
                                 // Licence null = free mana jaata hai (safe default).
