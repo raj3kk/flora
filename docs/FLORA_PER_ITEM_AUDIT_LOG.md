@@ -541,3 +541,22 @@ maujood, index bhi 200. Download page ab live hai.
 - Comparison doc: docs/FLORA_MAYA_COMPARISON_20261028.md (server/app + AI use + gadbad table + kaun kis point par behtar).
 - Audit: 4 files brace/paren 0/0; retry loop break-sahi; liveSession line order safe (state → openSession → use).
 - Test entry: docs/FLORA_V220_TEST_ENTRY.md.
+
+## v2.20 CI PASS + APK verify (2026-10-28 ~16:32 IST)
+- Run 40676111594 completed SUCCESS (commit 796ee4e7). Artifact 12810807309, zip 59,057,604 bytes (exact match).
+- Real APK: 111,265,998 bytes, sha256 351cb94d795d05f7b1abc5876d68774de5453171353149792bea4ee4f13a96aa, aapt2: com.flora.app, versionCode 42, versionName 2.20.0-rebuild.
+- Dex content check: BasicTalk / discoverGeminiModels / liveSession strings classes5+8.dex me mile — naya code APK me confirm (size v2.19 jitna hi hona coincidence hai, sha alag hai).
+- SwissTransfer upload in progress; link milte hi download page update hoga.
+
+## v2.20 download page LIVE (2026-10-28 ~16:35 IST)
+- SwissTransfer link: https://www.swisstransfer.com/dl/01a1822d-dd0b-73a9-8a2f-f258b6818b22 (106.1 MB, 15 din, 12 Nov 2026 tak; bina password, bina account/payment; 250 max downloads; 30-day selector par bhi confirmation 15 din + email extension).
+- Download page update commit fb40bbfc → deploy flora-h6e17i8pq-webbuilder1.vercel.app READY (BUILDING se READY tak dekha); /download par live verify: v2.20.0-rebuild, size 111,265,998, SHA 351cb94d…, whats-new v2.20 (no technical errors + BasicTalk + auto-discovery + screen-share fix).
+
+## v2.21 CODE DONE / CI PENDING (2026-10-28 ~16:40 IST, CEO plan M1: model download system)
+- CEO appointment (user order): Muse Flora ka CEO — plan doc docs/FLORA_CEO_PLAN_MAYA_PARITY_PLUS.md (R1 mapping: server parity S1–S8, app parity, automation parity+, model system design, phase order M1→S2→P1→P5→S3→R3, boundaries: paisa alag approval, copy kabhi nahi, privacy).
+- ModelDownloader (naya code, Maya behaviour se seekha, copy nahi): manifest 10-min cache, .part download, SHA-256 verify, rename + .ok marker, fail par .part delete, bundled fallback (server na mile to koi error nahi).
+- ModelsScreen (Menu > Models): status + Download + Refresh, warm messages only. Wiring: enum MODELS + title + menu + branch (sab pehle declare, baad me use).
+- Manifest source of truth: web/models/manifest.json (sirf 2 bundled entries; neural models training/licence ke baad hi aayenge — Maya ke models kabhi nahi).
+- Host: Supabase Storage public bucket flora-models (URL FloraConfig me); bucket abhi bana nahi hai — tab tak app bundled list dikhayegi. Bucket dashboard browser task se banega (API ke liye service key nahi hai).
+- Audit: 5 files brace/paren 0/0; manifest JSON valid; unused imports hataye.
+- Test entry: docs/FLORA_V221_TEST_ENTRY.md.

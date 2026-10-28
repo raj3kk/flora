@@ -40,6 +40,7 @@ class FloraPreferences(private val context: Context) {
         val DRIVING_MODE = booleanPreferencesKey("driving_mode")
         val PERSONA = stringPreferencesKey("persona")
         val THEME = stringPreferencesKey("theme")
+        val MODELS_MANIFEST_URL = stringPreferencesKey("models_manifest_url")
         val GEMINI_API_KEY2 = stringPreferencesKey("gemini_api_key_2")
         val GROQ_API_KEY2 = stringPreferencesKey("groq_api_key_2")
         val TAVILY_API_KEY = stringPreferencesKey("tavily_api_key")
@@ -112,6 +113,14 @@ class FloraPreferences(private val context: Context) {
     suspend fun supabaseAnonKey(): String {
         val stored = context.floraDataStore.data.map { it[Keys.SUPABASE_ANON_KEY] ?: "" }.first()
         return stored.ifEmpty { FloraConfig.DEFAULT_SUPABASE_ANON_KEY }
+    }
+
+    /** Models manifest override (v2.21): khali = Flora default server. */
+    suspend fun modelsManifestUrl(): String =
+        context.floraDataStore.data.map { it[Keys.MODELS_MANIFEST_URL] ?: "" }.first()
+
+    suspend fun setModelsManifestUrl(value: String) {
+        context.floraDataStore.edit { it[Keys.MODELS_MANIFEST_URL] = value }
     }
 
     suspend fun setSupabaseAnonKey(value: String) {

@@ -38,6 +38,15 @@ object FloraConfig {
     const val USAGE_FUNCTION_PATH = "/functions/v1/usage-count"
     const val PUSH_TOKEN_FUNCTION_PATH = "/functions/v1/push-token-sync"
 
+    // Models manifest (v2.21, CEO plan M1): Flora ke apne
+    // models ka server — Supabase Storage public bucket
+    // flora-models (bucket banne tak ye URL 404 dega, tab
+    // app bundled list hi dikhayegi — koi error nahi).
+    // Bucket + manifest ka source of truth repo me
+    // web/models/manifest.json hai.
+    const val MODELS_MANIFEST_URL =
+        "https://keomyweghrmhqglaxmyv.supabase.co/storage/v1/object/public/flora-models/manifest.json"
+
     // Wake phrase DECIDED hai: "Hey Flora" (user decision 2026-10-28).
     // v2.4 se v0 model hai: MFCC mean template (user ke 6 clips se
     // prototype, phone par 3-sample enrolment). Neural model abhi

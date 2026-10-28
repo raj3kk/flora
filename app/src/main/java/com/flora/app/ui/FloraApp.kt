@@ -75,7 +75,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -98,6 +98,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.LIVE -> "Live Screen"
     Screen.DRIVING -> "Gaadi"
     Screen.JOURNAL -> "Journal"
+    Screen.MODELS -> "Models"
 }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
@@ -501,6 +502,10 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Live Screen") },
                             onClick = { screen = Screen.LIVE; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Models") },
+                            onClick = { screen = Screen.MODELS; menuOpen = false },
                         )
                         DropdownMenuItem(
                             text = { Text("Gaadi") },
@@ -1347,6 +1352,8 @@ fun FloraApp(
                 }, onGoSettings = { screen = Screen.SETTINGS })
             } else if (screen == Screen.AUTO_LOG) {
                 AutoLogScreen(autoLogStore)
+            } else if (screen == Screen.MODELS) {
+                ModelsScreen(voice, prefs)
             } else if (screen == Screen.MEMORIES) {
                 MemoriesScreen(memoriesStore)
             } else if (screen == Screen.SCAN) {
