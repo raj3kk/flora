@@ -75,20 +75,20 @@ object VerifiedAppLauncher {
         app: LaunchableApp,
         timeoutMs: Long = 3500L,
     ): OpenResult {
-        val service = FloraAutomationService.instance ?: return NoVerifier
-        if (service.foregroundPackage() == app.packageName) return AlreadyOpen
+        val service = FloraAutomationService.instance ?: return OpenResult.NoVerifier
+        if (service.foregroundPackage() == app.packageName) return OpenResult.AlreadyOpen
         val intent = context.packageManager.getLaunchIntentForPackage(app.packageName)
-            ?: return NoLaunchIntent
+            ?: return OpenResult.NoLaunchIntent
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             context.startActivity(intent)
         } catch (e: Exception) {
-            return NotVisible
+            return OpenResult.NotVisible
         }
         return if (service.waitForForeground(app.packageName, timeoutMs)) {
-            Opened
+            OpenResult.Opened
         } else {
-            NotVisible
+            OpenResult.NotVisible
         }
     }
 
@@ -104,7 +104,7 @@ object VerifiedAppLauncher {
         timeoutMs: Long = 3500L,
     ): OpenResult {
         var url = site.trim()
-        if (url.isEmpty()) return NoLaunchIntent
+        if (url.isEmpty()) return OpenResult.NoLaunchIntent
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
             url = if ("." in url) "https://$url"
             else "https://www.google.com/search?q=" + Uri.encode(url)
@@ -122,14 +122,14 @@ object VerifiedAppLauncher {
         try {
             context.startActivity(intent)
         } catch (e: Exception) {
-            return NotVisible
+            return OpenResult.NotVisible
         }
-        if (browserPkg == null) return FiredUnverified
-        val service = FloraAutomationService.instance ?: return FiredUnverified
+        if (browserPkg == null) return OpenResult.FiredUnverified
+        val service = FloraAutomationService.instance ?: return OpenResult.FiredUnverified
         return if (service.waitForForeground(browserPkg, timeoutMs)) {
-            Opened
+            OpenResult.Opened
         } else {
-            NotVisible
+            OpenResult.NotVisible
         }
     }
 }
