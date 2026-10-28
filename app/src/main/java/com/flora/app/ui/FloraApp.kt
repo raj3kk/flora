@@ -165,6 +165,10 @@ fun FloraApp(
     // fun baad me declare hota hai, isliye effect holder se call
     // karta hai — hook order ke liye effect yahan, call holder se).
     var continuousOn by remember { mutableStateOf(false) }
+    // Barge-in controller (v2.22, chunk 7): TTS ke dauraan user
+    // beech me bole to Deepgram live stream se suno. Mic
+    // continuous listener ka ho to shuru hi nahi hoga.
+    val bargeIn = remember { com.flora.app.voice.BargeInController(appContext) }
     // Voice-first Baat view (v2.15): default ON — baat-cheet me
     // likha hua transcript nahi dikhega, sirf orb + mic. Chat
     // sirf tab jab user khud "Chat kholo" dabaye.
@@ -425,6 +429,35 @@ fun FloraApp(
         faceLockOn = prefs.faceLock()
         // Continuous mic toggle ki shuruati haalat prefs se.
         try { continuousOn = prefs.continuousMic() } catch (e: Exception) { }
+        // Barge-in hooks (v2.22, chunk 7): MainActivity ke hooks
+        // ko OVERWRITE nahi karna — chain karo (pehle unka kaam,
+        // phir barge-in). TTS shuru hote hi arm, khatam hote hi
+        // disarm. Continuous mic ON ho to mic uska hai, isliye
+        // barge-in shuru hi nahi hota.
+        val prevStart = voice.onSpeechStart
+        val prevDone = voice.onSpeechDone
+        voice.onSpeechStart = {
+            try { prevStart?.invoke() } catch (e: Exception) { }
+            scope.launch {
+                try {
+                    if (continuousOn) return@launch
+                    val key = prefs.deepgramApiKey()
+                    if (key.isEmpty()) return@launch
+                    bargeIn.start(key) { transcript ->
+                        scope.launch {
+                            bargeIn.stop()
+                            voice.stop()
+                            sendChatHolder[0]?.invoke(transcript)
+                        }
+                    }
+                } catch (e: Exception) {
+                }
+            }
+        }
+        voice.onSpeechDone = {
+            try { prevDone?.invoke() } catch (e: Exception) { }
+            try { bargeIn.stop() } catch (e: Exception) { }
+        }
     }
     LaunchedEffect(screen) {
         if (screen == Screen.CHAT) faceLockOn = prefs.faceLock()
@@ -1540,6 +1573,7 @@ fun FloraApp(
                     }
                     Button(onClick = {
                         voice.stop()
+                        try { bargeIn.stop() } catch (e: Exception) { }
                         // Interrupt (v2.14): continuous mode me Stop
                         // dabana matlab user kuch kehna chahta hai —
                         // casually poochho, phir sunna apne aap shuru

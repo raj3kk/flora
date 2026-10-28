@@ -649,3 +649,12 @@ maujood, index bhi 200. Download page ab live hai.
 - Wajah (job log, d5aaead6): FloraApp.kt:2203 `Unresolved reference: voice` — chunk 4 me Settings ke persona row me `voice.setPersona(id)` likha tha, par wo row SettingsScreen composable me hai jiske params me `voice` tha hi nahi (voice sirf main FloraApp composable me hai). Pehle ke fail (VoiceMatcher import) ne is error ko chhupaya hua tha — ek error fix hote hi agla dikha.
 - Fix: SettingsScreen signature me `voice: VoiceEngine` param + call site par `voice` pass + app-start LaunchedEffect me `voice.setPersona(prefs.persona())` (taaki restart ke baad bhi persona ki awaaz wahi rahe, sirf command/Settings switch par nahi).
 - Audit: SettingsScreen ka ek hi call site (grep); VoiceEngine import pehle se tha; SettingsScreen range me `voice.` ka ek hi use; brace/paren balance.
+
+## v2.22 chunk 7 — Deepgram streaming barge-in (2026-10-28 ~17:35 IST, CI PENDING)
+- Naya dep: OkHttp 4.12.0 (build.gradle.kts) — WebSocket ke liye. Baaki deps unchanged.
+- DeepgramStreamClient: wss /v1/listen (nova-2, hi, interim) + Token auth; sirf FINAL non-blank transcript callback; audio kabhi save nahi.
+- BargeInController: AudioRecord 16kHz mono + WS stream; permission/key/mic-init fail par false (chupchaap no-barge-in); 30s auto-stop; stop idempotent.
+- Wiring (FloraApp): MainActivity ke onSpeechStart/onSpeechDone ko OVERWRITE nahi — chain kiya (pehle unka kaam, phir barge-in arm/disarm). TTS shuru hote hi, continuous mic OFF ho aur Deepgram key ho to arm; FINAL milte hi TTS roko + transcript ko naya command banao (sendChatHolder se). Stop button par bhi disarm.
+- Imaandari: continuous mic ON ho to mic uska hai — barge-in tab kaam nahi karega (mic fight se bachne ke liye). Wake Word ON hone par mic share par nirbhar karega — fail ho to chupchaap no-barge-in. Bina Deepgram key ke ye feature bilkul nahi chalega (REST client ki tarah, koi fake nahi).
+- Audit: 3 naye/badli files brace/paren balance; Stop button edit wahi CHAT Stop button hai (grep + context verify); hooks chain (prevStart/prevDone) verify.
+- P1 POORA (enrol UI, Guardian voice, Deepgram REST+streaming, job runner, auto-memory, voice-per-persona, wake tune, brain-context). Baaki: P2–P5, S2/S3, R3, EK final deploy.
