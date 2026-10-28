@@ -4,13 +4,14 @@ import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import android.net.http.SslError
 import android.webkit.DownloadListener
 import android.webkit.SslErrorHandler
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.webkit.SslError
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -199,7 +200,7 @@ fun BrowserScreen(voice: VoiceEngine) {
                     settings.allowContentAccess = false
                     settings.allowFileAccessFromFileURLs = false
                     settings.allowUniversalAccessFromFileURLs = false
-                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER
+                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER
                     settings.safeBrowsingEnabled = true
                     settings.setSupportZoom(true)
                     settings.builtInZoomControls = true
