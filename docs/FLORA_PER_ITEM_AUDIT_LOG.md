@@ -95,3 +95,13 @@
 - Run 40627580432 completed success, artifact 54,540,574 bytes,
   expired: false. Project flora-f22a7, package com.flora.app.
 - Test entry: docs/FLORA_FCM_TEST_ENTRY.md (6 steps).
+
+## v2.2.1 audit stale-fix — audit PASS (2026-10-28)
+- Run 40628284467 completed success, artifact 54,540,426 bytes,
+  expired: false. Repo-verified: WAKE_WORD_DECISION_PENDING =
+  false, Terms FCM line nayi ("client taiyaar hai..."), purani
+  "jab available ho" line 0, versionCode 24 / 2.2.1-rebuild,
+  full audit doc repo me (8007 bytes).
+- Test entry: docs/FLORA_V221_TEST_ENTRY.md (Terms wording
+  check; koi naya feature nahi, isliye koi naya behaviour
+  check nahi).

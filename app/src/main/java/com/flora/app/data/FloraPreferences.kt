@@ -2,6 +2,7 @@ package com.flora.app.data
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import com.flora.app.core.FloraConfig
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -65,8 +66,13 @@ class FloraPreferences(private val context: Context) {
         return androidId
     }
 
-    suspend fun supabaseAnonKey(): String =
-        context.floraDataStore.data.map { it[Keys.SUPABASE_ANON_KEY] ?: "" }.first()
+    // User ki Settings key ho to wahi pehle chalegi; warna app ka
+    // default publishable key (FloraConfig me, public by design)
+    // use hoga — user ko key daalni hi nahi padegi.
+    suspend fun supabaseAnonKey(): String {
+        val stored = context.floraDataStore.data.map { it[Keys.SUPABASE_ANON_KEY] ?: "" }.first()
+        return stored.ifEmpty { FloraConfig.DEFAULT_SUPABASE_ANON_KEY }
+    }
 
     suspend fun setSupabaseAnonKey(value: String) {
         context.floraDataStore.edit { it[Keys.SUPABASE_ANON_KEY] = value }

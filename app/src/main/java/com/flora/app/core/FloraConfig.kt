@@ -21,10 +21,16 @@ object FloraConfig {
     // are kept separately for legal accounting and are NOT auto-expired.
     const val DATA_RETENTION_DAYS = 30
 
-    // Supabase project for Flora (public project URL only — never a key).
-    // API keys are NEVER hardcoded: the user enters his own publishable
-    // anon key once in Settings, stored in DataStore on-device only.
+    // Supabase project for Flora.
+    // Publishable (anon) key: ye SECRET NAHI hai — Supabase ka design
+    // hi ye hai ki ye client app me hoti hai; data ki suraksha RLS
+    // rules se hoti hai. Isliye user order (2026-10-28) par isko
+    // default banaya gaya hai taaki user ko Settings me key daalni
+    // na pade. User ki apni Settings key ho to wahi pehle chalegi.
+    // Service_role key kabhi yahan nahi aayegi — wo sirf server par
+    // (Supabase Edge Function secrets me) rehti hai.
     const val SUPABASE_URL = "https://keomyweghrmhqglaxmyv.supabase.co"
+    const val DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_qMjX-cw11dB_Y9nT8IlVzw_nPup-Yxe"
     const val LICENCE_FUNCTION_PATH = "/functions/v1/licence-verify"
     const val USAGE_FUNCTION_PATH = "/functions/v1/usage-count"
 
