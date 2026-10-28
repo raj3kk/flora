@@ -847,3 +847,7 @@ maujood, index bhi 200. Download page ab live hai.
 ## CI fail fix — screenshotJpeg compile errors (2026-10-28 ~19:30 IST, CI PENDING)
 - Run 40698840209 (4fe5742e) job-log se pakde gaye 2 asli errors, guess nahi: (1) kotlinx.coroutines.resume internal hai (is coroutines version me) → cont.resumeWith(Result.success(...)) par laya gaya; (2) ScreenshotResult me bitmap property hoti hi nahi → hardwareBuffer + colorSpace se Bitmap.wrapHardwareBuffer() par laya gaya (baaki errors isi ke cascade the).
 - AGENTS lesson: takeScreenshot API ko yaad se mat likho — ScreenshotResult = hardwareBuffer/colorSpace, bitmap nahi; continuation resume = resumeWith(Result.success()).
+
+## G0 audit catch fix (2026-10-28 ~20:30 IST, CI PENDING)
+- Maya full audit (MAYA_FULL_AUDIT_20261028.md) ne pakda: Flora ki accessibility config me canTakeScreenshot + canPerformGestures NAHI the — isliye naya screenshot raasta + gesture automation asli phone par fail hote. Dono attributes jod diye (Maya jaisi configuration, code copy nahi).
+- Doosra catch: Flora manifest me backup exclusion nahi thi (default backup ON rehta) — android:allowBackup="false" jod diya (Flora ka apna attribute, Maya ki file copy nahi).

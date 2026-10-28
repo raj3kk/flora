@@ -26,6 +26,7 @@
     <application
         android:name="com.flora.app.FloraApplication"
         android:label="Flora"
+        android:allowBackup="false"
         android:theme="@android:style/Theme.Material">
         <activity
             android:name="com.flora.app.MainActivity"
