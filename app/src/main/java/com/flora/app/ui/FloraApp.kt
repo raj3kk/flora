@@ -523,7 +523,7 @@ fun FloraApp(
             } else if (screen == Screen.DOCS) {
                 DocsScreen(docsStore)
             } else if (screen == Screen.CONNECT) {
-                ConnectScreen()
+                ConnectScreen(voice, prefs)
             } else if (screen == Screen.PRIVACY) {
                 PrivacyScreen()
             } else if (screen == Screen.TERMS) {

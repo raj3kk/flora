@@ -36,6 +36,7 @@ class FloraPreferences(private val context: Context) {
         val CALL_ANNOUNCE = booleanPreferencesKey("call_announce")
         val EVENT_ANNOUNCE = booleanPreferencesKey("event_announce")
         val DRIVING_MODE = booleanPreferencesKey("driving_mode")
+        val CALL_TALK = booleanPreferencesKey("call_talk")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
     }
@@ -143,6 +144,14 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setDrivingMode(value: Boolean) {
         context.floraDataStore.edit { it[Keys.DRIVING_MODE] = value }
+    }
+
+    /** Call-talk (dialer role): default OFF, user khud ON karega. */
+    suspend fun callTalk(): Boolean =
+        context.floraDataStore.data.map { it[Keys.CALL_TALK] ?: false }.first()
+
+    suspend fun setCallTalk(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.CALL_TALK] = value }
     }
 
     /** Talk seconds used on [today] (yyyy-MM-dd). Rolls over automatically. */

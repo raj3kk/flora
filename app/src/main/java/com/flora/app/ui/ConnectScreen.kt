@@ -1,8 +1,10 @@
 package com.flora.app.ui
 
 import android.Manifest
+import android.app.role.RoleManager
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Spacer
@@ -16,14 +18,19 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.flora.app.assistant.VoiceEngine
 import com.flora.app.automation.AutoActions
+import com.flora.app.data.FloraPreferences
+import kotlinx.coroutines.launch
 
 /**
  * Connect screen (v0.7, confirmed automation): user says it once,
@@ -38,13 +45,37 @@ import com.flora.app.automation.AutoActions
  * action happened when it did not.
  */
 @Composable
-fun ConnectScreen() {
+fun ConnectScreen(voice: VoiceEngine, prefs: FloraPreferences) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var callTalk by remember { mutableStateOf(false) }
+    var dialerHeld by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        callTalk = prefs.callTalk()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val rm = context.getSystemService(RoleManager::class.java)
+            dialerHeld = rm?.isRoleHeld(RoleManager.ROLE_DIALER) == true
+        }
+    }
+
+    val roleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val rm = context.getSystemService(RoleManager::class.java)
+            dialerHeld = rm?.isRoleHeld(RoleManager.ROLE_DIALER) == true
+            note = if (dialerHeld) "Flora ab default dialer hai."
+                else "Default dialer nahi bana — bina iske Flora call nahi utha sakti."
+        }
+    }
+    // note yahan upar hai kyunki roleLauncher ka callback isko use karta
+    // hai — neeche declare karne par compile error aata (use-before-declaration).
+    var note by remember { mutableStateOf("") }
     var shareText by remember { mutableStateOf("") }
     var callNumber by remember { mutableStateOf("") }
     var smsNumber by remember { mutableStateOf("") }
     var smsText by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
     var pendingCall by remember { mutableStateOf<String?>(null) }
     var pendingSms by remember { mutableStateOf<Pair<String, String>?>(null) }
     var wantCallPermission by remember { mutableStateOf(false) }
@@ -136,6 +167,39 @@ fun ConnectScreen() {
                     context.startActivity(Intent.createChooser(intent, "Kahan share karna hai?"))
                 }
             }) { Text("Share sheet kholo") }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Call-talk (dialer role) — Flora call utha kar baat karegi, sirf tab jab aap khud ise default dialer banayenge.")
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Default dialer: " + if (dialerHeld) "Flora hai" else "Flora nahi hai")
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    note = "Dialer role ke liye Android 10+ chahiye."
+                } else {
+                    val rm = context.getSystemService(RoleManager::class.java)
+                    if (rm == null || !rm.isRoleAvailable(RoleManager.ROLE_DIALER)) {
+                        note = "Is phone par dialer role available nahi hai."
+                    } else if (rm.isRoleHeld(RoleManager.ROLE_DIALER)) {
+                        note = "Flora pehle se default dialer hai."
+                    } else {
+                        roleLauncher.launch(rm.createRequestRoleIntent(RoleManager.ROLE_DIALER))
+                    }
+                }
+            }) { Text("Flora ko default dialer banao") }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = {
+                val next = !callTalk
+                scope.launch {
+                    prefs.setCallTalk(next)
+                    callTalk = next
+                    val msg = if (next) "Call-talk ON: default dialer hote hi Flora call uthayegi."
+                        else "Call-talk OFF."
+                    note = msg
+                    voice.speak(msg)
+                }
+            }) { Text("Call-talk: " + if (callTalk) "ON" else "OFF") }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Limit imaandari se: TTS ka doosri taraf saaf sunai dena phone test ke baad hi kaha ja sakta hai — pehle se guarantee nahi hai.")
             if (note.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(note)
