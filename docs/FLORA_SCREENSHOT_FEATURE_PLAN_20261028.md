@@ -526,3 +526,10 @@ se dobara khul sakta hai, is plan se nahi.
 - ABHI BHI BAND: payment auto-confirm (money rule) + creator
   copy (kanoon + ownership proof nahi) + hard lock (PIN wala
   lock aayega) + purani keys (hain hi nahi).
+
+## v2.18 amendment (user order 2026-10-28 ~15:54 IST)
+- Auto Mode DEFAULT ON ho gaya (v2.17 me OFF tha): poora Flora
+  Auto Mode me hi rahega, bolte hi kaam shuru, har kaam bol kar
+  + Auto Log me. Routines ke call/SMS steps bhi auto chalenge.
+- Ek confirmation abhi bhi lagega: payment, delete-all, kai apps
+  me se chunna, pehli permission, SOS emergency.

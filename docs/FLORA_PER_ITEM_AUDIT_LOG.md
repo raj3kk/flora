@@ -486,3 +486,14 @@ maujood, index bhi 200. Download page ab live hai.
 - Nahi khola (saaf wajah ke saath): payment auto-confirm (paisa bina poochhe kat sakta hai) + creator code/UI/assets copy (kanoon + ownership proof nahi) + hard lock jo user khud na khol sake (phone band ho jayega — PIN wala lock aage aayega) + purani keys (hain hi nahi, nayi hi banengi).
 - Audit: 6 files brace/paren 0/0; autoMode state (179) + autoLogStore (180) helpers (739) se pehle; Settings call-site args signature order se mile; AutoLogScreen Column fillMaxSize (MemoriesScreen pattern).
 - Test entry: docs/FLORA_V217_TEST_ENTRY.md.
+
+## v2.16 CI PASS + APK verified (2026-10-28 ~15:51 IST)
+- CI run 40670610839 (commit dd09af19) completed success. Asli APK 111,735,544 bytes, sha256 dc926db0395cc23fd38ed216ab33c4cd65eec2ffa45809e99792e91d7642f468, aapt2: com.flora.app vCode 38 / 2.16.0-rebuild, sdk 26/34. Artifact zip size 59,527,804 bytes. (v2.15 se size barabar hai, SHA alag hai — versionCode se verify kiya gaya hai.)
+- SwissTransfer upload (v2.16) browser task se chal raha hai; link milte hi download page 2.16 par update hoga.
+
+## v2.18 CODE DONE / CI PENDING (2026-10-28 ~15:55 IST, user order: pura Flora Auto Mode me hi rahe, bol kar, bina ruke)
+- Auto Mode DEFAULT ON (prefs default true; pehle OFF tha): bolte hi kaam shuru, bina har baar poochhe. Band karne ke liye switch OFF ya "auto mode band" (pehle jaisa).
+- Routines: Auto Mode ON ho to call/SMS steps bhi seedha chalenge + log honge (pehle skip hote the); OFF ho to pehle wala skip rule wapas.
+- Narration: voice commands + routine steps pehle se bol kar chalte the — v2.18 me ye poora cover hai (koi chupchaap kaam nahi). Ek confirmation abhi bhi lagega: payment, delete-all, ek naam ki kai apps, pehli permission, SOS emergency — ye Settings text + test entry me saaf likha hai.
+- Audit: 2 files brace/paren 0/0; routine branch me autoMode/autoLogStore/scope sab pehle declare hain; comment bhi update (purana "nahi chalte" wala jhooth nahi rahega).
+- Test entry: docs/FLORA_V218_TEST_ENTRY.md.

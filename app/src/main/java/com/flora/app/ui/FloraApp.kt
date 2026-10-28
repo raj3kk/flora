@@ -282,8 +282,9 @@ fun FloraApp(
     }
     // Routine auto-run (v1.1): Routines screen se ek confirmation ke
     // baad queue yahan chalti hai — har step bol kar, bina ruke.
-    // Call/SMS steps queue me nahi chalte (unke liye Chat se alag
-    // confirmation chahiye); payment ka koi step routine me hai hi nahi.
+    // Call/SMS steps: Auto Mode ON (v2.18 default) ho to seedha
+    // chalenge + log honge; OFF ho to pehle wala skip rule.
+    // Payment ka koi step routine me hai hi nahi.
     var routineQueue by remember { mutableStateOf<List<String>>(emptyList()) }
     var routineName by remember { mutableStateOf("") }
     var routineRunning by remember { mutableStateOf(false) }
@@ -345,7 +346,41 @@ fun FloraApp(
                 voice.speak("Yaadein khol raha hun.")
             }
             lower.startsWith("call ") || lower.startsWith("sms ") -> {
-                voice.speak("Call ya SMS step routine me nahi chalta, iske liye Chat se alag confirmation chahiye. Step chhod diya.")
+                // Auto Mode (v2.18, default ON): routine ke call/SMS
+                // steps bhi seedha chalenge + log honge. Auto Mode OFF
+                // ho to pehle wala skip rule wapas (Chat se alag
+                // confirmation chahiye).
+                if (!autoMode) {
+                    voice.speak("Call ya SMS step routine me nahi chalta, iske liye Chat se alag confirmation chahiye. Step chhod diya.")
+                } else if (lower.startsWith("call ")) {
+                    val number = cmd.substring(5).trim().filter { it.isDigit() || it == '+' }
+                    if (number.length >= 7 && AutoActions.hasCallPermission(appContext)) {
+                        val ok = AutoActions.placeCall(appContext, number)
+                        voice.speak(if (ok) "Routine call laga di gayi: $number" else "Routine call nahi lagi.")
+                        scope.launch {
+                            try { autoLogStore.add("Routine call (auto): $number -> ${if (ok) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                        }
+                    } else {
+                        voice.speak("Call permission ya number nahi mila, step chhod diya.")
+                    }
+                } else {
+                    val rest = cmd.substring(4).trim()
+                    val parts = rest.split(" ", limit = 2)
+                    if (parts.size < 2) {
+                        voice.speak("SMS ka format samajh nahi aaya, step chhod diya.")
+                    } else {
+                        val number = parts[0].filter { it.isDigit() || it == '+' }
+                        if (number.length >= 7 && AutoActions.hasSmsPermission(appContext)) {
+                            val ok = AutoActions.sendSms(appContext, number, parts[1])
+                            voice.speak(if (ok) "Routine SMS bhej diya gaya: $number" else "Routine SMS nahi gaya.")
+                            scope.launch {
+                                try { autoLogStore.add("Routine SMS (auto): $number -> ${if (ok) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                            }
+                        } else {
+                            voice.speak("SMS permission ya number nahi mila, step chhod diya.")
+                        }
+                    }
+                }
             }
             else -> {
                 val today = java.text.SimpleDateFormat(
@@ -1907,13 +1942,13 @@ private fun SettingsScreen(
             }
             Text("Flora: friendly + professional. Saathi: dostana, chhote jawab. Guru: step-by-step, to-the-point. Romantic: pyaar bhara, caring tone (user ke kehne par ON hua hai).")
             Spacer(modifier = Modifier.height(12.dp))
-            Text("Auto mode — bina har baar poochhe kaam (user order, default OFF)")
+            Text("Auto mode — bina har baar poochhe kaam (default ON, user order)")
             Row {
                 Text("Auto mode")
                 Spacer(modifier = Modifier.padding(4.dp))
                 Switch(checked = autoMode, onCheckedChange = { value -> onAutoModeChange(value) })
             }
-            Text("ON hone par Flora call, SMS aur app-kholo bina har baar poochhe karegi. Har kaam Auto Log me dikhega aur notification me 'Auto mode ON' dikhega. 'Auto mode band' bolte hi band. Payment kabhi auto nahi hogi.")
+            Text("ON hone par Flora call, SMS, app-kholo aur routine ke call/SMS steps bina har baar poochhe karegi, aur har kaam bol kar batayegi. Har kaam Auto Log me dikhega aur notification me 'Auto mode ON' dikhega. 'Auto mode band' bolte hi band. Ek confirmation abhi bhi lagega: payment, delete-all, ek se zyada app milne par chunna, pehli baar permission, aur SOS emergency.")
             Button(onClick = { onShowAutoLog() }) { Text("Auto Log dekho") }
             Spacer(modifier = Modifier.height(12.dp))
             Text("Theme — Flora ka rang (sirf colors, koi asset nahi)")

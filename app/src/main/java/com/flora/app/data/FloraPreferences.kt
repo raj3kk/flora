@@ -198,14 +198,13 @@ class FloraPreferences(private val context: Context) {
         context.floraDataStore.data.map { it[Keys.AUTOMATION_CONSENT] ?: false }.first()
 
     /**
-     * Auto mode (v2.17, user order 2026-10-28): user ka apna switch,
-     * default OFF. ON hone par Flora call/SMS/app-kholo bina har baar
-     * poochhe karegi — har kaam Auto Log me dikhega, notification me
-     * "Auto mode ON" dikhega, aur "auto mode band" bolte hi band.
-     * Payment isse kabhi auto nahi hogi (money rule hamesha alag).
+     * Auto mode (v2.17 user switch; v2.18 user order se DEFAULT ON):
+     * poora Flora Auto Mode me hi rahega — bolte hi kaam shuru,
+     * bina har baar poochhe. Band karne ke liye switch OFF ya
+     * "auto mode band" bolo. Payment isse kabhi auto nahi hogi.
      */
     suspend fun autoMode(): Boolean =
-        context.floraDataStore.data.map { it[Keys.AUTO_MODE] ?: false }.first()
+        context.floraDataStore.data.map { it[Keys.AUTO_MODE] ?: true }.first()
 
     suspend fun setAutoMode(value: Boolean) {
         context.floraDataStore.edit { it[Keys.AUTO_MODE] = value }
