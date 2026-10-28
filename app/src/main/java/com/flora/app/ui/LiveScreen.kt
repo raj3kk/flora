@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.flora.app.assistant.VisionClient
 import com.flora.app.assistant.VoiceEngine
 import com.flora.app.automation.AppLauncher
+import com.flora.app.automation.FloraAutomationService
 import com.flora.app.automation.ScreenCapture
 import com.flora.app.data.FloraPreferences
 import kotlinx.coroutines.delay
@@ -138,6 +139,31 @@ fun LiveScreen(
         }
         note = "Screen dekh rahi hun..."
         scope.launch {
+            // One-time-setup raasta PEHLE: accessibility ON ho to
+            // bina dialog, bina Allow tap ke screenshot lo.
+            val accessJpeg = try {
+                FloraAutomationService.instance?.screenshotJpeg()
+            } catch (e: Exception) {
+                null
+            }
+            if (accessJpeg != null) {
+                val key = prefs.geminiApiKey()
+                if (key.isEmpty()) {
+                    note = "Live screen ke liye Settings me apni free Gemini key daaliye."
+                    voice.speak("Live screen ke liye Gemini key chahiye.")
+                    return@launch
+                }
+                val reply = vision.askAboutImage(question, accessJpeg, key)
+                if (reply == null) {
+                    note = "Vision jawab nahi de paya, dobara koshish kijiye."
+                    voice.speak("Arre, is baar dekh nahi payi — ek baar phir poochho na.")
+                } else {
+                    answer = reply
+                    note = "Dekh liya."
+                    voice.speak(reply.take(500))
+                }
+                return@launch
+            }
             // v2.20: persistent session + 3 baar retry (har baar
             // naya virtual display). Session mara ho to pyar se
             // dobara permission maango + dialog khud kholo.

@@ -123,3 +123,9 @@ Code me (is plan ke hisse):
 - Call par Flora ki awaaz doosri taraf saaf sunai degi — ye sirf
   dialer-role phone test ke baad kaha ja sakta hai (TTS uplink
   guarantee nahi hai).
+
+## ADDENDUM 2026-10-28 ~19:10 IST — bina-Allow raasta (user order: one-time setup, phir sirf bol kar)
+- MediaProjection dialog ka Allow Flora KHUD NAHI daba sakti — ye OS ka hard rule hai: koi app apne liye screen-capture consent self-grant nahi kar sakti (warna har app chupke screen dekh leti). Accessibility se bhi apne dialog par click karke self-grant nahi hota, aur app khud apne liye accessibility bhi ON nahi kar sakti — dono jagah user ka haath lagna OS se mandatory hai.
+- Isliye doosra raasta banaya gaya: AccessibilityService.takeScreenshot() (API 30+). One-time setup me user khud Settings → Accessibility me Flora ON kare (sideload app par Android 13+ me pehle App info me "Allow restricted settings" ka ek toggle bhi lagta hai — ek baar). Uske baad "screen dekho" par Flora bina kisi dialog/tap ke screenshot legi — session marne ka sawaal hi nahi, har baar fresh capture.
+- Capture SIRF user ke bolne par hota hai (koi passive/background capture nahi); secure windows isme bhi black; screen off/locked ho to fail → MediaProjection wale raaste par gir jayega (dialog + Allow).
+- Code: FloraAutomationService.screenshotJpeg() (hardware bitmap → ARGB_8888 → JPEG 80, 8s timeout) → FloraApp.lookAtScreen + LiveScreen.ask() me PEHLE try, phir session path fallback. "Screen share chalu karo" accessibility ON hone par dialog nahi kholega.

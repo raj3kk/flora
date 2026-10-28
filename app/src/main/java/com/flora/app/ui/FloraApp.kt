@@ -1928,6 +1928,30 @@ fun FloraApp(
                     // dono isi se chalte hain.
                     fun lookAtScreen(prompt: String) {
                         scope.launch {
+                            // One-time-setup raasta PEHLE: accessibility
+                            // ON ho to bina dialog, bina Allow tap ke
+                            // screenshot lo. Na mile to neeche wala
+                            // MediaProjection raasta (dialog + Allow).
+                            val accessJpeg = try {
+                                FloraAutomationService.instance?.screenshotJpeg()
+                            } catch (e: Exception) {
+                                null
+                            }
+                            if (accessJpeg != null) {
+                                val key = prefs.geminiApiKey()
+                                if (key.isEmpty()) {
+                                    voice.speak("Screen dekhne ke liye Settings me apni free Gemini key daaliye.")
+                                    return@launch
+                                }
+                                val reply = vision.askAboutImage(prompt, accessJpeg, key)
+                                if (reply == null) {
+                                    voice.speak("Is baar dekh nahi payi — ek baar phir poochho na.")
+                                } else {
+                                    messages = messages + ChatMsg(reply, false)
+                                    voice.speak(reply.take(500))
+                                }
+                                return@launch
+                            }
                             val session = if (screenGranted) ScreenCapture.openShared(
                                 appContext, screenResultCode, screenResultData
                             ) else null
@@ -1977,7 +2001,9 @@ fun FloraApp(
                         lower == "screen share on karo"
                     ) {
                         input = ""
-                        if (screenGranted && screenResultData != null &&
+                        if (FloraAutomationService.isEnabled()) {
+                            voice.speak("Screen dekhna taiyaar hai — ab 'screen dekho' bologe to bina kisi Allow ke dekh lungi.")
+                        } else if (screenGranted && screenResultData != null &&
                             ScreenCapture.openShared(appContext, screenResultCode, screenResultData) != null
                         ) {
                             voice.speak("Screen share pehle se chalu hai. 'Screen dekho' bolo, main dekh kar bata dungi.")

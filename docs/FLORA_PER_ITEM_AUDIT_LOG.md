@@ -832,3 +832,8 @@ maujood, index bhi 200. Download page ab live hai.
 - LiveScreen typing HATA DIYA: app-naam TextField hata, mic button se bolo + auto-run (openAppAndLook). Session/permission ab FloraApp se aate hain (apna launcher hata).
 - Call UI (pehle koi UI nahi tha — isliye option nahi dikhta tha): CallActivity (Flora se baat karao / Khud baat karo / Kaato) + CallHolder lambdas + InCallService UI-first (auto-answer HATA DIYA) + manifest entry + ConnectScreen text. Dialer role abhi bhi user ko khud set karna hai (system dialog).
 - Pending-question auto-resume (Allow dabate hi bina dobara bole jawab) agle chunk me — plan me darj hai, is turn me daava nahi.
+
+## Bina-Allow screen raasta (2026-10-28 ~19:10 IST, CI PENDING)
+- User order: Allow tap khatam karo, one-time setup ke baad sab bol kar. Imaandari: MediaProjection Allow Flora khud NAHI daba sakti (OS hard rule, self-grant band hai).
+- Raasta: Accessibility takeScreenshot (API 30+) — one-time setup (Settings → Accessibility ON + Android 13+ restricted-settings toggle, user khud, ek baar) ke baad har "screen dekho" bina dialog/tap ke. Sirf bolne par capture, kabhi passive nahi; secure windows black.
+- Code: FloraAutomationService.screenshotJpeg() + FloraApp.lookAtScreen/LiveScreen.ask() me pehle try + fallback session path + "screen share chalu" par dialog skip. Service header ka purana "never screenshotted" comment naye rule se badla gaya.

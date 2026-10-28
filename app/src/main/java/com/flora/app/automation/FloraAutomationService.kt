@@ -3,6 +3,9 @@ package com.flora.app.automation
 import android.accessibilityservice.AccessibilityService
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Flora automation service (v1.0 foundation).
@@ -11,8 +14,17 @@ import android.view.accessibility.AccessibilityNodeInfo
  * silently, never via ADB). OFF karte hi sab automation ruk jata hai.
  * Screen content is processed ONLY on this phone to find a button /
  * field the user asked for — it is never sent to a server, never
- * screenshotted, never saved. A failed lookup reports "nahi mila"
- * instead of guessing a click.
+ * saved. A failed lookup reports "nahi mila" instead of guessing
+ * a click.
+ *
+ * SCREENSHOT RULE (user order 2026-10-28, one-time setup):
+ * takeScreenshot() sirf tab chalta hai jab user ne BOL KAR screen
+ * dekhne ko kaha ho ("screen dekho" jaisa command). Koi passive
+ * capture nahi, koi background capture nahi. Ye MediaProjection
+ * dialog ka doosra raasta hai: accessibility ek baar ON ho jaye to
+ * uske baad har screen-dekho command bina kisi Allow tap ke chalta
+ * hai — session marne ka sawaal hi nahi. Banking/password (secure)
+ * windows isme bhi black aayengi, ye Android ka niyam hai.
  */
 class FloraAutomationService : AccessibilityService() {
 
@@ -160,4 +172,79 @@ class FloraAutomationService : AccessibilityService() {
     fun goBack(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
 
     fun goHome(): Boolean = performGlobalAction(GLOBAL_ACTION_HOME)
+
+    /**
+     * One-time-setup screen capture (API 30+): jab user BOL KAR
+     * screen dekhne ko kahe, tab current screen ka JPEG wapas deta
+     * hai — bina MediaProjection dialog, bina Allow tap ke. Service
+     * OFF ho, API purani ho, screen off ho ya secure window ho to
+     * null (caller tab MediaProjection wale raaste par jayega).
+     * Hardware bitmap ko pehle software bitmap me badla jata hai,
+     * tabhi JPEG compress ho sakta hai.
+     */
+    suspend fun screenshotJpeg(): ByteArray? {
+        if (android.os.Build.VERSION.SDK_INT <
+            android.os.Build.VERSION_CODES.R
+        ) return null
+        return try {
+            kotlinx.coroutines.withTimeoutOrNull(8000) {
+                kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+                    val executor = java.util.concurrent.Executor { cmd ->
+                        android.os.Handler(
+                            android.os.Looper.getMainLooper()
+                        ).post(cmd)
+                    }
+                    try {
+                        takeScreenshot(
+                            android.view.Display.DEFAULT_DISPLAY,
+                            executor,
+                            object : TakeScreenshotCallback {
+                                override fun onSuccess(result: ScreenshotResult) {
+                                    if (!cont.isActive) return
+                                    val jpeg = try {
+                                        val raw = result.bitmap ?: run {
+                                            cont.resume(null)
+                                            return
+                                        }
+                                        val soft = if (raw.config ==
+                                            android.graphics.Bitmap.Config.HARDWARE
+                                        ) {
+                                            raw.copy(
+                                                android.graphics.Bitmap.Config.ARGB_8888,
+                                                false
+                                            )
+                                        } else {
+                                            raw
+                                        } ?: run {
+                                            cont.resume(null)
+                                            return
+                                        }
+                                        val out =
+                                            java.io.ByteArrayOutputStream()
+                                        soft.compress(
+                                            android.graphics.Bitmap.CompressFormat.JPEG,
+                                            80,
+                                            out
+                                        )
+                                        out.toByteArray()
+                                    } catch (e: Exception) {
+                                        null
+                                    }
+                                    cont.resume(jpeg)
+                                }
+
+                                override fun onFailure(errorCode: Int) {
+                                    if (cont.isActive) cont.resume(null)
+                                }
+                            }
+                        )
+                    } catch (e: Exception) {
+                        if (cont.isActive) cont.resume(null)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
 }
