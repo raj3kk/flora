@@ -35,6 +35,7 @@ import com.flora.app.automation.AppAutomation
 import com.flora.app.automation.AutoModeNotifier
 import com.flora.app.automation.FloraAutomationService
 import com.flora.app.automation.ScreenCapture
+import com.flora.app.automation.ShizukuBridge
 import com.flora.app.data.AutoLogStore
 import com.flora.app.tools.ImageTools
 import kotlinx.coroutines.delay
@@ -68,6 +69,7 @@ import com.flora.app.data.MemoriesStore
 import com.flora.app.data.JournalStore
 import com.flora.app.data.SosStore
 import com.flora.app.tools.SearchTools
+import com.flora.app.tools.WebsitePublisher
 import com.flora.app.security.BiometricTemplates
 import com.flora.app.security.GuardianGate
 import com.flora.app.security.PinVault
@@ -423,6 +425,66 @@ fun FloraApp(
                         }
                     } catch (e: Exception) {
                         voice.speak("Live update me dikkat aayi, dobara koshish karo.")
+                    }
+                }
+            }
+            lower == "shizuku status batao" -> {
+                voice.speak(ShizukuBridge.statusText())
+            }
+            lower == "shizuku se permission do" -> {
+                if (ShizukuBridge.isReady() && ShizukuBridge.hasPermission()) {
+                    val pkg = appContext.packageName
+                    val done = listOf(
+                        "Notification" to ShizukuBridge.grantPermission(pkg, Manifest.permission.POST_NOTIFICATIONS),
+                        "Camera" to ShizukuBridge.grantPermission(pkg, Manifest.permission.CAMERA),
+                        "Mic" to ShizukuBridge.grantPermission(pkg, Manifest.permission.RECORD_AUDIO)
+                    )
+                    val ok = done.filter { it.second }.map { it.first }
+                    val fail = done.filter { !it.second }.map { it.first }
+                    voice.speak(
+                        if (fail.isEmpty()) "Shizuku se teeno permission mil gayi — ${ok.joinToString(", ")}."
+                        else if (ok.isEmpty()) "Shizuku se permission nahi mili — Settings me Shizuku section se dobara koshish karo."
+                        else "Mil gayi: ${ok.joinToString(", ")}. Nahi mili: ${fail.joinToString(", ")}."
+                    )
+                } else {
+                    voice.speak("Shizuku taiyaar nahi hai. Pehle Shizuku app se chalao, phir Settings me 'Shizuku permission do' dabao, tab main permission le paungi.")
+                }
+            }
+            lower == "whatsapp call uthao" -> {
+                if (FloraAutomationService.isEnabled()) {
+                    FloraAutomationService.instance?.swipeUp()
+                    voice.speak("Swipe kar diya hai — agar WhatsApp call screen khuli thi to uth jayegi; har phone ka UI alag hota hai, guarantee nahi.")
+                } else {
+                    voice.speak("Accessibility band hai, isliye swipe nahi kar sakti. Settings me Flora ki accessibility ON karo, phir dobara bolo.")
+                }
+            }
+            lower == "website publish karo" -> {
+                voice.speak("Pichhli website ko public link par daal rahi hun.")
+                scope.launch {
+                    try {
+                        val file = java.io.File(appContext.filesDir, "last-website.html")
+                        if (!file.exists()) {
+                            voice.speak("Pehle website banao — 'website banao' bol kar ek website banwao, phir main use publish kar dungi.")
+                            return@launch
+                        }
+                        val html = file.readText()
+                        val anonKey = try { prefs.supabaseAnonKey() } catch (e: Exception) { "" }
+                        val uid = try { prefs.userId() } catch (e: Exception) { "" }
+                        if (anonKey.isBlank() || uid.isBlank()) {
+                            voice.speak("Publish ke liye app ki setting me website wali key chahiye — Settings me daal kar dobara bolo.")
+                            return@launch
+                        }
+                        val slug = "site-" + uid.take(8)
+                        val result = WebsitePublisher.publish(html, slug, anonKey)
+                        if (result.isSuccess) {
+                            val url = result.getOrNull() ?: ""
+                            messages = messages + ChatMsg("Flora: Website publish ho gayi — $url", false)
+                            voice.speak("Website publish ho gayi hai, link chat me de diya hai.")
+                        } else {
+                            voice.speak("Publish nahi ho paya. ${result.exceptionOrNull()?.message ?: "dobara koshish karo."}")
+                        }
+                    } catch (e: Exception) {
+                        voice.speak("Publish me dikkat aayi, dobara koshish karo.")
                     }
                 }
             }
@@ -1515,6 +1577,11 @@ fun FloraApp(
                             return
                         }
                         val result = searchTools.websiteStarter(idea)
+                        // Publish ke liye save (v2.22, G19): "website publish karo"
+                        // isi file ko public link par daalta hai.
+                        try {
+                            java.io.File(appContext.filesDir, "last-website.html").writeText(result)
+                        } catch (e: Exception) { }
                         messages = messages + ChatMsg("Flora: $result", false)
                         voice.speak("Website starter taiyaar hai — chat me dekh lo. Ye sirf shuruati HTML hai, poori website banani ho to detail bata dena.")
                         return
@@ -2717,6 +2784,10 @@ private fun SettingsScreen(
     var voiceSample by remember { mutableStateOf("lily") }
     // Theme state (v1.9): persona ke saath, launcher se pehle.
     var theme by remember { mutableStateOf("light") }
+    // Shizuku state (v2.22, G19): launcher se PEHLE declare (order trap).
+    var shizukuStatus by remember { mutableStateOf("Shizuku: jaanch ho rahi hai...") }
+    var shizukuReady by remember { mutableStateOf(false) }
+    var shizukuGranted by remember { mutableStateOf(false) }
     // FCM status (v2.2): token value KABHI screen par nahi dikhegi.
     var fcmStatus by remember { mutableStateOf("Push: jaanch ho rahi hai...") }
     // Wake Word state (v2.4): launcher se PEHLE declare (order trap).
@@ -2793,6 +2864,10 @@ private fun SettingsScreen(
         persona = prefs.persona()
         voiceSample = prefs.voiceSample()
         theme = prefs.theme()
+        // Shizuku status (v2.22, G19): system se live padha jata hai.
+        shizukuStatus = ShizukuBridge.statusText()
+        shizukuReady = ShizukuBridge.isReady()
+        shizukuGranted = ShizukuBridge.hasPermission()
         fcmStatus = if (prefs.fcmToken().isNotEmpty()) {
             "Push: chalu (token sirf is phone par save hai)"
         } else {
@@ -3269,6 +3344,51 @@ private fun SettingsScreen(
                 }) { Text("Default dialer banao") }
             }
             Text("Default assistant: system settings me Flora chuno — phir Flora har jagah se bulayi ja sakegi. Default dialer: default apps me Flora chuno — phir call UI Flora ka chalega.")
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Shizuku — system permission ek tap me (bina root ke, tumhare control me)")
+            Text(shizukuStatus)
+            Row {
+                Button(onClick = {
+                    ShizukuBridge.requestPermission(1001)
+                    shizukuStatus = ShizukuBridge.statusText()
+                    shizukuReady = ShizukuBridge.isReady()
+                    shizukuGranted = ShizukuBridge.hasPermission()
+                }) { Text("Shizuku permission do") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = {
+                    shizukuStatus = ShizukuBridge.statusText()
+                    shizukuReady = ShizukuBridge.isReady()
+                    shizukuGranted = ShizukuBridge.hasPermission()
+                }) { Text("Status refresh karo") }
+            }
+            if (shizukuReady && shizukuGranted) {
+                Text("Taiyaar hai — neeche wali permission ek tap me mil jayegi.")
+                Row {
+                    Button(onClick = {
+                        val ok = ShizukuBridge.grantPermission(context.packageName, Manifest.permission.POST_NOTIFICATIONS)
+                        shizukuStatus = if (ok) "Notification permission mil gaya." else "Notification permission nahi mila — dobara koshish karo."
+                    }) { Text("Notification do") }
+                    Spacer(modifier = Modifier.padding(4.dp))
+                    Button(onClick = {
+                        val ok = ShizukuBridge.grantPermission(context.packageName, Manifest.permission.CAMERA)
+                        shizukuStatus = if (ok) "Camera permission mil gaya." else "Camera permission nahi mila — dobara koshish karo."
+                    }) { Text("Camera do") }
+                    Spacer(modifier = Modifier.padding(4.dp))
+                    Button(onClick = {
+                        val ok = ShizukuBridge.grantPermission(context.packageName, Manifest.permission.RECORD_AUDIO)
+                        shizukuStatus = if (ok) "Mic permission mil gaya." else "Mic permission nahi mila — dobara koshish karo."
+                    }) { Text("Mic do") }
+                }
+            }
+            Row {
+                Button(onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api")).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                }) { Text("Shizuku app kholo") }
+            }
+            Text("Setup: Shizuku app install karo, usme wireless debugging se chalao (Shizuku app khud steps batata hai). Reboot par Shizuku band ho jata hai — dobara chalana padta hai. Tum jab chaho Shizuku band kar sakte ho, tab Flora wapas normal settings wale raaste par aa jayegi.")
             Spacer(modifier = Modifier.height(12.dp))
             Text("Auto mode — bina har baar poochhe kaam (default ON, user order)")
             Row {

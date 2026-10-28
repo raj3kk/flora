@@ -22,6 +22,8 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- Shizuku (v2.22, G19): Android 11+ package visibility ke liye. -->
+        <package android:name="moe.shizuku.privileged.api" />
     </queries>
     <application
         android:name="com.flora.app.FloraApplication"

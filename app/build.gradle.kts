@@ -51,4 +51,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.firebase:firebase-messaging:24.0.0")
+    // Shizuku (v2.22, G19): system permissions bina root ke, user ki
+    // Shizuku app ke through — sirf jab user ne Shizuku chalaya ho.
+    implementation("dev.rikka.shizuku:api:13.1.5")
 }
