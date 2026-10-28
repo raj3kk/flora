@@ -58,6 +58,7 @@ class FloraPreferences(private val context: Context) {
         val LINKED_EMAIL = stringPreferencesKey("linked_email")
         val LINKED_REFRESH_TOKEN = stringPreferencesKey("linked_refresh_token")
         val CALL_TALK = booleanPreferencesKey("call_talk")
+        val HOME_BOX_CODE = stringPreferencesKey("home_box_code")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
         val PERMISSIONS_GATE_DONE = booleanPreferencesKey("permissions_gate_done")
@@ -132,6 +133,16 @@ class FloraPreferences(private val context: Context) {
      *  Khali = system STT fallback; key aate hi sachhi barge-in. */
     suspend fun deepgramApiKey(): String =
         context.floraDataStore.data.map { it[Keys.DEEPGRAM_API_KEY] ?: "" }.first()
+
+    /** Home box code (v2.22, P5-F22 phone half): box ka join code
+     *  sirf phone par save hota hai. Server sync (S4) abhi baaki
+     *  hai — code save hona control nahi hai. */
+    suspend fun homeBoxCode(): String =
+        context.floraDataStore.data.map { it[Keys.HOME_BOX_CODE] ?: "" }.first()
+
+    suspend fun setHomeBoxCode(value: String) {
+        context.floraDataStore.edit { it[Keys.HOME_BOX_CODE] = value }
+    }
 
     suspend fun setDeepgramApiKey(value: String) {
         context.floraDataStore.edit { it[Keys.DEEPGRAM_API_KEY] = value }

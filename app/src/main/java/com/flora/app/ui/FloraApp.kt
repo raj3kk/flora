@@ -78,7 +78,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -105,6 +105,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.VOICE_ENROL -> "Awaaz sikhao"
     Screen.NOTIFICATIONS -> "Notifications"
     Screen.WHITEBOARD -> "Whiteboard"
+    Screen.HOME -> "Home"
 }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
@@ -563,6 +564,10 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Whiteboard") },
                             onClick = { screen = Screen.WHITEBOARD; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Home") },
+                            onClick = { screen = Screen.HOME; menuOpen = false },
                         )
                         DropdownMenuItem(
                             text = { Text("Live Screen") },
@@ -1294,6 +1299,27 @@ fun FloraApp(
                                 messages = messages + ChatMsg("Flora: $msg", false)
                                 voice.speak(msg)
                             }
+                        }
+                        return
+                    }
+                    // Home control ki koshish par imaandari wala
+                    // jawab (v2.22, P5-F22): box juda ho ya na ho,
+                    // server sync (S4) ke bina koi relay nahi chalega
+                    // — chhupke se on/off kabhi nahi hoga.
+                    if (teachLower.contains("ghar") &&
+                        (teachLower.contains("light") || teachLower.contains("pankha") ||
+                            teachLower.contains("fan") || teachLower.contains("batti"))
+                    ) {
+                        input = ""
+                        scope.launch {
+                            val code = try { prefs.homeBoxCode() } catch (e: Exception) { "" }
+                            val msg = if (code.isEmpty()) {
+                                "Ghar ka control abhi nahi chalega — pehle Menu me Home screen se box ka code jodo. Uske baad bhi server sync (S4) aane par hi on/off chalega."
+                            } else {
+                                "Box juda hua hai, par server sync abhi baaki hai — isliye light/pankha abhi awaaz se nahi chalega. Sync aate hi chalega."
+                            }
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
                         }
                         return
                     }
@@ -2248,6 +2274,8 @@ fun FloraApp(
                 DocsScreen(docsStore)
             } else if (screen == Screen.WHITEBOARD) {
                 WhiteboardScreen()
+            } else if (screen == Screen.HOME) {
+                HomeScreen(prefs)
             } else if (screen == Screen.CONNECT) {
                 ConnectScreen(voice, prefs)
             } else if (screen == Screen.PRIVACY) {
