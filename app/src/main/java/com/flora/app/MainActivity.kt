@@ -18,6 +18,7 @@ import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
 import com.flora.app.data.DocsStore
 import com.flora.app.data.MemoriesStore
+import com.flora.app.data.JournalStore
 import com.flora.app.data.SosStore
 import com.flora.app.tools.SearchTools
 import com.flora.app.security.GuardianGate
@@ -68,6 +69,7 @@ class MainActivity : ComponentActivity() {
         val pinVault = PinVault(applicationContext)
         val guardian = GuardianGate()
         val memoriesStore = MemoriesStore(applicationContext)
+        val journalStore = JournalStore(applicationContext)
         val searchTools = SearchTools()
         val sosStore = SosStore(applicationContext)
         val docsStore = DocsStore(applicationContext)
@@ -80,6 +82,7 @@ class MainActivity : ComponentActivity() {
                 pinVault = pinVault,
                 guardian = guardian,
                 memoriesStore = memoriesStore,
+                journalStore = journalStore,
                 searchTools = searchTools,
                 sosStore = sosStore,
                 docsStore = docsStore,
