@@ -170,3 +170,20 @@
   v2.8 push ka gate khula.
 - Build test (v2.8): CI run — result push ke baad verify hoga.
 - Phone test entry: docs/FLORA_APP_LINK_TEST_ENTRY.md (6 steps).
+
+## v2.8 app-link — CI PASS VERIFIED (2026-10-28 ~10:57 IST)
+- Run 40637321596 completed success, artifact flora-debug-apk
+  59,412,409 bytes, expired false. v2.8 = latest PASS.
+- Gate clear: Round 2 items ab push ho sakte hain.
+
+## Clean-URL fix — web-only (watcher tick ne pakda)
+- Finding: /admin, /pricing, /login, /signup, /pay, /account
+  bina .html ke Vercel NOT_FOUND 404 dete the — web/ me koi
+  vercel.json rewrites/cleanUrls nahi tha. .html paths par
+  7/7 pages 200 the, isliye ye chhota layer issue pehle
+  chhoot gaya tha (imaandari se note).
+- Fix: web/vercel.json me {"cleanUrls": true} — /admin ab
+  /admin.html serve karega; .html paths pehle jaise chalte
+  rahenge. Koi app code change nahi, isliye version bump
+  nahi (web-only commit).
+- Verify: naye deploy par clean URLs 200-check hoga.
