@@ -166,10 +166,6 @@ fun FloraApp(
     // fun baad me declare hota hai, isliye effect holder se call
     // karta hai — hook order ke liye effect yahan, call holder se).
     var continuousOn by remember { mutableStateOf(false) }
-    // Barge-in controller (v2.22, chunk 7): TTS ke dauraan user
-    // beech me bole to Deepgram live stream se suno. Mic
-    // continuous listener ka ho to shuru hi nahi hoga.
-    val bargeIn = remember { com.flora.app.voice.BargeInController(appContext) }
     // Voice-first Baat view (v2.15): default ON — baat-cheet me
     // likha hua transcript nahi dikhega, sirf orb + mic. Chat
     // sirf tab jab user khud "Chat kholo" dabaye.
@@ -203,6 +199,12 @@ fun FloraApp(
     var pendingVoiceSmsRequest by remember { mutableStateOf<Pair<String, String>?>(null) }
     var pendingContact by remember { mutableStateOf<PendingContact?>(null) }
     val appContext = LocalContext.current
+    // Barge-in controller (v2.22, chunk 7): appContext ke BAAD hi
+    // (order trap — pehle likhne par CI ne Unresolved reference
+    // diya tha). TTS ke dauraan user beech me bole to Deepgram
+    // live stream se suno; mic continuous listener ka ho to
+    // shuru hi nahi hoga.
+    val bargeIn = remember { com.flora.app.voice.BargeInController(appContext) }
     // appContext ke BAAD (declaration order — pehle wali galti se CI fail hua tha).
     val autoLogStore = remember { AutoLogStore(appContext) }
     val voicePermissionLauncher = rememberLauncherForActivityResult(

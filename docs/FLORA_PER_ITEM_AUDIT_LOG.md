@@ -680,3 +680,7 @@ maujood, index bhi 200. Download page ab live hai.
 - Parent verify (code se, guess nahi): licence-verify index.ts me `!device_id → 400` CONFIRMED; admin-approve me `!users.device_id → 400 "user device unknown"` CONFIRMED; admin-phase-a SQL me payment_submissions par user INSERT/SELECT-own + admin SELECT/UPDATE policies CONFIRMED — isliye naye account/admin flows policy-sound hain.
 - N4 (coordinator ka app finding, parent ne fix kiya): FloraApp lock text "sirf PIN se" stale tha (chunk 3 voice wiring ke baad PIN + voice) — ek line theek ki.
 - Baaki dashboard se: confirm-email ON/OFF, Site URL/redirects, owner is_admin flag (browser audit task chal raha hai, uski report aane par). Function gap (website-only approve 400) ka permanent fix (signup par users row ya approve me website path) abhi pending faisla — short-term copy "pehle app link karo" hai.
+
+## v2.22 chunk 7b CI FAIL — root fix (2026-10-28 ~18:10 IST)
+- Wajah (job log, 7200f35e): FloraApp.kt:172 `Unresolved reference: appContext` — chunk 7 me bargeIn ka remember appContext ki declaration (line ~200) se PEHLE likh diya tha. Wahi purana declaration-order trap (v2.13/v2.17 wali galti ka naya roop).
+- Fix: bargeIn declaration ko appContext ke turant BAAD le jaya gaya; isse pehle ke koi use nahi hai (hooks LaunchedEffect ~430 ke baad, Stop button ~1576). Balance verify.
