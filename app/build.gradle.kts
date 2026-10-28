@@ -12,8 +12,8 @@ android {
         applicationId = "com.flora.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 23
-        versionName = "2.2.0-rebuild"
+        versionCode = 24
+        versionName = "2.2.1-rebuild"
     }
 
     buildFeatures {

@@ -28,8 +28,8 @@ object FloraConfig {
     const val LICENCE_FUNCTION_PATH = "/functions/v1/licence-verify"
     const val USAGE_FUNCTION_PATH = "/functions/v1/usage-count"
 
-    // Wake phrases are NOT decided yet (open user decision): the app
-    // ships without a wake-word model until the user confirms phrases
-    // and gives consent-only recordings. Nothing is recorded silently.
-    const val WAKE_WORD_DECISION_PENDING = true
+    // Wake phrase DECIDED hai: "Hey Flora" (user decision 2026-10-28).
+    // Model/training abhi baaki hai (recordings 6/50) — isliye app
+    // me abhi koi wake-word model nahi hai. Nothing is recorded silently.
+    const val WAKE_WORD_DECISION_PENDING = false
 }

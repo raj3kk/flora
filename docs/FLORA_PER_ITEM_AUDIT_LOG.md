@@ -84,3 +84,14 @@
 - v2.2 Voice/Face match: design taiyaar, test entry
   docs/FLORA_VOICE_FACE_TEST_ENTRY.md (phone test se hi audit poora
   hoga, CI par nahi).
+  NOTE (audit fix 2026-10-28): ye item ab v2.3 hai — v2.2 FCM ne le
+  liya hai; upar wali line ka "v2.2" purana label tha.
+
+## v2.1 Keys + rotation — audit PASS (2026-10-28)
+- Run 40625192196 completed success, artifact 54,350,099 bytes,
+  expired: false. Upar wali "CI result pending" entry stale thi.
+
+## v2.2 FCM wiring — audit PASS (2026-10-28)
+- Run 40627580432 completed success, artifact 54,540,574 bytes,
+  expired: false. Project flora-f22a7, package com.flora.app.
+- Test entry: docs/FLORA_FCM_TEST_ENTRY.md (6 steps).
