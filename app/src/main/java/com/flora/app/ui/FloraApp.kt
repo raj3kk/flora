@@ -77,7 +77,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -103,6 +103,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.MODELS -> "Models"
     Screen.VOICE_ENROL -> "Awaaz sikhao"
     Screen.NOTIFICATIONS -> "Notifications"
+    Screen.WHITEBOARD -> "Whiteboard"
 }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
@@ -551,6 +552,10 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Docs") },
                             onClick = { screen = Screen.DOCS; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Whiteboard") },
+                            onClick = { screen = Screen.WHITEBOARD; menuOpen = false },
                         )
                         DropdownMenuItem(
                             text = { Text("Live Screen") },
@@ -1976,6 +1981,8 @@ fun FloraApp(
                 FaceScreen()
             } else if (screen == Screen.DOCS) {
                 DocsScreen(docsStore)
+            } else if (screen == Screen.WHITEBOARD) {
+                WhiteboardScreen()
             } else if (screen == Screen.CONNECT) {
                 ConnectScreen(voice, prefs)
             } else if (screen == Screen.PRIVACY) {

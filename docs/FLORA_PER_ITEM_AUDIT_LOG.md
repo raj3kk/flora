@@ -717,3 +717,8 @@ maujood, index bhi 200. Download page ab live hai.
 - "market kaisa hai" / "market dikhao" / "share market kaisa hai" → Nifty 50 (^NSEI), Sensex (^BSESN), Bitcoin (BTC-USD) — wahi stockPrice/Yahoo raasta, har line ka sirf pehla hissa (per-symbol note repeat nahi), aakhir me ek baar live-pushti note.
 - Sirf padhna hai, isliye Auto Mode gate nahi. Audit: brace/paren balance.
 - P3 baaki: F16 whiteboard (code ZERO — naya screen), F13 image post step (image voice maujood hai; auto-post ka raasta abhi koi nahi — IG auto-post bada + risky item, confirm flow ke saath alag se banega, chupke se nahi).
+
+## v2.22 P3-F16 poora — Whiteboard screen (2026-10-28 ~18:55 IST, CI PENDING)
+- Nayi WhiteboardScreen.kt: ungli se draw (drag paths), 4 colors, Undo, Saaf karo, Save → gallery Pictures/Flora (MediaStore, PNG). Drawing sirf phone par banti hai, koi upload nahi. Wiring: Screen.WHITEBOARD + title + Menu entry + branch (Docs ke baad).
+- Audit: dono files brace/paren balance; Save IO par, note main par; khaali canvas par Save mana karta hai.
+- P3 baaki sirf F13 image post step (image voice maujood; auto-post ka raasta koi nahi — IG auto-post bada + risky, confirm flow ke saath alag se banega).
