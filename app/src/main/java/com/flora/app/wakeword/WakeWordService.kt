@@ -85,9 +85,17 @@ class WakeWordService : Service() {
 
     private suspend fun listenLoop() {
         val templates = BiometricTemplates(this@WakeWordService)
-        val stored = templates.loadWake() ?: return
-        if (stored.isEmpty()) return
-        val template = DoubleArray(stored.size) { stored[it].toDouble() }
+        val stored = templates.loadWake()
+        // Default template (v2.22, Phase 3): enrolled template
+        // na ho to assets/wakeword/default_template.json se
+        // 6-clip mean vector lo — wake word enrol kiye bina
+        // bhi kaam karega. Enrolled template hamesha pehle.
+        // Dono na hon to service chupchaap kuch nahi karti.
+        val template: DoubleArray = when {
+            stored != null && stored.isNotEmpty() ->
+                DoubleArray(stored.size) { stored[it].toDouble() }
+            else -> loadDefaultTemplate() ?: return
+        }
         var lastWakeMs = 0L
         while (scope.isActive) {
             // Mic-owner rule (v2.15): continuous mic ON ho to mic
@@ -137,6 +145,20 @@ class WakeWordService : Service() {
                     }
                 }
             }
+        }
+    }
+
+    /** Default template asset padho: {"vector": [12 floats]}.
+     *  Galat/missing asset par null — service kuch nahi karegi. */
+    private fun loadDefaultTemplate(): DoubleArray? {
+        return try {
+            val text = assets.open("wakeword/default_template.json")
+                .bufferedReader().use { it.readText() }
+            val vecObj = org.json.JSONObject(text).optJSONArray("vector") ?: return null
+            if (vecObj.length() != 12) return null
+            DoubleArray(12) { vecObj.getDouble(it) }
+        } catch (e: Exception) {
+            null
         }
     }
 

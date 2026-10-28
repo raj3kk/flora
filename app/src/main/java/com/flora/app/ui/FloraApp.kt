@@ -2933,6 +2933,11 @@ private fun SettingsScreen(
     var wakeEnrolled by remember { mutableStateOf(false) }
     var wakeStatus by remember { mutableStateOf("Wake Word: band hai") }
     var wakeThreshold by remember { mutableStateOf(0.60f) }
+    // Voice-match threshold (v2.22, Phase 3): PIN unlock par
+    // awaaz check kitna sakht ho. Default 0.50 starting guess
+    // hai (same-speaker min 0.558, noise max 0.380) — phone
+    // par validate hone ke baad hi lock hoga (Phase 8).
+    var matchThreshold by remember { mutableStateOf(0.50f) }
     // App-link state (v2.8, PREP — push v2.7 PASS ke baad): launcher
     // se PEHLE declare (order trap). Password state screen par hi
     // rahega, kabhi save/log nahi hoga.
@@ -3015,6 +3020,7 @@ private fun SettingsScreen(
         wakeEnrolled = BiometricTemplates(context).hasWake()
         wakeStatus = if (wakeEnabled) "Wake Word ON hai — sun raha hun." else "Wake Word: band hai"
         wakeThreshold = prefs.wakeThreshold()
+        matchThreshold = prefs.voiceMatchThreshold()
         linkedEmailDisplay = prefs.linkedEmail()
         // Background status (v2.12): system se live padha jata hai.
         notifGranted = ContextCompat.checkSelfPermission(
@@ -3072,6 +3078,17 @@ private fun SettingsScreen(
                         wakeThreshold = value
                         scope.launch { prefs.setWakeThreshold(value) }
                     }) { Text(if (wakeThreshold == value) "✓ $label" else label) }
+                    Spacer(modifier = Modifier.padding(2.dp))
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("Awaaz pehchan (PIN unlock) — galat awaaz se khul jaye to 'Sakht' karo, apni awaaz na pehchane to 'Dheela' karo.")
+            Row {
+                listOf(0.60f to "Sakht", 0.50f to "Medium", 0.40f to "Dheela").forEach { (value, label) ->
+                    Button(onClick = {
+                        matchThreshold = value
+                        scope.launch { prefs.setVoiceMatchThreshold(value) }
+                    }) { Text(if (matchThreshold == value) "✓ $label" else label) }
                     Spacer(modifier = Modifier.padding(2.dp))
                 }
             }

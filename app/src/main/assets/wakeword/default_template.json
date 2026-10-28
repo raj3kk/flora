@@ -1,0 +1,26 @@
+{
+ "version": 1,
+ "source": "6 positive clips, mfcc_mean (12-d, DCT 0th skipped), mean vector",
+ "clips": [
+  "New_recording_28.wav",
+  "New_recording_29.wav",
+  "New_recording_30.wav",
+  "New_recording_31.wav",
+  "New_recording_32.wav",
+  "New_recording_33.wav"
+ ],
+ "vector": [
+  -4.580238468791653,
+  1.9991571976765126,
+  6.730239010564574,
+  -2.0947127436056507,
+  -1.3334553785066452,
+  3.482183928553082,
+  -3.38346809925518,
+  -0.8080675457285401,
+  0.7155813276881354,
+  -3.0980962146227564,
+  -1.6054161809119254,
+  -3.167809905579952
+ ]
+}

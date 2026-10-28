@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.flora.app.assistant.VoiceEngine
+import com.flora.app.data.FloraPreferences
+import com.flora.app.voice.SttLanes
 import com.flora.app.voice.VoiceMatcher
 import com.flora.app.voice.VoiceRecorder
 import com.flora.app.voice.VoiceVault
@@ -35,6 +37,7 @@ fun VoiceEnrolScreen(voice: VoiceEngine) {
     var samples by remember { mutableStateOf<List<ShortArray>>(emptyList()) }
     var recording by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf("") }
+    var transcribeNote by remember { mutableStateOf("") }
     var enrolled by remember { mutableStateOf(VoiceVault(context).hasEnrolled()) }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -88,6 +91,34 @@ fun VoiceEnrolScreen(voice: VoiceEngine) {
                     }
                 }
             ) { Text("Save karo (enrol)") }
+            Spacer(modifier = Modifier.height(8.dp))
+            // STT check (v2.22, Phase 3): aakhri sample ko
+            // Deepgram se text me badal kar dikhao — isse pata
+            // chalta hai Deepgram lane chal rahi hai ya nahi.
+            // Key na ho to guide dikhta hai, koi jhootha daava nahi.
+            Button(
+                enabled = samples.isNotEmpty() && !recording,
+                onClick = {
+                    scope.launch {
+                        val prefs = FloraPreferences(context)
+                        if (!SttLanes.hasDeepgramKey(prefs)) {
+                            transcribeNote = "Deepgram key chahiye — Settings me daalo, phir dobara karo."
+                        } else {
+                            transcribeNote = "Sun kar likh raha hun..."
+                            val text = SttLanes.transcribe(samples.last(), prefs)
+                            transcribeNote = if (!text.isNullOrBlank()) {
+                                "Deepgram ne suna: $text"
+                            } else {
+                                "Samajh nahi paya — dobara saaf bolo."
+                            }
+                        }
+                    }
+                }
+            ) { Text("Aakhri sample ko text me badlo (STT check)") }
+            if (transcribeNote.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(transcribeNote)
+            }
             Spacer(modifier = Modifier.height(8.dp))
             if (enrolled) {
                 Button(onClick = {
