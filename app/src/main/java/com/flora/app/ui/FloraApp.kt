@@ -315,6 +315,36 @@ fun FloraApp(
     var menuOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val vision = remember { VisionClient() }
+    // Guardian PIN re-ask (Guardian enforcement build, 2026-10-29):
+    // Guardian ON ho aur is session me PIN verify na hua ho, tab gated
+    // kaam turant nahi chalega — PIN dialog khulega; sahi PIN par
+    // pending kaam ek baar chalega, galat/cancel par kuch nahi chalega.
+    // Guardian OFF ho ya session verified ho to kaam seedha chalega
+    // (koi extra step nahi). Ek waqt me ek hi pending kaam rehta hai —
+    // naya gated request purane pending ko badal deta hai (fail-safe:
+    // bina PIN ke kuch nahi chalta). Har roka gaya kaam Auto Log me
+    // likha jata hai; ongoing notification + "auto mode band" chhede nahi.
+    var guardianPinInput by remember { mutableStateOf("") }
+    var guardianPinNote by remember { mutableStateOf("") }
+    var guardianPinPending by remember { mutableStateOf<(() -> Unit)?>(null) }
+    fun runGuardedVoice(action: () -> Unit) {
+        scope.launch {
+            val gOn = try { prefs.guardianMode() } catch (e: Exception) { false }
+            val pOn = try { prefs.pinEnabled() } catch (e: Exception) { false }
+            if (guardian.canAccessSensitive(pOn, gOn)) {
+                action()
+            } else {
+                guardianPinPending = action
+                guardianPinInput = ""
+                guardianPinNote = ""
+                val msg = "Guardian mode ON hai — pehle PIN verify karo, phir ye kaam hoga."
+                messages = messages + ChatMsg("Flora: $msg", false)
+                voice.speak(msg)
+                try { autoLogStore.add("Guardian ne roka: PIN verify ke bina kaam nahi chala") } catch (e: Exception) { }
+            }
+        }
+    }
+
     // Screen share state (v2.22, voice-first autonomy): permission +
     // token FloraApp level par — Chat se bhi "screen dekho" bolne par
     // kaam kare, LiveScreen par jaane ki zaroorat nahi. Launcher
@@ -489,6 +519,7 @@ fun FloraApp(
                     }
                     else -> {
                         val app = matches[0]
+                        runGuardedVoice {
                         when (VerifiedAppLauncher.openVerified(appContext, app)) {
                             VerifiedAppLauncher.OpenResult.Opened,
                             VerifiedAppLauncher.OpenResult.AlreadyOpen -> {
@@ -501,6 +532,7 @@ fun FloraApp(
                                 voice.speak("${app.label} nahi khul paya, step chhod diya.")
                             }
                         }
+                        }
                     }
                 }
             }
@@ -510,6 +542,7 @@ fun FloraApp(
                 if (site.isBlank()) {
                     voice.speak("Website nahi khul payi, step chhod diya.")
                 } else {
+                    runGuardedVoice {
                     when (VerifiedAppLauncher.openWebsiteVerified(appContext, site)) {
                         VerifiedAppLauncher.OpenResult.NotVisible,
                         VerifiedAppLauncher.OpenResult.NoLaunchIntent -> {
@@ -518,6 +551,7 @@ fun FloraApp(
                         else -> {
                             voice.speak("$site khol raha hun.")
                         }
+                    }
                     }
                 }
             }
@@ -638,10 +672,12 @@ fun FloraApp(
                 } else if (lower.startsWith("call ")) {
                     val number = cmd.substring(5).trim().filter { it.isDigit() || it == '+' }
                     if (number.length >= 7 && AutoActions.hasCallPermission(appContext)) {
+                        runGuardedVoice {
                         val ok = AutoActions.placeCall(appContext, number)
                         voice.speak(if (ok) "Routine call laga di gayi: $number" else "Routine call nahi lagi.")
                         scope.launch {
                             try { autoLogStore.add("Routine call (auto): $number -> ${if (ok) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                        }
                         }
                     } else {
                         voice.speak("Call permission ya number nahi mila, step chhod diya.")
@@ -654,10 +690,12 @@ fun FloraApp(
                     } else {
                         val number = parts[0].filter { it.isDigit() || it == '+' }
                         if (number.length >= 7 && AutoActions.hasSmsPermission(appContext)) {
+                            runGuardedVoice {
                             val ok = AutoActions.sendSms(appContext, number, parts[1])
                             voice.speak(if (ok) "Routine SMS bhej diya gaya: $number" else "Routine SMS nahi gaya.")
                             scope.launch {
                                 try { autoLogStore.add("Routine SMS (auto): $number -> ${if (ok) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                            }
                             }
                         } else {
                             voice.speak("SMS permission ya number nahi mila, step chhod diya.")
@@ -1257,22 +1295,26 @@ fun FloraApp(
                 // Auto Mode execute helpers (v2.17): confirm dialog ke
                 // bajay seedha execute + Auto Log me entry + bol kar.
                 fun autoExecuteCall(number: String) {
-                    val ok = AutoActions.placeCall(appContext, number)
-                    val msg = if (ok) "Call laga di gayi: $number" else "Call nahi lagi, permission ya number check kijiye."
-                    messages = messages + ChatMsg("Flora: $msg", false)
-                    voice.speak(msg)
-                    scope.launch {
-                        try { autoLogStore.add("Call (auto): $number -> ${if (ok) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                    runGuardedVoice {
+                        val ok = AutoActions.placeCall(appContext, number)
+                        val msg = if (ok) "Call laga di gayi: $number" else "Call nahi lagi, permission ya number check kijiye."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        scope.launch {
+                            try { autoLogStore.add("Call (auto): $number -> ${if (ok) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                        }
                     }
                 }
 
                 fun autoExecuteSms(number: String, text: String) {
-                    val ok = AutoActions.sendSms(appContext, number, text)
-                    val msg = if (ok) "SMS bhej diya gaya: $number" else "SMS nahi gaya, permission ya number check kijiye."
-                    messages = messages + ChatMsg("Flora: $msg", false)
-                    voice.speak(msg)
-                    scope.launch {
-                        try { autoLogStore.add("SMS (auto): $number -> ${if (ok) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                    runGuardedVoice {
+                        val ok = AutoActions.sendSms(appContext, number, text)
+                        val msg = if (ok) "SMS bhej diya gaya: $number" else "SMS nahi gaya, permission ya number check kijiye."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        scope.launch {
+                            try { autoLogStore.add("SMS (auto): $number -> ${if (ok) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                        }
                     }
                 }
 
@@ -1280,6 +1322,7 @@ fun FloraApp(
                     app: com.flora.app.automation.LaunchableApp,
                     onDone: ((VerifiedAppLauncher.OpenResult) -> Unit)? = null,
                 ) {
+                    runGuardedVoice {
                     scope.launch {
                         val result = VerifiedAppLauncher.openVerified(appContext, app)
                         val verified = result == VerifiedAppLauncher.OpenResult.Opened ||
@@ -1294,6 +1337,7 @@ fun FloraApp(
                         voice.speak(msg)
                         try { autoLogStore.add("App khola (auto): ${app.label} -> ${if (verified) "ho gaya" else "fail"}") } catch (e: Exception) { }
                         onDone?.invoke(result)
+                    }
                     }
                 }
 
@@ -2671,7 +2715,7 @@ fun FloraApp(
                                 voice.speak("Ek se zyada app mili: $names. Poora naam boliye.")
                             } else {
                                 val app = matches[0]
-                                scope.launch {
+                                runGuardedVoice { scope.launch {
                                     when (VerifiedAppLauncher.openVerified(appContext, app)) {
                                         VerifiedAppLauncher.OpenResult.Opened,
                                         VerifiedAppLauncher.OpenResult.AlreadyOpen -> {
@@ -2686,6 +2730,7 @@ fun FloraApp(
                                             voice.speak("${app.label} nahi khul paya.")
                                         }
                                     }
+                                }
                                 }
                             }
                         }
@@ -3361,7 +3406,7 @@ fun FloraApp(
                             "github kholo" -> "https://github.com"
                             else -> "https://vercel.com"
                         }
-                        scope.launch {
+                        runGuardedVoice { scope.launch {
                             try {
                                 val found = VerifiedAppLauncher.findByName(appContext, appName)
                                 val msg = when {
@@ -3393,6 +3438,7 @@ fun FloraApp(
                                 messages = messages + ChatMsg("Flora: $msg", false)
                                 voice.speak(msg)
                             }
+                        }
                         }
                         return
                     }
@@ -3800,10 +3846,12 @@ fun FloraApp(
                     confirmButton = {
                         TextButton(onClick = {
                             voiceCallConfirm = null
+                            runGuardedVoice {
                             val ok = AutoActions.placeCall(appContext, number)
                             val msg = if (ok) "Call laga di gayi: $number" else "Call nahi lagi, permission ya number check kijiye."
                             messages = messages + ChatMsg("Flora: $msg", false)
                             voice.speak(msg)
+                            }
                         }) { Text("Haan, call lagao") }
                     },
                     dismissButton = {
@@ -3819,10 +3867,12 @@ fun FloraApp(
                     confirmButton = {
                         TextButton(onClick = {
                             voiceSmsConfirm = null
+                            runGuardedVoice {
                             val ok = AutoActions.sendSms(appContext, number, text)
                             val msg = if (ok) "SMS bhej diya gaya: $number" else "SMS nahi gaya, permission ya number check kijiye."
                             messages = messages + ChatMsg("Flora: $msg", false)
                             voice.speak(msg)
+                            }
                         }) { Text("Haan, bhejo") }
                     },
                     dismissButton = {
@@ -3838,7 +3888,7 @@ fun FloraApp(
                     confirmButton = {
                         TextButton(onClick = {
                             voiceAppConfirm = null
-                            scope.launch {
+                            runGuardedVoice { scope.launch {
                                 val msg = when (VerifiedAppLauncher.openVerified(appContext, app)) {
                                     VerifiedAppLauncher.OpenResult.Opened -> "${app.label} khol diya."
                                     VerifiedAppLauncher.OpenResult.AlreadyOpen -> "${app.label} pehle se khula hua hai."
@@ -3847,6 +3897,7 @@ fun FloraApp(
                                 }
                                 messages = messages + ChatMsg("Flora: $msg", false)
                                 voice.speak(msg)
+                            }
                             }
                         }) { Text("Haan, kholo") }
                     },
@@ -3893,6 +3944,46 @@ fun FloraApp(
                     },
                 )
             }
+            guardianPinPending?.let { pending ->
+                AlertDialog(
+                    onDismissRequest = { guardianPinPending = null; guardianPinInput = "" },
+                    title = { Text("Guardian PIN verify karo") },
+                    text = {
+                        Column {
+                            Text("Guardian mode ON hai — ye kaam PIN verify ke baad hi hoga. PIN sahi ho to kaam turant chalega.")
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = guardianPinInput, onValueChange = { guardianPinInput = it },
+                                label = { Text("PIN") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            if (guardianPinNote.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(guardianPinNote)
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            if (pinVault.verify(guardianPinInput)) {
+                                guardian.markPinVerified()
+                                guardianPinPending = null
+                                guardianPinInput = ""
+                                guardianPinNote = ""
+                                pending()
+                            } else {
+                                guardianPinNote = "Galat PIN."
+                                guardianPinInput = ""
+                            }
+                        }) { Text("Verify karo") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { guardianPinPending = null; guardianPinInput = "" }) { Text("Ruko") }
+                    }
+                )
+            }
+
         }
     }
     }
@@ -3962,6 +4053,31 @@ private fun SettingsScreen(
     var linkPassword by remember { mutableStateOf("") }
     var linkedEmailDisplay by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
+    // Guardian PIN re-ask (Guardian enforcement build, 2026-10-29):
+    // Guardian ON ho aur is session me PIN verify na hua ho, tab
+    // sensitive Settings kaam turant nahi chalega — PIN dialog khulega;
+    // sahi PIN par pending kaam ek baar chalega, galat/cancel par kuch
+    // nahi badlega. Guardian OFF ho ya session verified ho to kaam
+    // seedha chalega (koi extra step nahi). Ek waqt me ek hi pending
+    // kaam rehta hai (fail-safe: bina PIN ke kuch nahi chalta).
+    var guardianPinInput by remember { mutableStateOf("") }
+    var guardianPinNote by remember { mutableStateOf("") }
+    var guardianPinPending by remember { mutableStateOf<(() -> Unit)?>(null) }
+    fun runGuardedSettings(action: () -> Unit) {
+        scope.launch {
+            val gOn = try { prefs.guardianMode() } catch (e: Exception) { false }
+            val pOn = try { prefs.pinEnabled() } catch (e: Exception) { false }
+            if (guardian.canAccessSensitive(pOn, gOn)) {
+                action()
+            } else {
+                guardianPinPending = action
+                guardianPinInput = ""
+                guardianPinNote = ""
+                note = "Guardian mode ON hai — pehle PIN verify karo, phir ye kaam hoga."
+            }
+        }
+    }
+
     // Keys-check + background status (v2.12): launcher se PEHLE.
     var keyCheckNote by remember { mutableStateOf("") }
     var bgNote by remember { mutableStateOf("") }
@@ -4279,6 +4395,7 @@ private fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Row {
                 Button(onClick = {
+                    runGuardedSettings {
                     scope.launch {
                         prefs.setSupabaseAnonKey(anonKey.trim())
                         prefs.setGeminiApiKey(geminiKey.trim())
@@ -4291,6 +4408,7 @@ private fun SettingsScreen(
                         prefs.setSerpApiKey(serpKey.trim())
                         prefs.setMapsApiKey(mapsKey.trim())
                         note = "Keys is phone par save ho gayi."
+                    }
                     }
                 }) { Text("Keys save karo") }
                 Spacer(modifier = Modifier.padding(4.dp))
@@ -4446,10 +4564,12 @@ private fun SettingsScreen(
             if (linkedEmailDisplay.isNotEmpty()) {
                 Text("Linked: $linkedEmailDisplay")
                 Button(onClick = {
+                    runGuardedSettings {
                     scope.launch {
                         prefs.clearLink()
                         linkedEmailDisplay = ""
                         note = "Website account unlink ho gaya — ab app wapas random-UUID mode me hai."
+                    }
                     }
                 }) { Text("Unlink karo") }
             } else {
@@ -4467,6 +4587,7 @@ private fun SettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = {
+                    runGuardedSettings {
                     scope.launch {
                         if (linkEmail.isBlank() || linkPassword.isBlank()) {
                             note = "Email aur password dono daalo."
@@ -4491,6 +4612,7 @@ private fun SettingsScreen(
                                 note = "Website account link ho gaya — ab website wala Pro isi app me dikhega."
                             }
                         }
+                    }
                     }
                 }) { Text("Website account link karo") }
             }
@@ -4669,6 +4791,7 @@ private fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = {
+                runGuardedSettings {
                 scope.launch {
                     if (pin.length < 4) {
                         note = "PIN kam se kam 4 digit ka rakho."
@@ -4681,24 +4804,35 @@ private fun SettingsScreen(
                     }
                     pin = ""
                 }
+                }
             }) { Text("PIN set karo") }
             Spacer(modifier = Modifier.height(12.dp))
             Row {
-                Text("Guardian mode (ye setting save hoti hai; sensitive kaam par PIN dobara maangna is version me abhi lagu nahi hai)")
+                Text("Guardian mode (ON ho to sensitive kaam par PIN dobara maanga jayega)")
                 Spacer(modifier = Modifier.padding(4.dp))
                 Switch(checked = guardianMode, onCheckedChange = { value ->
-                    scope.launch {
-                        if (value && !prefs.pinEnabled()) {
-                            note = "Guardian mode ke liye pehle PIN set karo."
-                        } else {
-                            guardianMode = value
-                            prefs.setGuardianMode(value)
-                            note = if (value) "Guardian mode ON ho gaya." else "Guardian mode OFF ho gaya."
+                    if (value) {
+                        scope.launch {
+                            if (!prefs.pinEnabled()) {
+                                note = "Guardian mode ke liye pehle PIN set karo."
+                            } else {
+                                guardianMode = true
+                                prefs.setGuardianMode(true)
+                                note = "Guardian mode ON ho gaya."
+                            }
+                        }
+                    } else {
+                        runGuardedSettings {
+                            scope.launch {
+                                guardianMode = false
+                                prefs.setGuardianMode(false)
+                                note = "Guardian mode OFF ho gaya."
+                            }
                         }
                     }
                 })
             }
-            Text("Is gate ka PIN check sensitive kaam par abhi lagu nahi hai — setting save hoti hai, wiring baaki hai. Chat lock ka PIN + awaaz check alag se chalta hai.")
+            Text("Guardian ON ho to ye kaam PIN verify ke baad hi honge: Keys save, PIN change, Guardian/Face Lock band karna, website link/unlink, VPA/UTR save, aur Auto Mode ke call/SMS/app-kholo. Ek session me ek baar PIN verify ho jaye to baaki kaam seedha chalenge. Chat lock ka PIN + awaaz check alag se chalta hai.")
             Spacer(modifier = Modifier.height(12.dp))
             var verifyPin by remember { mutableStateOf("") }
             var faceLock by remember { mutableStateOf(false) }
@@ -4724,13 +4858,23 @@ private fun SettingsScreen(
                 Text("Face Lock (ON = Chat PIN verify ke bina nahi khulega)")
                 Spacer(modifier = Modifier.padding(4.dp))
                 Switch(checked = faceLock, onCheckedChange = { value ->
-                    scope.launch {
-                        if (value && !prefs.pinEnabled()) {
-                            note = "Face Lock ke liye pehle PIN set karo."
-                        } else {
-                            faceLock = value
-                            prefs.setFaceLock(value)
-                            note = if (value) "Face Lock ON ho gaya." else "Face Lock OFF ho gaya."
+                    if (value) {
+                        scope.launch {
+                            if (!prefs.pinEnabled()) {
+                                note = "Face Lock ke liye pehle PIN set karo."
+                            } else {
+                                faceLock = true
+                                prefs.setFaceLock(true)
+                                note = "Face Lock ON ho gaya."
+                            }
+                        }
+                    } else {
+                        runGuardedSettings {
+                            scope.launch {
+                                faceLock = false
+                                prefs.setFaceLock(false)
+                                note = "Face Lock OFF ho gaya."
+                            }
                         }
                     }
                 })
@@ -4762,9 +4906,11 @@ private fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = {
+                runGuardedSettings {
                 scope.launch {
                     prefs.setAdminUpiVpa(adminVpa.trim())
                     note = "Admin UPI VPA save ho gaya."
+                }
                 }
             }) { Text("VPA save karo") }
             Spacer(modifier = Modifier.height(8.dp))
@@ -4791,13 +4937,55 @@ private fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = {
+                runGuardedSettings {
                 scope.launch {
                     prefs.setLastUtr(utr.trim())
                     note = "UTR save ho gaya (local note). Admin verify karke hi licence active karega — server verification alag step hai."
                 }
+                }
             }) { Text("UTR save karo") }
             Spacer(modifier = Modifier.height(8.dp))
             Text("Data retention: Journal 30 din baad auto-delete; Memories me date wali entries 30 din baad auto-delete, bina date wali manually. Licence/payment record alag se rakha jata hai.")
+
+            guardianPinPending?.let { pending ->
+                AlertDialog(
+                    onDismissRequest = { guardianPinPending = null; guardianPinInput = "" },
+                    title = { Text("Guardian PIN verify karo") },
+                    text = {
+                        Column {
+                            Text("Guardian mode ON hai — ye sensitive kaam PIN verify ke baad hi hoga. PIN sahi ho to kaam turant chalega.")
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = guardianPinInput, onValueChange = { guardianPinInput = it },
+                                label = { Text("PIN") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            if (guardianPinNote.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(guardianPinNote)
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            if (pinVault.verify(guardianPinInput)) {
+                                guardian.markPinVerified()
+                                guardianPinPending = null
+                                guardianPinInput = ""
+                                guardianPinNote = ""
+                                pending()
+                            } else {
+                                guardianPinNote = "Galat PIN."
+                                guardianPinInput = ""
+                            }
+                        }) { Text("Verify karo") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { guardianPinPending = null; guardianPinInput = "" }) { Text("Ruko") }
+                    }
+                )
+            }
             if (note.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(note)
