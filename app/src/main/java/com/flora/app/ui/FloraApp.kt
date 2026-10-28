@@ -251,6 +251,12 @@ fun FloraApp(
     var screenGranted by remember { mutableStateOf(false) }
     var screenResultCode by remember { mutableStateOf(0) }
     var screenResultData by remember { mutableStateOf<Intent?>(null) }
+    // Pending-question auto-resume (v2.22, Phase 1): "screen
+    // dekho" bolne par permission dialog khula ho to sawaal
+    // yahan rakha jata hai; Allow milte hi launcher callback
+    // ise voice pipeline se dobara chalata hai — user ko
+    // dobara bolna nahi padta. Deny par clear ho jata hai.
+    var pendingScreenQuestion by remember { mutableStateOf<String?>(null) }
     val screenLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -259,8 +265,16 @@ fun FloraApp(
             screenGranted = true
             screenResultCode = result.resultCode
             screenResultData = result.data
-            voice.speak("Screen permission mil gayi. Ab 'screen dekho' bolo, main dekh kar bata dungi.")
+            val pending = pendingScreenQuestion
+            pendingScreenQuestion = null
+            if (pending != null) {
+                voice.speak("Permission mil gayi, abhi dekh kar batati hun.")
+                voiceCommand.value = pending
+            } else {
+                voice.speak("Screen permission mil gayi. Ab 'screen dekho' bolo, main dekh kar bata dungi.")
+            }
         } else {
+            pendingScreenQuestion = null
             voice.speak("Screen permission ke bina live screen nahi dekh sakti.")
         }
     }
@@ -309,6 +323,21 @@ fun FloraApp(
                 ) ?: "flora-device"
                 val deviceId = prefs.deviceId(androidId)
                 licence = licenceClient.verify(userId, deviceId)
+            }
+            // Licence session renew (v2.22, Phase 1): linked
+            // account ho to saved refresh token se session zinda
+            // rakho. Fail ho to chupchaap local mode — app-start
+            // kabhi nahi rukega. Naya token mile to save karo
+            // (rotation). Access token kabhi save nahi hota.
+            try {
+                val rt = prefs.linkedRefreshToken()
+                if (rt.isNotEmpty()) {
+                    val next = licenceClient.refreshSession(rt)
+                    if (!next.isNullOrEmpty() && next != rt) {
+                        prefs.setLink(prefs.linkedUserId(), prefs.linkedEmail(), next)
+                    }
+                }
+            } catch (e: Exception) {
             }
             // 30-din retention (v2.9): app-start par journal +
             // memories ki purani date-wali entries auto-delete.
@@ -2054,6 +2083,7 @@ fun FloraApp(
                             if (session == null) {
                                 screenGranted = false
                                 screenResultData = null
+                                pendingScreenQuestion = "screen dekho"
                                 val mgr = appContext.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
                                     as MediaProjectionManager
                                 screenLauncher.launch(mgr.createScreenCaptureIntent())
@@ -2069,6 +2099,7 @@ fun FloraApp(
                                 ScreenCapture.LiveSessionHolder.clear()
                                 screenGranted = false
                                 screenResultData = null
+                                pendingScreenQuestion = "screen dekho"
                                 val mgr = appContext.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
                                     as MediaProjectionManager
                                 screenLauncher.launch(mgr.createScreenCaptureIntent())
@@ -2415,6 +2446,113 @@ fun FloraApp(
                                 voice.speak(msg)
                             }
                             busy = false
+                        }
+                        return
+                    }
+                    // Code likho (v2.22, Phase 1, G15): bola hua
+                    // description -> brain se sirf code -> phone par
+                    // file save + chat me dikhao. Code sunaya nahi
+                    // jaata (lamba hota hai), sirf confirmation boli
+                    // jaati hai. Publish ke liye "website publish karo"
+                    // wala raasta alag hai (sirf website HTML ke liye).
+                    if (lower.startsWith("code likho ")) {
+                        input = ""
+                        val desc = question.substring(11).trim()
+                        if (desc.isEmpty()) {
+                            val msg = "Kaisa code likhun? Aise boliye: 'code likho ek calculator ka HTML'."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else {
+                            scope.launch {
+                                try {
+                                    val code = brain.ask(
+                                        "Sirf code likho, koi explanation ya markdown ke bahar ki baat nahi. Task: $desc"
+                                    )
+                                    val name = "code-" + System.currentTimeMillis() + ".txt"
+                                    try {
+                                        java.io.File(appContext.filesDir, name).writeText(code)
+                                    } catch (e: Exception) { }
+                                    messages = messages + ChatMsg("Flora: Code ban gaya ($name) —\n$code", false)
+                                    voice.speak("Code ban gaya hai, chat me dekh lo.")
+                                } catch (e: Exception) {
+                                    val msg = "Code nahi ban paya, dobara bol dena."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                }
+                            }
+                        }
+                        return
+                    }
+                    // Hisaab (v2.22, Phase 1): ab tak kya hua + aage
+                    // kya karna hai — yaadein, routines, jobs se.
+                    // Sirf padhna hai, koi action nahi hota.
+                    if (lower == "hisaab batao" || lower == "mera hisaab batao" ||
+                        lower == "kya kiya" || lower == "kya karna hai" ||
+                        lower == "ab tak kya hua"
+                    ) {
+                        input = ""
+                        scope.launch {
+                            try {
+                                val mems = try { memoriesStore.items.first().takeLast(5) } catch (e: Exception) { emptyList() }
+                                val jobs = try { com.flora.app.data.JobStore.load(appContext) } catch (e: Exception) { emptyList() }
+                                val routines = try { com.flora.app.data.RoutineStore.load(appContext) } catch (e: Exception) { emptyList() }
+                                val pending = jobs.filter { it.enabled }.joinToString(", ") {
+                                    it.routineName + " (" + it.hour + ":" + it.minute.toString().padStart(2, '0') + ")"
+                                }
+                                val detail = StringBuilder()
+                                detail.append("Ab tak: ${mems.size} aakhri yaadein")
+                                if (mems.isNotEmpty()) detail.append(" — " + mems.joinToString("; "))
+                                detail.append("\nRoutines: ${routines.size} (${routines.joinToString(", ") { it.name }})")
+                                detail.append("\nJobs: ${jobs.size}")
+                                if (pending.isNotEmpty()) detail.append(" — aage karna hai: $pending") else detail.append(" — koi pending job nahi")
+                                messages = messages + ChatMsg("Flora: $detail", false)
+                                val spoken = if (pending.isNotEmpty()) "Hisaab ye raha — aage karna hai: $pending." else "Sab kaam poora hai, koi pending job nahi hai."
+                                voice.speak(spoken)
+                            } catch (e: Exception) {
+                                val msg = "Hisaab nahi nikal paya, dobara bol dena."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                        return
+                    }
+                    // Overlay mic (v2.22, Phase 1): har screen par
+                    // Flora ka mic button. Permission Android ka
+                    // niyam hai (ek baar user khud dega); bina
+                    // permission ke overlay nahi dikhega.
+                    if (lower == "overlay mic chalu karo" || lower == "overlay button chalu karo") {
+                        input = ""
+                        if (!android.provider.Settings.canDrawOverlays(appContext)) {
+                            try {
+                                val intent = android.content.Intent(
+                                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    android.net.Uri.parse("package:" + appContext.packageName)
+                                )
+                                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                appContext.startActivity(intent)
+                            } catch (e: Exception) { }
+                            voice.speak("Overlay ke liye ek baar permission chahiye — settings khol raha hun, Flora ko doosri app ke upar dikhne ki permission do, phir dobara bolo.")
+                        } else {
+                            try {
+                                appContext.startForegroundService(
+                                    android.content.Intent(appContext, com.flora.app.automation.OverlayMicService::class.java)
+                                )
+                                voice.speak("Overlay mic chalu ho gaya — ab kisi bhi screen par Flora ka mic button dikhega, dabate hi main sunungi.")
+                            } catch (e: Exception) {
+                                voice.speak("Overlay mic chalu nahi ho paya, dobara koshish karo.")
+                            }
+                        }
+                        return
+                    }
+                    if (lower == "overlay mic band karo" || lower == "overlay button band karo") {
+                        input = ""
+                        try {
+                            appContext.stopService(
+                                android.content.Intent(appContext, com.flora.app.automation.OverlayMicService::class.java)
+                            )
+                            voice.speak("Overlay mic band kar diya.")
+                        } catch (e: Exception) {
+                            voice.speak("Overlay mic band nahi ho paya.")
                         }
                         return
                     }

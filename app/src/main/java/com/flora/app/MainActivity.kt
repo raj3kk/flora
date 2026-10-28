@@ -108,6 +108,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Mic button + overlay mic button dono isi se bolna shuru
+     *  karte hain (system speech recognizer, hi-IN). */
+    private fun startMicRecognition() {
+        try {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+            }
+            micLauncher.launch(intent)
+        } catch (e: Exception) {
+            // No speech recognizer on device: mic button simply does nothing.
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val prefs = FloraPreferences(applicationContext)
@@ -176,17 +190,7 @@ class MainActivity : ComponentActivity() {
                 sosStore = sosStore,
                 docsStore = docsStore,
                 voiceResult = voiceResult,
-                onMicRequest = {
-                    try {
-                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
-                        }
-                        micLauncher.launch(intent)
-                    } catch (e: Exception) {
-                        // No speech recognizer on device: mic button simply does nothing.
-                    }
-                },
+                onMicRequest = { startMicRecognition() },
                 voiceCommand = voiceCommand,
                 listeningState = listeningState,
                 speakingState = speakingState,
@@ -234,6 +238,12 @@ class MainActivity : ComponentActivity() {
             continuousWanted = true
             mainHandler.postDelayed({ startContinuous() }, 2000)
         }
+        // Overlay mic button (v2.22, Phase 1): button dabate hi
+        // thodi der baad sunna shuru — activity resume hone ke
+        // baad, taaki recognizer sahi se khule.
+        if (intent?.getBooleanExtra("flora_mic", false) == true) {
+            mainHandler.postDelayed({ startMicRecognition() }, 500)
+        }
         drainCommandBus()
     }
 
@@ -242,6 +252,9 @@ class MainActivity : ComponentActivity() {
         if (newIntent.getBooleanExtra("flora_wake", false)) {
             continuousWanted = true
             mainHandler.postDelayed({ startContinuous() }, 2000)
+        }
+        if (newIntent.getBooleanExtra("flora_mic", false)) {
+            startMicRecognition()
         }
         drainCommandBus()
     }

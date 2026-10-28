@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Default assistant (v2.22, Phase 1, G3): session service ka
+     naam. recognitionService jaanboojh kar nahi diya — Flora
+     system speech recognizer hi use karti hai, alag recognition
+     service nahi banayi gayi. -->
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="com.flora.app.voice.FloraVoiceInteractionSessionService" />

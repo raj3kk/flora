@@ -94,6 +94,11 @@ class FloraPreferences(private val context: Context) {
     suspend fun linkedEmail(): String =
         context.floraDataStore.data.map { it[Keys.LINKED_EMAIL] ?: "" }.first()
 
+    /** Linked account ka refresh token (sirf is phone ke DataStore
+     *  me; app-start session renew ke liye. Khali = link nahi hai. */
+    suspend fun linkedRefreshToken(): String =
+        context.floraDataStore.data.map { it[Keys.LINKED_REFRESH_TOKEN] ?: "" }.first()
+
     suspend fun effectiveUserId(): String {
         val linked = linkedUserId()
         return if (linked.isNotEmpty()) linked else userId()
