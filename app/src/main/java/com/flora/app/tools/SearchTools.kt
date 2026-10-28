@@ -1,6 +1,7 @@
 package com.flora.app.tools
 
 import com.flora.app.data.FloraPreferences
+import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

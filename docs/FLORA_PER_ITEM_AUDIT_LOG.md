@@ -379,7 +379,7 @@ maujood, index bhi 200. Download page ab live hai.
   phone test ke bina PASS nahi mana jayega).
 
 ## v2.12 user-report fixes — PASS (2026-10-28 ~13:20 IST)
-- CI run 40651357407 completed success; asli APK 111,653,485 bytes, sha256 1d37653186faf937414596c3a0115a5a74465b5f62126b14540c5ff731ef9181, aapt2: com.flora.app vCode 34 / 2.12.0-rebuild, sdk 26/34. SwissTransfer upload (v2.12) browser task se chal raha hai — v2.13 isko supersede karega.
+- CI run 40651357407 completed success; asli APK 111,653,485 bytes, sha256 1d37653186faf937414596c3a0115a5a74465b5f62126b14540c5ff731ef9181, aapt2: com.flora.app vCode 34 / 2.12.0-rebuild, sdk 26/34. SwissTransfer upload COMPLETE 2026-10-28 ~13:25 IST: link https://www.swisstransfer.com/dl/01a1817e-db1d-7078-97a5-d8ce94a7a170, 106.5 MB (size match), 15 din validity (12 Nov 2026 tak), is baar koi email code nahi maanga gaya, koi account/payment nahi. Download page v2.12 par update + push (e9eb1cde), Vercel deploy verify pending.
 - Artifact download note: GitHub 302 ko urllib follow karne par blob host 401 deta hai (surrogate auth header aage badh jata hai) — pehle 302 ka Location pakdo, phir use bina auth header ke fetch karo. Ye pattern agli baar bhi use hoga.
 - Shikayat: (1) app khulte hi permissions nahi maangta, (2) key
   daalne par bhi "key daaliye" bolta hai, (3) 16 buttons bikhre
@@ -426,3 +426,9 @@ maujood, index bhi 200. Download page ab live hai.
 - Background wake: WakeWordService wake par MainActivity foreground laata hai (flora_wake extra, 2s delay greeting ke baad) — mute ho to bhi isi session ke liye sunna shuru (wake = "ab baat karo" ka ishara).
 - Imaandaari se baaki: poora background pipeline (service me brain+commands) nahi hai; barge-in (Flora bol rahi ho tabhi user bole to turant rukna) system recognizer se nahi hota — Stop hi interrupt raasta hai.
 - Pre-push audit: brace/paren 0/0 (FloraApp, MainActivity, ContinuousListener, VoiceEngine, Preferences, WakeWordService); test entry docs/FLORA_V214_TEST_ENTRY.md; decisions FLORA_DECISIONS.md (Maya=Flora ek hi app; voice default + manual bhi).
+
+## v2.13 CI FAIL — root cause + fix (2026-10-28 ~13:33 IST)
+- CI run 40653036845 (v2.13, ca58a3cf) completed failure; job 122697386646 step 4 Build debug APK fail.
+- Root cause (log line 250): SearchTools.kt:135:22 "Unresolved reference: PackageManager" — v2.13 me weatherHere() me PackageManager.PERMISSION_GRANTED use hua par import nahi daala tha (sirf ContextCompat daala tha). Meri galti, ek line ki kami.
+- Fix: SearchTools.kt me "import android.content.pm.PackageManager" add kiya. Uske baad poore tree me check kiya — PackageManager use karne wali har file me import maujood hai (MainActivity, AutoActions, ContactLookup, SearchTools, FaceScreen, FloraApp, ScanScreen, SetupWizard, ContinuousListener, WakeWordService — sab OK).
+- Ye fix v2.14 ke upar gaya hai (v2.14 me wahi bug tha, isliye uska CI bhi fail hona tay tha) — fix commit ka CI hi ab asli gate hai.
