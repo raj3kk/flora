@@ -62,9 +62,16 @@
 9. [OPEN, phone par hi prove hoga] wake/face/FCM-sync/usage
    runtime, asli push, asli approve — bina phone test + admin
    user ke ye kabhi "verified" nahi kahlaenge.
-10. [OPEN, by-design nahi bug] Turso sync_queue: Turso token
-    watcher-level par invalid hai; Supabase authoritative hai,
-    isliye block nahi hai — bas dormant note.
+10. [CLOSED — dormant note, local; pushed sync agle docs push me baaki]
+    Turso sync_queue: Turso token watcher-level par invalid hai;
+    Supabase authoritative hai, isliye block nahi hai — bas dormant
+    note. Evidence (2026-10-28 ~11:40 IST watcher cross-check):
+    poore rebuilt tree me "turso" ka koi reference nahi hai
+    (sirf isi doc ki ye line) aur "sync_queue" bhi sirf isi doc
+    me hai; app code me Supabase hi wired hai (FloraConfig,
+    FloraPreferences, LicenceClient, FloraApp). Koi Turso code
+    path, table ya sync call maujood nahi — isliye ye item
+    bug nahi, dormant note hai. Koi table/code delete nahi hua.
 
 ## Round 1 fix status
 - Terms + website strings: FIXED (is round me push hoga).
@@ -159,3 +166,23 @@
   (app-link phone test), 8 (Brain Phase B proxy), 9 (wake/
   face/FCM-sync/usage phone test), 10 (Turso dormant note,
   by-design). Issue count abhi bhi 0 NAHI hai — cycle jaari.
+
+## Watcher tick verification — 2026-10-28 ~11:40 IST
+- Item 10 is tick par CLOSED hua (dormant note, evidence list
+  line me hai): rebuilt tree me Turso/sync_queue ka koi code
+  reference nahi, Supabase hi authoritative hai. Ye sirf local
+  doc closure hai — pushed doc me item 10 abhi bhi OPEN
+  dikhega jab tak agla docs push na ho; koi code/table
+  delete nahi hua, koi push watcher ne nahi kiya.
+- Live (read-only, is tick): GitHub latest run abhi bhi
+  40641000422 (docs-sync, head a7dfe826) completed success —
+  11:35 tick ke baad koi naya CI run nahi; tree abhi bhi
+  v32/2.10.0-rebuild, 11:35 ke baad koi builder write nahi.
+  Website naye deploy flora-fxx247dqz-webbuilder1.vercel.app
+  par clean URLs 7/7 200. Supabase 6/6 Edge Functions
+  (licence-verify, usage-count, push-token-sync, send-push,
+  admin-approve, admin-list) unauthenticated POST par 401 —
+  auth gate laga hai, down nahi.
+- Abhi bhi OPEN: 7 (app-link phone test), 8 (Brain Phase B
+  proxy), 9 (wake/face/FCM-sync/usage phone test). Issue
+  count abhi bhi 0 NAHI hai — cycle jaari rahega.
