@@ -684,3 +684,8 @@ maujood, index bhi 200. Download page ab live hai.
 ## v2.22 chunk 7b CI FAIL — root fix (2026-10-28 ~18:10 IST)
 - Wajah (job log, 7200f35e): FloraApp.kt:172 `Unresolved reference: appContext` — chunk 7 me bargeIn ka remember appContext ki declaration (line ~200) se PEHLE likh diya tha. Wahi purana declaration-order trap (v2.13/v2.17 wali galti ka naya roop).
 - Fix: bargeIn declaration ko appContext ke turant BAAD le jaya gaya; isse pehle ke koi use nahi hai (hooks LaunchedEffect ~430 ke baad, Stop button ~1576). Balance verify.
+
+## v2.22 P2-F10 poora — notification voice query (2026-10-28 ~18:20 IST, CI PENDING)
+- sendChat me "notification batao / notifications batao / koi notification aayi" branch: NotificationStore se aakhri 3 (title warna text, 100 chars) bolkar + chat me likhkar. Khali ho to access ON karne ka raasta batata hai.
+- Privacy: sirf user ke poochhne par bolta hai — auto-announce kabhi nahi (private content apne aap bolna leak hota).
+- Audit: branch normal-mode block ke baad, call block se pehle (return ke saath, brain tak nahi jaata); brace/paren balance.

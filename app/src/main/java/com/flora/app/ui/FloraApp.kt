@@ -1143,6 +1143,49 @@ fun FloraApp(
                         voice.speak("Normal mode wapas aa gaya hai.")
                         return
                     }
+                    // Notification voice query (v2.22, P2-F10 poora):
+                    // user khud poochhe tabhi notifications bolkar
+                    // sunao (auto-announce kabhi nahi — private
+                    // content apne aap bolna leak ho sakta hai).
+                    // Sirf aakhri 3, sirf title/text ka pehla hissa.
+                    if (lower == "notification batao" ||
+                        lower == "notifications batao" ||
+                        lower == "koi notification aayi"
+                    ) {
+                        input = ""
+                        scope.launch {
+                            try {
+                                val notifs = com.flora.app.data.NotificationStore
+                                    .load(appContext).reversed().take(3)
+                                if (notifs.isEmpty()) {
+                                    val msg = "Koi notification save nahi hai. Pehle Menu me Notifications se access ON karo."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else {
+                                    val parts = notifs.map { item ->
+                                        val label = try {
+                                            val info = appContext.packageManager
+                                                .getApplicationInfo(item.pkg, 0)
+                                            appContext.packageManager
+                                                .getApplicationLabel(info).toString()
+                                        } catch (e: Exception) {
+                                            item.pkg
+                                        }
+                                        val t = if (item.title.isNotBlank()) item.title else item.text
+                                        "$label se ${t.take(100)}"
+                                    }
+                                    val msg = "Aakhri notifications: " + parts.joinToString(" • ")
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                }
+                            } catch (e: Exception) {
+                                val msg = "Notifications nahi padh payi."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                        return
+                    }
                     if (lower.startsWith("call ")) {
                         val raw = question.substring(5).trim()
                         val number = raw.filter { it.isDigit() || it == '+' }
