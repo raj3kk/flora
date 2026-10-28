@@ -438,3 +438,11 @@ maujood, index bhi 200. Download page ab live hai.
 - Root cause: PermissionGate.kt lines 30-32 "Expecting a top level declaration" — v2.13 me deprecation note daalte waqt purane doc comment ka opening "/**" replace ho gaya tha, par uski body lines khuli reh gayi thi (bare text). Watcher tick ne isko "orphan comment block" keh kar pehle hi pakda tha, aur maine use cosmetic samajh kar chhod diya tha — ye galti meri hai, doosri baar wahi file.
 - Fix: poora header ek hi saaf comment block me merge kar diya (deprecation note + purana note ek block me). Brace/paren balance verify kiya.
 - Seekh: watcher ki flag ko "cosmetic" keh kar kabhi mat chhodo — pehle file khol kar dekho, phir faisla karo.
+
+## v2.14-fix2 CI PASS (2026-10-28 ~13:43 IST)
+- CI run 40654474955 (fix2 commit a54ea29a) completed success. Asli APK 111,702,752 bytes, sha256 8ab05d7b129ddd087d440a15f9fd8452f0150efd0e52821df63363d14a08a682, aapt2: com.flora.app vCode 36 / 2.14.0-rebuild, sdk 26/34. Artifact zip size 59,480,097 bytes (APK size se alag — phir se wahi galti nahi).
+- SwissTransfer upload (v2.14) browser task se chal raha hai; link milte hi download page 2.14 par update hoga.
+
+## v2.14 SwissTransfer + download page (2026-10-28 ~14:35 IST)
+- SwissTransfer upload complete (browser task): link https://www.swisstransfer.com/dl/01a181c0-d5cc-724f-8b3c-b73d71d08637, 106.5 MB shown, 15 days, expires 12 Nov 2026. Is baar email code nahi manga gaya. No account, no payment.
+- web/download.html v2.14 par update (version, size 111,702,752, SHA 8ab05d7b..., link, what's-new = continuous mic + wizard + contacts + location).
