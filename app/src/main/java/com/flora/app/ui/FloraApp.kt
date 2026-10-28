@@ -101,6 +101,27 @@ fun FloraApp(
         }
     }
     val scope = rememberCoroutineScope()
+    /**
+     * Licence auto-refresh (v1.4 gating, local-only abhi — push v1.4
+     * verdict ke baad hoga): app khulte hi, agar Supabase anon key
+     * set hai to server se plan verify karo. Fail ho to licence null
+     * hi rehta hai = free mana jaata hai (safe default); talk-limit
+     * tab bhi enforce hota hai. Manual Settings check waisa hi hai.
+     */
+    LaunchedEffect(Unit) {
+        try {
+            if (prefs.supabaseAnonKey().isNotEmpty()) {
+                val userId = prefs.userId()
+                val androidId = Settings.Secure.getString(
+                    appContext.contentResolver, Settings.Secure.ANDROID_ID
+                ) ?: "flora-device"
+                val deviceId = prefs.deviceId(androidId)
+                licence = licenceClient.verify(userId, deviceId)
+            }
+        } catch (e: Exception) {
+            // Offline/server fail: licence null = free, kaam rukta nahi.
+        }
+    }
     // Routine auto-run (v1.1): Routines screen se ek confirmation ke
     // baad queue yahan chalti hai — har step bol kar, bina ruke.
     // Call/SMS steps queue me nahi chalte (unke liye Chat se alag
