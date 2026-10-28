@@ -1186,6 +1186,60 @@ fun FloraApp(
                         }
                         return
                     }
+                    // Research voice commands (v2.22, P3-F12):
+                    // ToolsScreen me ye tools pehle se the, awaaz
+                    // se nahi chalte the. Sirf padhna hai, isliye
+                    // Auto Mode gate nahi — bolna + chat me likhna.
+                    if (lower.startsWith("search karo ") ||
+                        lower.endsWith(" search karo") ||
+                        lower.startsWith("matlab batao ") ||
+                        lower.endsWith(" ka matlab") ||
+                        lower.startsWith("stock price ") ||
+                        lower.endsWith(" ka share price") ||
+                        lower.startsWith("study karo ") ||
+                        lower.endsWith(" par study")
+                    ) {
+                        input = ""
+                        val (desc, job) = when {
+                            lower.startsWith("search karo ") ->
+                                "Search: ${question.substring(12).trim()}" to
+                                    suspend { searchTools.search(question.substring(12).trim()) }
+                            lower.endsWith(" search karo") ->
+                                "Search: ${question.dropLast(12).trim()}" to
+                                    suspend { searchTools.search(question.dropLast(12).trim()) }
+                            lower.startsWith("matlab batao ") ->
+                                "Matlab: ${question.substring(13).trim()}" to
+                                    suspend { searchTools.defineWord(question.substring(13).trim()) }
+                            lower.endsWith(" ka matlab") ->
+                                "Matlab: ${question.dropLast(9).trim()}" to
+                                    suspend { searchTools.defineWord(question.dropLast(9).trim()) }
+                            lower.startsWith("stock price ") ->
+                                "Stock: ${question.substring(12).trim()}" to
+                                    suspend { searchTools.stockPrice(question.substring(12).trim()) }
+                            lower.endsWith(" ka share price") ->
+                                "Stock: ${question.dropLast(14).trim()}" to
+                                    suspend { searchTools.stockPrice(question.dropLast(14).trim()) }
+                            lower.startsWith("study karo ") ->
+                                "Study: ${question.substring(11).trim()}" to
+                                    suspend { searchTools.study(question.substring(11).trim()) }
+                            else ->
+                                "Study: ${question.dropLast(10).trim()}" to
+                                    suspend { searchTools.study(question.dropLast(10).trim()) }
+                        }
+                        scope.launch {
+                            try {
+                                val result = job()
+                                val spoken = result.take(500)
+                                messages = messages + ChatMsg("Flora: $result", false)
+                                voice.speak(spoken)
+                            } catch (e: Exception) {
+                                val msg = "$desc nahi mil paya, dobara bol dena."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                        return
+                    }
                     // General tap/type/swipe voice commands (v2.22,
                     // P2-F4 poora): primitives FloraAutomationService
                     // me pehle se the, ab awaaz se bhi chalte hain.

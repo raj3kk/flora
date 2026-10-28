@@ -698,3 +698,8 @@ maujood, index bhi 200. Download page ab live hai.
 - sendChat me naye commands: "tap karo X" / "click karo X" / "X par tap karo", "scroll up/down karo" (upar/neeche), "type karo X", "back/wapas jao", "home jao" — sab FloraAutomationService primitives par.
 - GATE: Accessibility OFF ho to sirf guidance (execute nahi); Auto Mode OFF ho to execute nahi (sirf "Auto Mode ON karo" batana); har chalaya kaam Auto Log me. Koi chhupa execution nahi.
 - Audit: prefix lengths verify (tap 9, click 11, type 10, " par tap karo" 13); sab service calls Boolean; brace/paren balance.
+
+## v2.22 P3-F12 poora — research voice commands (2026-10-28 ~18:35 IST, CI PENDING)
+- ToolsScreen me search/study/define/stock pehle se the, awaaz se nahi chalte the. sendChat me jode: "search karo X", "X search karo", "matlab batao X" / "X ka matlab", "stock price X" / "X ka share price", "study karo X" / "X par study" — bolna (500 chars tak) + chat me poora result.
+- Sirf padhna hai, isliye Auto Mode gate nahi. Audit: prefix/suffix lengths verify (search 12/12, matlab 13/9, stock 12/14, study 11/10 — " par study" ka 9→10 fix push se pehle pakda gaya); brace/paren balance.
+- NOTE (CI): 929f67b8 run wahi purana appContext error (line 172) se fail hua — ye b91ff250 me pehle hi fix ho chuka hai, naya kaam nahi hai. Website deploy (Vercel) isse affected nahi — wo READY hai.
