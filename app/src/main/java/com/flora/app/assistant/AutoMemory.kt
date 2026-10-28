@@ -39,25 +39,43 @@ object AutoMemory {
         return out
     }
 
-    /** Naye facts save karo; kitne save hue, wapas do. */
+    /**
+     * Naye facts save karo; kitne badle (save/update), wapas do.
+     * U1 dedup: bilkul wahi fact dobara save nahi hota.
+     * U3 sudhaar: nayi baat purani baat ki jagah leti hai —
+     * jaise "mera naam X hai" ke baad "mera naam Y hai" aaye to
+     * "Naam: X" ki jagah "Naam: Y" ho jaata hai (dono saath
+     * nahi rehte, warna brain ko ulta-seedha context milta).
+     * Sirf "Key: value" wale facts ko key se milaya jaata hai —
+     * bina colon wale free notes ko kabhi overwrite nahi kiya jaata.
+     */
     suspend fun learn(store: MemoriesStore, text: String): Int {
         val facts = extractFacts(text)
         if (facts.isEmpty()) return 0
         val existing = try {
-            store.items.first().map { it.lowercase() }.toSet()
+            store.items.first()
         } catch (e: Exception) {
-            emptySet()
+            emptyList()
         }
-        var added = 0
+        var changed = 0
         for (fact in facts) {
-            if (fact.lowercase() !in existing) {
-                try {
+            if (existing.any { it.lowercase() == fact.lowercase() }) continue
+            val key = fact.substringBefore(":").trim().lowercase()
+            val keyIdx = existing.indexOfFirst {
+                it.contains(":") &&
+                    it.substringBefore(":").trim().lowercase() == key &&
+                    key.isNotEmpty()
+            }
+            try {
+                if (keyIdx >= 0) {
+                    store.update(keyIdx, fact)
+                } else {
                     store.add(fact)
-                    added++
-                } catch (e: Exception) {
                 }
+                changed++
+            } catch (e: Exception) {
             }
         }
-        return added
+        return changed
     }
 }

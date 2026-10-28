@@ -744,3 +744,8 @@ maujood, index bhi 200. Download page ab live hai.
 - Audit: brace/paren balance.
 - CI: 005ebe52 (F12 research) bhi SUCCESS — green chain jaari.
 - P5 survey: Home relay code ZERO, game ZERO tha (ab game hai); dedup/weak-network/learning ke code-level survey baaki.
+
+## v2.22 P5-U1+U3 poora — memory dedup + sudhaar (2026-10-28 ~19:20 IST, CI PENDING)
+- AutoMemory.learn ab: exact duplicate skip (U1, pehle se tha) + nayi baat purani ki jagah leti hai (U3 — "mera naam Y hai" aane par "Naam: X" update hokar "Naam: Y" hota hai, dono saath nahi rehte). Key match sirf "Key: value" wale facts par; bina colon wale free notes kabhi overwrite nahi hote.
+- Audit: MemoriesStore.update(index, text) signature + pairs order verify; update me index guard hai (stale index par crash nahi). Chhoti seema: learn ke read aur update ke beech user ne memories badli hon to galat index update ho sakta hai — phone par ek user ke liye na ke barabar, aur guard crash rokta hai.
+- U2 weak-network verify (koi code change nahi): brain fail par BasicTalk fallback pehle se hai; search fail par seedha non-technical message pehle se hai.
