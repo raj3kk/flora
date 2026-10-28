@@ -658,3 +658,14 @@ maujood, index bhi 200. Download page ab live hai.
 - Imaandari: continuous mic ON ho to mic uska hai — barge-in tab kaam nahi karega (mic fight se bachne ke liye). Wake Word ON hone par mic share par nirbhar karega — fail ho to chupchaap no-barge-in. Bina Deepgram key ke ye feature bilkul nahi chalega (REST client ki tarah, koi fake nahi).
 - Audit: 3 naye/badli files brace/paren balance; Stop button edit wahi CHAT Stop button hai (grep + context verify); hooks chain (prevStart/prevDone) verify.
 - P1 POORA (enrol UI, Guardian voice, Deepgram REST+streaming, job runner, auto-memory, voice-per-persona, wake tune, brain-context). Baaki: P2–P5, S2/S3, R3, EK final deploy.
+
+## M1 server — manifest v2 + voice-encoder LIVE (2026-10-28 ~17:40 IST, khud verify kiya)
+- Bucket flora-models me: manifest.json v2 (3 models: face-match + wakeword-template bundled, voice-encoder bundled=false) + conformer_tisid_medium.tflite.
+- Khud ka check (browser report par bharosa nahi): manifest public URL se version 2 + voice-encoder entry (sizeBytes 22134696, sha256 7781a316...) mili; conformer URL par HTTP 200 + Content-Length bilkul 22134696.
+- Iska matlab: app ka ModelDownloader ab voice-encoder ko bucket se SHA-verify karke download kar sakta hai — enrol/voice-match ka server wala hissa poora. Koi paisa nahi laga.
+
+## v2.22 P2-F10 — Notification listener, READ ONLY (2026-10-28 ~17:50 IST, CI PENDING)
+- FloraNotificationListener (NotificationListenerService, manifest me BIND_NOTIFICATION_LISTENER_SERVICE ke saath): aane wali notification ka title+text (max 200 chars) sirf is phone par DataStore me (max 20, purani auto-hat). Flora ki apni + ongoing notifications ignore. Dismiss/reply/action KABHI nahi — read-only hi hai.
+- NotificationsScreen (Menu > Notifications): list (app label + time + title + text), access ON/OFF status, Settings kholne ka button (access user khud dega, Flora khud ON nahi kar sakti), Refresh, ek tap par list saaf.
+- Privacy: notification me OTP/private message bhi ho sakta hai — isliye list sirf phone par, server par kabhi nahi; auto-announce NAHI (chupchaap bolna private content leak kar sakta hai). Voice se "notification batao" poochhna agle chunk me.
+- Audit: 4 files brace/paren balance; enum+title+menu+branch+manifest grep-verify; FloraApp.kt me NOTIFICATIONS ke baaki matches sirf POST_NOTIFICATIONS permission wale hain (alag cheez).

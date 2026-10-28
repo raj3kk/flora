@@ -77,7 +77,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -102,6 +102,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.JOURNAL -> "Journal"
     Screen.MODELS -> "Models"
     Screen.VOICE_ENROL -> "Awaaz sikhao"
+    Screen.NOTIFICATIONS -> "Notifications"
 }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
@@ -585,6 +586,10 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Awaaz sikhao") },
                             onClick = { screen = Screen.VOICE_ENROL; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Notifications") },
+                            onClick = { screen = Screen.NOTIFICATIONS; menuOpen = false },
                         )
                         DropdownMenuItem(
                             enabled = false,
@@ -1647,6 +1652,8 @@ fun FloraApp(
                 ModelsScreen(voice, prefs)
             } else if (screen == Screen.VOICE_ENROL) {
                 VoiceEnrolScreen(voice)
+            } else if (screen == Screen.NOTIFICATIONS) {
+                NotificationsScreen(voice)
             } else if (screen == Screen.MEMORIES) {
                 MemoriesScreen(memoriesStore)
             } else if (screen == Screen.SCAN) {
