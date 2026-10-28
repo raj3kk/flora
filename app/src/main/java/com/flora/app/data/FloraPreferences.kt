@@ -59,6 +59,7 @@ class FloraPreferences(private val context: Context) {
         val LINKED_REFRESH_TOKEN = stringPreferencesKey("linked_refresh_token")
         val CALL_TALK = booleanPreferencesKey("call_talk")
         val HOME_BOX_CODE = stringPreferencesKey("home_box_code")
+        val AVATAR = stringPreferencesKey("avatar")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
         val PERMISSIONS_GATE_DONE = booleanPreferencesKey("permissions_gate_done")
@@ -142,6 +143,15 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setHomeBoxCode(value: String) {
         context.floraDataStore.edit { it[Keys.HOME_BOX_CODE] = value }
+    }
+
+    /** Avatar style id (v2.22, S2): gulabi/neela/hara/baingani/
+     *  sunehra. Galat id aaye to gulabi (default) maana jaata hai. */
+    suspend fun avatar(): String =
+        context.floraDataStore.data.map { it[Keys.AVATAR] ?: "gulabi" }.first()
+
+    suspend fun setAvatar(value: String) {
+        context.floraDataStore.edit { it[Keys.AVATAR] = value }
     }
 
     suspend fun setDeepgramApiKey(value: String) {

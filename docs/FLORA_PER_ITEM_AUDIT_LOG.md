@@ -755,3 +755,7 @@ maujood, index bhi 200. Download page ab live hai.
 - Awaaz se ghar ka light/pankha mangne par imaandari wala jawab: box na juda ho to jodne ka raasta; juda ho to bhi "server sync baaki hai, isliye nahi chalega". Koi relay chhupke kabhi nahi chalega.
 - Baaki: S4 server sync (box ↔ server) — uske bina control adhoora hai, isliye F22 ka server half pending rakha hai.
 - CI: cc4c851a (F14) + bfb5bbcd (F11) bhi SUCCESS — green chain jaari.
+
+## v2.22 S2 poora — Avatar catalog (2026-10-28 ~19:30 IST, CI PENDING)
+- AvatarScreen (Menu > Avatar): 5 on-device styles — gulabi (default, pehle wale rang), neela, hara, baingani, sunehra. FloraOrb(busy, avatar) ab rang param leta hai (purani calls default se chalengi); chuna hua rang prefs me + turant Baat orb par lagta hai. Sirf rang badalta hai — awaaz/persona wahi; koi download, koi creator asset nahi.
+- Audit: 4 files brace/paren balance; enum + title + Menu + branch wiring grep-verify.

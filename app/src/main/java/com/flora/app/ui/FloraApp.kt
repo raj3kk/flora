@@ -78,7 +78,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -106,6 +106,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.NOTIFICATIONS -> "Notifications"
     Screen.WHITEBOARD -> "Whiteboard"
     Screen.HOME -> "Home"
+    Screen.AVATAR -> "Avatar"
 }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
@@ -173,6 +174,8 @@ fun FloraApp(
     // likha hua transcript nahi dikhega, sirf orb + mic. Chat
     // sirf tab jab user khud "Chat kholo" dabaye.
     var voiceView by remember { mutableStateOf(true) }
+    // Avatar style (v2.22, S2): orb ka rang, prefs se.
+    var avatarStyle by remember { mutableStateOf("gulabi") }
     val sendChatHolder = remember { arrayOfNulls<((String) -> Unit)>(1) }
     // Theme state (v1.9): states block me, launcher se pehle.
     var theme by remember { mutableStateOf("light") }
@@ -265,6 +268,7 @@ fun FloraApp(
             theme = prefs.theme()
             try { voice.persona = prefs.persona() } catch (e: Exception) { }
             try { voiceView = prefs.voiceView() } catch (e: Exception) { }
+            try { avatarStyle = prefs.avatar() } catch (e: Exception) { }
             // Auto mode (v2.17): ON tha to notification wapas dikhao.
             try {
                 autoMode = prefs.autoMode()
@@ -570,6 +574,10 @@ fun FloraApp(
                             onClick = { screen = Screen.HOME; menuOpen = false },
                         )
                         DropdownMenuItem(
+                            text = { Text("Avatar") },
+                            onClick = { screen = Screen.AVATAR; menuOpen = false },
+                        )
+                        DropdownMenuItem(
                             text = { Text("Live Screen") },
                             onClick = { screen = Screen.LIVE; menuOpen = false },
                         )
@@ -784,7 +792,7 @@ fun FloraApp(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("PIN bhool gaye ho to Settings me naya PIN set kar sakte ho (Chat ke alawa baaki screens khuli hain).")
                 } else {
-                FloraOrb(busy)
+                FloraOrb(busy, avatarStyle)
                 Spacer(modifier = Modifier.height(8.dp))
                 // Baat view (v2.15): transcript nahi dikhega — sirf
                 // orb + mic, taaki baat-cheet lage, chat nahi.
@@ -2276,6 +2284,8 @@ fun FloraApp(
                 WhiteboardScreen()
             } else if (screen == Screen.HOME) {
                 HomeScreen(prefs)
+            } else if (screen == Screen.AVATAR) {
+                AvatarScreen(prefs) { avatarStyle = it }
             } else if (screen == Screen.CONNECT) {
                 ConnectScreen(voice, prefs)
             } else if (screen == Screen.PRIVACY) {
