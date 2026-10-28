@@ -43,6 +43,7 @@ class FloraPreferences(private val context: Context) {
         val MODELS_MANIFEST_URL = stringPreferencesKey("models_manifest_url")
         val DEEPGRAM_API_KEY = stringPreferencesKey("deepgram_api_key")
         val VOICE_MATCH_THRESHOLD = stringPreferencesKey("voice_match_threshold")
+        val LEARNED_CONTACTS = stringPreferencesKey("learned_contacts_json")
         val GEMINI_API_KEY2 = stringPreferencesKey("gemini_api_key_2")
         val GROQ_API_KEY2 = stringPreferencesKey("groq_api_key_2")
         val TAVILY_API_KEY = stringPreferencesKey("tavily_api_key")
@@ -141,6 +142,28 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setVoiceMatchThreshold(value: Float) {
         context.floraDataStore.edit { it[Keys.VOICE_MATCH_THRESHOLD] = value.toString() }
+    }
+
+    /** Seekhe hue naam→number mapping (v2.22): user ne ek baar
+     *  bataya ("Home matlab ye number") to dobara nahi poochha
+     *  jayega. Sirf phone par, kabhi server par nahi. */
+    suspend fun learnedContactNumber(name: String): String {
+        return try {
+            val json = context.floraDataStore.data.map { it[Keys.LEARNED_CONTACTS] ?: "" }.first()
+            if (json.isEmpty()) "" else org.json.JSONObject(json).optString(name.trim().lowercase(), "")
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    suspend fun learnContact(name: String, number: String) {
+        try {
+            val current = context.floraDataStore.data.map { it[Keys.LEARNED_CONTACTS] ?: "" }.first()
+            val json = if (current.isEmpty()) org.json.JSONObject() else org.json.JSONObject(current)
+            json.put(name.trim().lowercase(), number)
+            context.floraDataStore.edit { it[Keys.LEARNED_CONTACTS] = json.toString() }
+        } catch (e: Exception) {
+        }
     }
 
     suspend fun setSupabaseAnonKey(value: String) {

@@ -593,3 +593,16 @@ maujood, index bhi 200. Download page ab live hai.
 - ModelDownloader.downloadedModelFile() naya public helper (valid .ok ke saath).
 - Manifest v2: voice-encoder entry (url = bucket public URL, size 22134696, sha256 7781a316…) + bundled 2 entries.
 - Bucket me upload (conformer tflite + manifest v2) browser dashboard task se hoga; tab tak matcher "server par abhi nahi" batayega (koi fake match nahi).
+
+## v2.21 upload DONE but HELD (2026-10-28 ~16:48 IST, single-deploy order)
+- SwissTransfer link ban gaya (106.1 MB, 12 Nov 2026 tak) — par user ke 16:47 IST order ("sab ek sath, tab deploy") ke hisaab se ye link download page par NAHI dala gaya aur release ke roop me pesh NAHI kiya gaya.
+- Link audit record me surakshit hai; final mega build (v2.22) aane par ye supersede ho jayega. Download page v2.20 par hi rahega.
+
+## v2.22 chunk 2 — Naam-se-kaam + poochho-seekho + dead-code sweep (2026-10-28 ~16:57 IST, CI PENDING)
+- ContactResolver: seekha hua → exact → ek → ambiguous (poochho) → not-found (poochho) → no-permission. Pehle wale ko chupke se chunna BAND.
+- FloraApp call+sms: dono site resolver par; ambiguous par "Ram naam ke kai log mile — X, Y. Kisko? Naam bolo ya pehla/doosra bolo."; not-found par "poora number de do ya sahi naam batao, main yaad rakh lungi"; jawab par seekhna + poora kaam (runContactAction). Naya command aaye to purana pending khatam; "chhodo" par cancel.
+- Learned contacts: DataStore JSON (sirf phone par, kabhi server nahi) — "Home" jaisa group bhi ek baar batane par seekh jayega.
+- Sweep: same-file duplicate fun = sirf ScreenCapture overload nikla; outer one-shot captureFrame (v2.20 bug wala) ZERO caller nikla → HATA DIYA; stale comment bhi sudhara. findNumber ab sirf definition bacha hai (koi caller nahi).
+- Crash-evidence: FloraApplication me handler — crash.log phone par (200KB cap), phir default handler (na ho to process kill — tooti haalat me zinda nahi rahegi).
+- Plan update: competitor benchmark (Maya), "Maya me nahi, Flora me hoga" 9 items, production-ready bar, full permanent approval (paisa + irreversible bahar).
+- Baaki (jhooth nahi): WhatsApp automation P4 me baaki hai; enrol UI + Deepgram streaming client agle chunks me; generic "wahan" clarification contacts ke bahar abhi format-ask tak hai.

@@ -52,6 +52,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.flora.app.automation.AppLauncher
 import com.flora.app.automation.AutoActions
 import com.flora.app.automation.ContactLookup
+import com.flora.app.automation.ContactResolver
 import com.flora.app.core.FloraConfig
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
@@ -102,6 +103,16 @@ private fun screenTitle(screen: Screen): String = when (screen) {
 }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
+
+/** Clarification pending: naam ambiguous tha ya mila nahi, user
+ *  ke jawab ka intezar hai. learnName = jawab milne par jo
+ *  naam seekhna hai (aksar poochha gaya naam hi). */
+private data class PendingContact(
+    val name: String,
+    val candidates: List<com.flora.app.automation.ContactLookup.ContactMatch>,
+    val action: String, // "call" ya "sms"
+    val text: String, // sms ka text, call par ""
+)
 
 /** Flora theme colors (v1.9): Flora ke apne 3 themes, sirf colors — koi asset copy nahi. */
 private fun floraColorScheme(theme: String): androidx.compose.material3.ColorScheme = when (theme) {
@@ -181,6 +192,7 @@ fun FloraApp(
     var autoMode by remember { mutableStateOf(false) }
     var pendingVoiceCallRequest by remember { mutableStateOf<String?>(null) }
     var pendingVoiceSmsRequest by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var pendingContact by remember { mutableStateOf<PendingContact?>(null) }
     val appContext = LocalContext.current
     // appContext ke BAAD (declaration order — pehle wali galti se CI fail hua tha).
     val autoLogStore = remember { AutoLogStore(appContext) }
@@ -808,12 +820,137 @@ fun FloraApp(
                     }
                 }
 
+                // Clarification ke baad kaam chalana (v2.22): confirm
+                // ya auto flow — call/sms branches jaisa hi.
+                fun runContactAction(number: String, action: String, text: String) {
+                    if (action == "call") {
+                        if (autoMode && AutoActions.hasCallPermission(appContext)) {
+                            autoExecuteCall(number)
+                        } else {
+                            messages = messages + ChatMsg(
+                                "Flora: Theek hai, $number par call laga raha hun — ek baar confirm kijiye.", false
+                            )
+                            voice.speak("Theek hai, call laga raha hun, ek baar confirm kijiye.")
+                            if (AutoActions.hasCallPermission(appContext)) {
+                                voiceCallConfirm = number
+                            } else {
+                                pendingVoiceCallRequest = number
+                                voicePermissionLauncher.launch(
+                                    arrayOf(Manifest.permission.CALL_PHONE)
+                                )
+                            }
+                        }
+                    } else {
+                        if (autoMode && AutoActions.hasSmsPermission(appContext)) {
+                            autoExecuteSms(number, text)
+                        } else {
+                            messages = messages + ChatMsg(
+                                "Flora: Theek hai, $number par SMS bhej raha hun — ek baar confirm kijiye.", false
+                            )
+                            voice.speak("Theek hai, SMS bhej raha hun, ek baar confirm kijiye.")
+                            if (AutoActions.hasSmsPermission(appContext)) {
+                                voiceSmsConfirm = number to text
+                            } else {
+                                pendingVoiceSmsRequest = number to text
+                                voicePermissionLauncher.launch(
+                                    arrayOf(Manifest.permission.SEND_SMS)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // sendChat (v2.14): Bhejo button ka pipeline, ab continuous
                 // mic bhi isi se auto-send karta hai. Holder ke zariye
                 // upar ke LaunchedEffect se call hota hai.
                 fun sendChat(questionRaw: String) {
                     val question = questionRaw.trim()
                     if (question.isEmpty() || busy) return
+                    // Clarification ka jawab (v2.22): naam ambiguous tha
+                    // ya mila nahi tha — user ka jawab hi action hai.
+                    // Naya command (call/sms/auto mode/romantic) aaye to
+                    // purana pending khatam, naya command chalega.
+                    val pending = pendingContact
+                    if (pending != null) {
+                        val ansLower = question.lowercase()
+                        val isNewCommand = ansLower.startsWith("call ") ||
+                            ansLower.startsWith("sms ") ||
+                            ansLower.startsWith("auto mode") ||
+                            ansLower == "romantic mode" ||
+                            ansLower == "normal mode"
+                        if (!isNewCommand) {
+                            input = ""
+                            if (ansLower == "cancel" || ansLower == "chhodo" ||
+                                ansLower == "rehne do" || ansLower == "chhod do"
+                            ) {
+                                pendingContact = null
+                                val msg = "Theek hai, chhod diya."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                                return
+                            }
+                            scope.launch {
+                                val digits = question.filter { it.isDigit() || it == '+' }
+                                if (pending.candidates.isNotEmpty()) {
+                                    val ordinals = mapOf(
+                                        "pehla" to 0, "pehle wala" to 0, "1" to 0,
+                                        "doosra" to 1, "doosre wala" to 1, "2" to 1,
+                                        "teesra" to 2, "teesre wala" to 2, "3" to 2,
+                                    )
+                                    val byOrdinal = ordinals[ansLower]?.let { idx ->
+                                        pending.candidates.getOrNull(idx)
+                                    }
+                                    val byName = pending.candidates.firstOrNull {
+                                        it.name.equals(question, ignoreCase = true)
+                                    }
+                                    val chosen = byOrdinal ?: byName
+                                    if (chosen != null) {
+                                        pendingContact = null
+                                        try { prefs.learnContact(pending.name, chosen.number) } catch (e: Exception) { }
+                                        val foundDigits = chosen.number.filter { it.isDigit() || it == '+' }
+                                        runContactAction(foundDigits, pending.action, pending.text)
+                                    } else if (digits.length >= 7) {
+                                        pendingContact = null
+                                        try { prefs.learnContact(pending.name, digits) } catch (e: Exception) { }
+                                        runContactAction(digits, pending.action, pending.text)
+                                    } else {
+                                        val names = pending.candidates.joinToString(", ") { it.name }
+                                        val msg = "Samajh nahi aaya — $names me se kisko? Naam bolo ya pehla/doosra bolo."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    }
+                                } else if (digits.length >= 7) {
+                                    pendingContact = null
+                                    try { prefs.learnContact(pending.name, digits) } catch (e: Exception) { }
+                                    runContactAction(digits, pending.action, pending.text)
+                                } else {
+                                    when (val res = ContactResolver.resolve(appContext, prefs, question)) {
+                                        is ContactResolver.Result.Resolved -> {
+                                            pendingContact = null
+                                            try { prefs.learnContact(pending.name, res.number) } catch (e: Exception) { }
+                                            val foundDigits = res.number.filter { it.isDigit() || it == '+' }
+                                            runContactAction(foundDigits, pending.action, pending.text)
+                                        }
+                                        is ContactResolver.Result.Ambiguous -> {
+                                            pendingContact = pending.copy(candidates = res.candidates)
+                                            val names = res.candidates.joinToString(", ") { it.name }
+                                            val msg = "'$question' naam ke kai log mile — $names. Kisko?"
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                        else -> {
+                                            val msg = "Ye naam bhi nahi mila — poora number de do, ya sahi naam batao."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                    }
+                                }
+                            }
+                            return
+                        } else {
+                            pendingContact = null
+                        }
+                    }
                     // Voice command, one confirmation, full execution, spoken
                     // commentary — no stopping at intermediate steps to ask again.
                     // "call <number>" / "call <naam>" / "sms <number|naam> <message>".
@@ -889,32 +1026,37 @@ fun FloraApp(
                                 }
                             }
                         } else if (raw.isNotEmpty()) {
-                            // Naam se number (v2.13): Contacts me dhoondho,
-                            // phir wahi confirmation flow.
+                            // Naam se kaun (v2.22): resolver — seekha hua,
+                            // exact, ek, ya poochho (kabhi chupke se pehla nahi).
                             scope.launch {
-                                val found = ContactLookup.findNumber(appContext, raw)
-                                val foundDigits = found?.filter { it.isDigit() || it == '+' } ?: ""
-                                if (foundDigits.length < 7) {
-                                    val msg = "Contacts me '$raw' nahi mila — poora number " +
-                                        "likhiye, ya Contacts permission dijiye."
-                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                    voice.speak(msg)
-                                } else {
-                                    if (autoMode && AutoActions.hasCallPermission(appContext)) {
-                                        autoExecuteCall(foundDigits)
-                                    } else {
-                                        messages = messages + ChatMsg(
-                                            "Flora: Theek hai, $raw ($foundDigits) par call laga raha hun — ek baar confirm kijiye.", false
-                                        )
-                                        voice.speak("Theek hai, call laga raha hun, ek baar confirm kijiye.")
-                                        if (AutoActions.hasCallPermission(appContext)) {
-                                            voiceCallConfirm = foundDigits
+                                when (val res = ContactResolver.resolve(appContext, prefs, raw)) {
+                                    is ContactResolver.Result.Resolved -> {
+                                        val foundDigits = res.number.filter { it.isDigit() || it == '+' }
+                                        if (foundDigits.length < 7) {
+                                            val msg = "Contacts me '$raw' ka number poora nahi mila — poora number likhiye."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
                                         } else {
-                                            pendingVoiceCallRequest = foundDigits
-                                            voicePermissionLauncher.launch(
-                                                arrayOf(Manifest.permission.CALL_PHONE)
-                                            )
+                                            runContactAction(foundDigits, "call", "")
                                         }
+                                    }
+                                    is ContactResolver.Result.Ambiguous -> {
+                                        pendingContact = PendingContact(raw, res.candidates, "call", "")
+                                        val names = res.candidates.joinToString(", ") { it.name }
+                                        val msg = "'$raw' naam ke kai log mile — $names. Kisko call karun? Naam bolo ya pehla/doosra bolo."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    }
+                                    ContactResolver.Result.NotFound -> {
+                                        pendingContact = PendingContact(raw, emptyList(), "call", "")
+                                        val msg = "Contacts me '$raw' nahi mila — poora number de do, ya sahi naam batao, main yaad rakh lungi."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    }
+                                    ContactResolver.Result.NoPermission -> {
+                                        val msg = "Contacts permission nahi mili — Settings se Contacts permission do, ya poora number likho."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
                                     }
                                 }
                             }
@@ -955,29 +1097,34 @@ fun FloraApp(
                                 }
                             } else {
                                 scope.launch {
-                                    val found = ContactLookup.findNumber(appContext, parts[0])
-                                    val foundDigits = found?.filter { it.isDigit() || it == '+' } ?: ""
-                                    if (foundDigits.length < 7) {
-                                        val msg = "Contacts me '${parts[0]}' nahi mila — poora " +
-                                            "number likhiye, ya Contacts permission dijiye."
-                                        messages = messages + ChatMsg("Flora: $msg", false)
-                                        voice.speak(msg)
-                                    } else {
-                                        if (autoMode && AutoActions.hasSmsPermission(appContext)) {
-                                            autoExecuteSms(foundDigits, text)
-                                        } else {
-                                            messages = messages + ChatMsg(
-                                                "Flora: Theek hai, ${parts[0]} ($foundDigits) par SMS bhej raha hun — ek baar confirm kijiye.", false
-                                            )
-                                            voice.speak("Theek hai, SMS bhej raha hun, ek baar confirm kijiye.")
-                                            if (AutoActions.hasSmsPermission(appContext)) {
-                                                voiceSmsConfirm = foundDigits to text
+                                    when (val res = ContactResolver.resolve(appContext, prefs, parts[0])) {
+                                        is ContactResolver.Result.Resolved -> {
+                                            val foundDigits = res.number.filter { it.isDigit() || it == '+' }
+                                            if (foundDigits.length < 7) {
+                                                val msg = "Contacts me '${parts[0]}' ka number poora nahi mila — poora number likhiye."
+                                                messages = messages + ChatMsg("Flora: $msg", false)
+                                                voice.speak(msg)
                                             } else {
-                                                pendingVoiceSmsRequest = foundDigits to text
-                                                voicePermissionLauncher.launch(
-                                                    arrayOf(Manifest.permission.SEND_SMS)
-                                                )
+                                                runContactAction(foundDigits, "sms", text)
                                             }
+                                        }
+                                        is ContactResolver.Result.Ambiguous -> {
+                                            pendingContact = PendingContact(parts[0], res.candidates, "sms", text)
+                                            val names = res.candidates.joinToString(", ") { it.name }
+                                            val msg = "'${parts[0]}' naam ke kai log mile — $names. Kisko SMS karun? Naam bolo ya pehla/doosra bolo."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                        ContactResolver.Result.NotFound -> {
+                                            pendingContact = PendingContact(parts[0], emptyList(), "sms", text)
+                                            val msg = "Contacts me '${parts[0]}' nahi mila — poora number de do, ya sahi naam batao, main yaad rakh lungi."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                        ContactResolver.Result.NoPermission -> {
+                                            val msg = "Contacts permission nahi mili — Settings se Contacts permission do, ya poora number likho."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
                                         }
                                     }
                                 }

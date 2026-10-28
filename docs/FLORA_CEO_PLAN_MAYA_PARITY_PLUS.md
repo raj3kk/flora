@@ -159,7 +159,55 @@ screen dekhna. Flora me isse ZYADA hoga:
 9. R3: final full audit (phone + server + security +
    privacy + law) → issue 0 → "Maya se achha" ka daava.
 
-## F. Maya se zyada — Flora ki jeet wali list (pehle se hai)
+## Competitor benchmark — Maya (user order 2026-10-28 ~16:53 IST)
+- Maya ab Flora ka competitor benchmark hai: har Maya
+  capability par Flora ko behtar hona hai (copy nahi, behtar
+  tareeqa). Audit ka source: GAP_AUDIT (2159 lines),
+  GAP5_ENDPOINTS, BACKEND_LICENCE_AUDIT, RE_FEATURES 178,
+  FRONTEND_ROUTES, screenshot plan.
+- Naam-se-kaam ka behtar tareeqa (v2.22 chunk 2): Flora
+  poochhti hai — "Ram naam ke do log mile, kisko?" / "Home
+  ka matlab kaunsa number hai?" — aur jawab SEEKH leti hai
+  (phone par hi), dobara nahi poochhti. Pehle wale ko
+  chupke se chunna band. WhatsApp automation P4 me hai
+  (abhi baaki) — SMS/call naam-se chunk 2 me ho gaya.
+- "Wahan kya karna hai" pattern: jab command adhoori ho
+  (naam nahi mila / message nahi likha / kaam saaf nahi),
+  Flora pyar se ek baar poochhegi, jawab milte hi poora
+  kaam karegi — aadha kaam chhodna nahi.
+
+## Maya me NAHI, Flora me HOGA (naye, Maya se aage)
+1. Auto Mode default ON + Auto Log + ongoing notification.
+2. No-technical-errors rule + BasicTalk local fallback.
+3. Model auto-download (server manifest + SHA verify).
+4. Server-enforced licence (1-phone/15-din) + UTR audit.
+5. Seekhi hui mapping (naam/group → number, phone par).
+6. Clarification dialogue (ambiguous/vague par poochho +
+   seekho, phir poora kaam).
+7. Crash-evidence (crash.log phone par, saboot ke liye).
+8. Har item par audit gate + CI verify + test entry.
+9. ₹199/month + 30-din retention + screen-kabhi-server-
+   par-nahi privacy (Maya se saaf behtar).
+
+## Production-ready bar (koi samjhauta nahi)
+- Duplicate: same-file duplicate fun sweep (chunk 2 me
+  chala — sirf overload nikla; one-shot captureFrame
+  dead nikla to hata diya gaya, wahi v2.20 bug tha).
+- Broken/crash/failed: har fail ka saboot (crash.log,
+  Auto Log, audit log) + root-fix, phir re-audit. Pichhle
+  fails aur unke fix: v2.17 declaration-order (fix),
+  GraphQL 499 bada payload (server-download hal),
+  v2.21 test-entry naam collision (nayi file se fix).
+- Koi item "done" nahi jab tak: code audit + CI PASS +
+  APK verify + test entry + (phone items par) phone test.
+
+## Full permanent approval — Flora (user order 2026-10-28 ~16:53 IST)
+- Flora ke kaam ke liye FULL, ALL-TIME approval hai:
+  baar-baar approval NAHI maanga jayega.
+- Sirf do cheezein isse bahar hain (permanent safety):
+  (1) PAISA/kharch — hamesha alag explicit approval;
+  (2) delete/irreversible — karne se pehle ek baar poochha
+  jayega. Baaki sab CEO authority me chalega.
 
 Auto Mode default ON, Auto Log, no-technical-errors rule,
 BasicTalk, model auto-discovery, server-enforced licence
