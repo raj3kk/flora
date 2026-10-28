@@ -138,6 +138,13 @@ fun ToolsScreen(tools: SearchTools) {
     var word by remember { mutableStateOf("") }
     var wordResult by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    // Study/Coding/Market states (v2.0, local): upar wale states ke saath.
+    var studyTopic by remember { mutableStateOf("") }
+    var studyResult by remember { mutableStateOf("") }
+    var siteIdea by remember { mutableStateOf("") }
+    var siteResult by remember { mutableStateOf("") }
+    var stockSymbol by remember { mutableStateOf("") }
+    var stockResult by remember { mutableStateOf("") }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
@@ -256,6 +263,76 @@ fun ToolsScreen(tools: SearchTools) {
             if (wordResult.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(wordResult)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Study — topic par short summary + sources (DuckDuckGo, bina key)")
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = studyTopic, onValueChange = { studyTopic = it },
+                label = { Text("Topic kya hai?") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    if (studyTopic.isNotBlank() && !busy) {
+                        busy = true
+                        scope.launch {
+                            studyResult = tools.study(studyTopic.trim())
+                            busy = false
+                        }
+                    }
+                },
+                enabled = !busy
+            ) { Text("Study karo") }
+            if (studyResult.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(studyResult)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Website starter — idea se pages + HTML skeleton (sirf text, file save nahi)")
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = siteIdea, onValueChange = { siteIdea = it },
+                label = { Text("Website kis cheez ki hai?") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    if (siteIdea.isNotBlank()) {
+                        siteResult = tools.websiteStarter(siteIdea.trim())
+                    }
+                }
+            ) { Text("Starter banao") }
+            if (siteResult.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(siteResult)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Market — share price (Yahoo Finance, bina key)")
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = stockSymbol, onValueChange = { stockSymbol = it },
+                label = { Text("Symbol (jaise RELIANCE.NS, AAPL)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    if (stockSymbol.isNotBlank() && !busy) {
+                        busy = true
+                        scope.launch {
+                            stockResult = tools.stockPrice(stockSymbol.trim())
+                            busy = false
+                        }
+                    }
+                },
+                enabled = !busy
+            ) { Text("Price dekho") }
+            if (stockResult.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(stockResult)
             }
         }
     }

@@ -36,9 +36,32 @@
   bytes.
 - Test-plan entry: docs/FLORA_PERSONAS_TEST_ENTRY.md (6 steps).
 
-## v1.9 Themes + Orb — push hua, CI result pending
+## v1.9 Themes + Orb — AUDIT PASS
 - Code audit: THEME key + MaterialTheme wrap + warm/dark/light
   schemes (sirf colors); orb Canvas-only, busy par pulse, idle par
   static; theme states launcher se pehle (FloraApp 99, Settings 784
   < launcher 786); brace/paren balance 0.
+- Build test: run 40624017595 completed success, artifact 54,331,069
+  bytes. Pushed content GitHub par bhi verify hua (MaterialTheme,
+  FloraOrb(busy), floraColorScheme, versionCode 20 sab maujood).
 - Test-plan entry: docs/FLORA_THEMES_TEST_ENTRY.md (7 steps).
+
+## v2.0 Study/Coding/Market — push hua, CI result pending
+- Code audit: study (DuckDuckGo, 5 sources + Source note),
+  stockPrice (Yahoo Finance + stale-price note), websiteStarter
+  (sirf local text, file save nahi); braces 0; koi key use nahi.
+  Tavily lane is push me NAHI hai (v2.1 ke liye alag rakha hai).
+- Test-plan entry: docs/FLORA_TOOLS_TEST_ENTRY.md (6 steps).
+
+## v2.0 Study/Coding/Market + v2.1 Keys — code local taiyaar, push themes audit ke baad
+- v2.0: SearchTools study/stockPrice/websiteStarter + ToolsScreen
+  sections; code audit done (braces 0); test entry
+  docs/FLORA_TOOLS_TEST_ENTRY.md (6 steps).
+- v2.1: Gemini/Groq second keys + Tavily lane + Brave/SerpAPI/Maps
+  fields (sirf save, lane nahi — UI me saaf likha hai); rotation
+  order Gemini 1, 2, Groq 1, 2; key values kabhi log nahi hoti;
+  code audit done (braces 0, states launcher se pehle 775 < 793);
+  test entry docs/FLORA_KEYS_TEST_ENTRY.md (6 steps).
+- v2.2 Voice/Face match: design taiyaar, test entry
+  docs/FLORA_VOICE_FACE_TEST_ENTRY.md (phone test se hi audit poora
+  hoga, CI par nahi).

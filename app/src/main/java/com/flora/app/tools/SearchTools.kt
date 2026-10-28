@@ -120,4 +120,60 @@ class SearchTools {
             "Ye shabd dictionary me nahi mila, spelling check kijiye."
         }
     }
+
+    /** Study (v2.0): topic par 5 tak sources ka short summary, source ke naam ke saath. */
+    suspend fun study(topic: String): String = withContext(Dispatchers.IO) {
+        val encoded = URLEncoder.encode(topic.trim(), "UTF-8")
+        val text = get("https://api.duckduckgo.com/?q=$encoded&format=json&no_html=1&skip_disambig=1")
+            ?: return@withContext "Study search nahi ho paya — network ya server ki dikkat hai."
+        try {
+            val json = JSONObject(text)
+            val parts = mutableListOf<String>()
+            val abstract = json.optString("AbstractText", "")
+            if (abstract.isNotBlank()) parts.add(abstract)
+            val topics = json.optJSONArray("RelatedTopics")
+            if (topics != null) {
+                for (i in 0 until topics.length()) {
+                    if (parts.size >= 5) break
+                    val t = topics.optJSONObject(i)?.optString("Text", "") ?: ""
+                    if (t.isNotBlank()) parts.add(t)
+                }
+            }
+            if (parts.isEmpty()) return@withContext "Is topic par kuch nahi mila, topic badal kar koshish kijiye."
+            parts.joinToString("\n\n") + "\n\nSource: DuckDuckGo"
+        } catch (e: Exception) {
+            "Study ka jawab samajh nahi aaya, dobara koshish kijiye."
+        }
+    }
+
+    /** Market (v2.0): Yahoo Finance se price/change. Bina key. Price ki pushti exchange/app se karo. */
+    suspend fun stockPrice(symbol: String): String = withContext(Dispatchers.IO) {
+        val encoded = URLEncoder.encode(symbol.trim().uppercase(), "UTF-8")
+        val text = get("https://query1.finance.yahoo.com/v8/finance/chart/$encoded")
+            ?: return@withContext "Market price nahi mil paya — network ya server ki dikkat hai."
+        try {
+            val meta = JSONObject(text)
+                .optJSONObject("chart")?.optJSONArray("result")?.optJSONObject(0)?.optJSONObject("meta")
+                ?: return@withContext "Ye symbol nahi mila, symbol check kijiye (jaise RELIANCE.NS, AAPL)."
+            val price = meta.optDouble("regularMarketPrice", Double.NaN)
+            if (price.isNaN()) return@withContext "Is symbol ka price nahi mila."
+            val currency = meta.optString("currency", "")
+            val change = meta.optDouble("regularMarketChangePercent", Double.NaN)
+            val changeText = if (change.isNaN()) "" else " (${String.format("%.2f", change)}%)"
+            "${symbol.trim().uppercase()}: $price $currency$changeText\nNote: live price ki pushti exchange/app se karo. Source: Yahoo Finance"
+        } catch (e: Exception) {
+            "Market ka jawab samajh nahi aaya, dobara koshish kijiye."
+        }
+    }
+
+    /** Website starter (v2.0): sirf local text — pages ka structure + Home ka HTML skeleton. */
+    fun websiteStarter(idea: String): String {
+        val safeIdea = idea.trim()
+        return "Website idea: $safeIdea\n\nPages: Home, About, Services, Contact\n\n" +
+            "Home ka starter HTML:\n<html>\n<head><title>$safeIdea</title></head>\n" +
+            "<body>\n<h1>$safeIdea</h1>\n<p>Yahan apne business ke baare me 2-3 line likhiye.</p>\n" +
+            "<h2>Services</h2>\n<p>Apni 3 main services yahan likhiye.</p>\n" +
+            "<h2>Contact</h2>\n<p>Phone/WhatsApp/email yahan likhiye.</p>\n</body>\n</html>\n\n" +
+            "Note: ye sirf starter text hai, file save nahi hui hai."
+    }
 }
