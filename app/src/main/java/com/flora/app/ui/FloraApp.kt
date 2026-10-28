@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.flora.app.assistant.BrainClient
+import com.flora.app.assistant.VisionClient
 import com.flora.app.assistant.VoiceEngine
 import com.flora.app.automation.AppLauncher
 import com.flora.app.automation.AutoActions
@@ -79,6 +80,11 @@ fun FloraApp(
     var messages by remember { mutableStateOf(listOf(ChatMsg("Namaste! Main Flora hun. Kya madad kar sakti hun?", false))) }
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    // Attachments (v1.7, local — journal PASS ke baad push): ye states
+    // launcher se PEHLE declare hain (order trap se bachne ke liye).
+    var attachedUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var attachedName by remember { mutableStateOf("") }
+    var attachedMime by remember { mutableStateOf("") }
     var licence by remember { mutableStateOf<LicenceStatus?>(null) }
     var faceLockOn by remember { mutableStateOf(false) }
     var chatUnlocked by remember { mutableStateOf(false) }
@@ -103,6 +109,23 @@ fun FloraApp(
         }
     }
     val scope = rememberCoroutineScope()
+    val vision = remember { VisionClient() }
+    val attachLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            attachedUri = uri
+            attachedMime = try {
+                appContext.contentResolver.getType(uri) ?: ""
+            } catch (e: Exception) {
+                ""
+            }
+            attachedName = uri.lastPathSegment ?: "file"
+            messages = messages + ChatMsg(
+                "Flora: File attach ho gayi: $attachedName. Ab sawaal likh kar Bhejo dabaiye.", false
+            )
+        }
+    }
     /**
      * Licence auto-refresh (v1.4 gating, local-only abhi — push v1.4
      * verdict ke baad hoga): app khulte hi, agar Supabase anon key
@@ -474,6 +497,89 @@ fun FloraApp(
                                 voice.speak(msg)
                                 return@Button
                             }
+                            // Attachments (v1.7): file + sawaal ek saath.
+                            // Image -> vision, text/md -> brain. PDF abhi
+                            // supported nahi (koi PDF parser dependency nahi).
+                            // Talk-limit yahan bhi lagu hota hai (free cap).
+                            if (attachedUri != null) {
+                                val uri = attachedUri
+                                val mime = attachedMime
+                                val fname = attachedName
+                                val q = question
+                                attachedUri = null
+                                attachedMime = ""
+                                attachedName = ""
+                                messages = messages + ChatMsg(question, true)
+                                input = ""
+                                busy = true
+                                scope.launch {
+                                    val today = java.text.SimpleDateFormat(
+                                        "yyyy-MM-dd", java.util.Locale.US
+                                    ).format(java.util.Date())
+                                    val used = prefs.talkSecondsUsed(today)
+                                    if (licence?.plan != "pro" && used >= 600) {
+                                        val msg = "Aaj ka free talk time (10 minute) khatam ho gaya hai. Kal phir milega, ya Pro (₹199/month) lijiye."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                        busy = false
+                                        return@launch
+                                    }
+                                    try {
+                                        val bytes = kotlinx.coroutines.withContext(
+                                            kotlinx.coroutines.Dispatchers.IO
+                                        ) {
+                                            appContext.contentResolver.openInputStream(uri)?.readBytes()
+                                        }
+                                        if (bytes == null || bytes.isEmpty()) {
+                                            val msg = "File padh nahi payi, dobara attach kijiye."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        } else if (bytes.size > 5 * 1024 * 1024) {
+                                            val msg = "File 5 MB se badi hai, chhoti file bhejo."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        } else if (mime.startsWith("image/")) {
+                                            val key = prefs.geminiApiKey()
+                                            if (key.isEmpty()) {
+                                                val msg = "Image dekhne ke liye Settings me apni free Gemini key daaliye."
+                                                messages = messages + ChatMsg("Flora: $msg", false)
+                                                voice.speak(msg)
+                                            } else {
+                                                val reply = vision.askAboutImage(
+                                                    if (q.isBlank()) "Is image me kya dikh raha hai, detail me batao?" else q,
+                                                    bytes, key
+                                                )
+                                                if (reply == null) {
+                                                    val msg = "Image ka jawab nahi de payi, dobara koshish kijiye."
+                                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                                    voice.speak(msg)
+                                                } else {
+                                                    messages = messages + ChatMsg(reply, false)
+                                                    voice.speak(reply.take(500))
+                                                }
+                                            }
+                                        } else if (mime.startsWith("text/") || fname.endsWith(".md") || fname.endsWith(".txt")) {
+                                            val text = String(bytes, Charsets.UTF_8).take(8000)
+                                            val reply = brain.ask(
+                                                "File ka text:\n$text\n\nUser ka sawaal: " +
+                                                    if (q.isBlank()) "Is file ke baare me batao." else q
+                                            )
+                                            messages = messages + ChatMsg(reply, false)
+                                            voice.speak(reply.take(500))
+                                        } else {
+                                            val msg = "Ye file type abhi nahi padh sakti — image ya text/md file bhejo. PDF abhi supported nahi hai."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                    } catch (e: Exception) {
+                                        val msg = "File padhte waqt error aaya, dobara koshish kijiye."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    }
+                                    busy = false
+                                }
+                                return@Button
+                            }
                             messages = messages + ChatMsg(question, true)
                             input = ""
                             busy = true
@@ -503,7 +609,18 @@ fun FloraApp(
                     Spacer(modifier = Modifier.padding(4.dp))
                     Button(onClick = onMicRequest) { Text("Mic") }
                     Spacer(modifier = Modifier.padding(4.dp))
+                    Button(onClick = { attachLauncher.launch("*/*") }) { Text("Attach") }
+                    Spacer(modifier = Modifier.padding(4.dp))
                     Button(onClick = { voice.stop() }) { Text("Stop") }
+                }
+                if (attachedUri != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Attach hai: $attachedName")
+                    Button(onClick = {
+                        attachedUri = null
+                        attachedMime = ""
+                        attachedName = ""
+                    }) { Text("Attach hatao") }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
