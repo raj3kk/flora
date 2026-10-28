@@ -19,6 +19,8 @@ data class LicenceStatus(
 
 data class UsageResult(val counted: Boolean, val detail: String)
 
+data class LinkResult(val uid: String, val refreshToken: String, val error: String)
+
 /**
  * Talks to Supabase Edge Functions only. Anon key FloraPreferences
  * se aati hai (user ki Settings key ho to wahi, warna app ka
@@ -26,6 +28,27 @@ data class UsageResult(val counted: Boolean, val detail: String)
  * Service_role key app me kabhi nahi hoti.
  */
 class LicenceClient(private val prefs: FloraPreferences) {
+
+    // Website account link (v2.8): Supabase Auth password grant.
+    // Access token wapas milta hai par save NAHI hota — sirf uid
+    // + refresh token caller ko milta hai (refresh DataStore me,
+    // access memory me hi). Password kabhi log/store nahi hota.
+    suspend fun linkWebsiteAccount(email: String, password: String): LinkResult =
+        withContext(Dispatchers.IO) {
+            val key = prefs.supabaseAnonKey()
+            if (key.isEmpty()) return@withContext LinkResult("", "", "Anon key nahi mili")
+            val body = JSONObject().put("email", email).put("password", password)
+            val res = post("/auth/v1/token?grant_type=password", body, key)
+                ?: return@withContext LinkResult("", "", "Server se jawab nahi mila")
+            val user = res.optJSONObject("user")
+            val uid = user?.optString("id", "") ?: ""
+            val refresh = res.optString("refresh_token", "")
+            if (uid.isEmpty() || refresh.isEmpty()) {
+                val msg = res.optString("msg", res.optString("error_description", "Login fail"))
+                return@withContext LinkResult("", "", msg)
+            }
+            LinkResult(uid, refresh, "")
+        }
 
     // verify() se aakhri jaana hua plan (memory me hi). countUsage
     // isi se decide karta hai ki server count bhejna hai ya nahi:

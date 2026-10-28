@@ -47,6 +47,9 @@ class FloraPreferences(private val context: Context) {
         val MAPS_API_KEY = stringPreferencesKey("maps_api_key")
         val FCM_TOKEN = stringPreferencesKey("fcm_token")
         val WAKE_ENABLED = booleanPreferencesKey("wake_enabled")
+        val LINKED_USER_ID = stringPreferencesKey("linked_user_id")
+        val LINKED_EMAIL = stringPreferencesKey("linked_email")
+        val LINKED_REFRESH_TOKEN = stringPreferencesKey("linked_refresh_token")
         val CALL_TALK = booleanPreferencesKey("call_talk")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
@@ -65,6 +68,38 @@ class FloraPreferences(private val context: Context) {
         if (existing != null) return existing
         context.floraDataStore.edit { it[Keys.DEVICE_ID] = androidId }
         return androidId
+    }
+
+    // App-link (v2.8, design FLORA_APP_LINK_DESIGN.md): website
+    // account (Auth uid) link ho to wahi identity use hoti hai,
+    // warna purana random uuid. Refresh token sirf is phone ke
+    // DataStore me rahta hai — kabhi server/log/backup par nahi
+    // jata. Access token kabhi save nahi hota (memory me hi).
+    suspend fun linkedUserId(): String =
+        context.floraDataStore.data.map { it[Keys.LINKED_USER_ID] ?: "" }.first()
+
+    suspend fun linkedEmail(): String =
+        context.floraDataStore.data.map { it[Keys.LINKED_EMAIL] ?: "" }.first()
+
+    suspend fun effectiveUserId(): String {
+        val linked = linkedUserId()
+        return if (linked.isNotEmpty()) linked else userId()
+    }
+
+    suspend fun setLink(uid: String, email: String, refreshToken: String) {
+        context.floraDataStore.edit {
+            it[Keys.LINKED_USER_ID] = uid
+            it[Keys.LINKED_EMAIL] = email
+            it[Keys.LINKED_REFRESH_TOKEN] = refreshToken
+        }
+    }
+
+    suspend fun clearLink() {
+        context.floraDataStore.edit {
+            it.remove(Keys.LINKED_USER_ID)
+            it.remove(Keys.LINKED_EMAIL)
+            it.remove(Keys.LINKED_REFRESH_TOKEN)
+        }
     }
 
     // User ki Settings key ho to wahi pehle chalegi; warna app ka

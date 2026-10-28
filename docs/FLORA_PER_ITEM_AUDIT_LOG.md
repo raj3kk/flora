@@ -147,3 +147,26 @@
   wallpaper/conversation "abhi nahi" dikhna chahiye.
 - Web: admin.html Audit list wired + plans text honest;
   index/pricing text honest. Deploy ke baad 200-check hoga.
+
+## v2.8 app-link — CODE PREPARED LOCALLY, PUSH PENDING v2.7 CI PASS (per-item gate)
+- Item: Settings "Website account link" (email+password -> Auth
+  password grant; uid+refresh DataStore me, access token kabhi
+  save nahi; unlink button; purani random-UUID licence orphan
+  warning UI me). Licence/usage/token-sync call sites ab
+  effectiveUserId() use karte hain (linked ho to Auth uid,
+  warna random uuid — backward compatible).
+- Code audit: FloraPreferences + LicenceClient + FloraApp
+  brace/paren 0/0/0; link states line 836 launcher se PEHLE;
+  password state screen-only, kabhi log/store nahi; koi
+  service_role key nahi; koi copy/old-key violation nahi.
+- Build test: PENDING — v2.7 CI PASS ke baad hi v2.8 push
+  hoga, tab CI + artifact size verify hoga.
+- Phone test entry: TODO (link/unlink/Pro-dikhna steps) —
+  push ke saath likhi jayegi.
+
+## v2.8 app-link — PUSHED (v2.7 CI PASS ke baad, gate clear)
+- v2.7 CI: run 40636820057 completed success, artifact
+  flora-debug-apk 59,408,672 bytes, expired false. Isliye
+  v2.8 push ka gate khula.
+- Build test (v2.8): CI run — result push ke baad verify hoga.
+- Phone test entry: docs/FLORA_APP_LINK_TEST_ENTRY.md (6 steps).

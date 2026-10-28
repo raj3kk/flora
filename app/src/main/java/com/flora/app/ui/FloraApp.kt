@@ -166,7 +166,7 @@ fun FloraApp(
         try {
             theme = prefs.theme()
             if (prefs.supabaseAnonKey().isNotEmpty()) {
-                val userId = prefs.userId()
+                val userId = prefs.effectiveUserId()
                 val androidId = Settings.Secure.getString(
                     appContext.contentResolver, Settings.Secure.ANDROID_ID
                 ) ?: "flora-device"
@@ -183,7 +183,7 @@ fun FloraApp(
                         scope.launch {
                             try {
                                 prefs.setFcmToken(token)
-                                val uid = prefs.userId()
+                                val uid = prefs.effectiveUserId()
                                 val aid = Settings.Secure.getString(
                                     appContext.contentResolver,
                                     Settings.Secure.ANDROID_ID
@@ -828,6 +828,12 @@ private fun SettingsScreen(
     var wakeEnabled by remember { mutableStateOf(false) }
     var wakeEnrolled by remember { mutableStateOf(false) }
     var wakeStatus by remember { mutableStateOf("Wake Word: band hai") }
+    // App-link state (v2.8, PREP — push v2.7 PASS ke baad): launcher
+    // se PEHLE declare (order trap). Password state screen par hi
+    // rahega, kabhi save/log nahi hoga.
+    var linkEmail by remember { mutableStateOf("") }
+    var linkPassword by remember { mutableStateOf("") }
+    var linkedEmailDisplay by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     val phonePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -881,6 +887,7 @@ private fun SettingsScreen(
         wakeEnabled = prefs.wakeEnabled()
         wakeEnrolled = BiometricTemplates(context).hasWake()
         wakeStatus = if (wakeEnabled) "Wake Word ON hai — sun raha hun." else "Wake Word: band hai"
+        linkedEmailDisplay = prefs.linkedEmail()
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -1021,6 +1028,60 @@ private fun SettingsScreen(
                 }
             }) { Text("Keys save karo") }
             Spacer(modifier = Modifier.height(12.dp))
+            Text("Website account link — website se khareeda Pro isi app me dikhane ke liye")
+            Text("Link karne se pehle jaan lo: purane random-UUID wali koi licence (agar hoti) orphan ho jayegi; refresh token sirf is phone par save hoga; password change par link tootega aur dobara login karna hoga.")
+            if (linkedEmailDisplay.isNotEmpty()) {
+                Text("Linked: $linkedEmailDisplay")
+                Button(onClick = {
+                    scope.launch {
+                        prefs.clearLink()
+                        linkedEmailDisplay = ""
+                        note = "Website account unlink ho gaya — ab app wapas random-UUID mode me hai."
+                    }
+                }) { Text("Unlink karo") }
+            } else {
+                OutlinedTextField(
+                    value = linkEmail, onValueChange = { linkEmail = it },
+                    label = { Text("Website account email") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = linkPassword, onValueChange = { linkPassword = it },
+                    label = { Text("Website account password") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(onClick = {
+                    scope.launch {
+                        if (linkEmail.isBlank() || linkPassword.isBlank()) {
+                            note = "Email aur password dono daalo."
+                        } else {
+                            val result = licenceClient.linkWebsiteAccount(
+                                linkEmail.trim(), linkPassword
+                            )
+                            linkPassword = ""
+                            if (result.error.isNotEmpty()) {
+                                note = "Link fail: ${result.error}"
+                            } else {
+                                prefs.setLink(result.uid, linkEmail.trim(), result.refreshToken)
+                                linkedEmailDisplay = linkEmail.trim()
+                                linkEmail = ""
+                                val aid = Settings.Secure.getString(
+                                    context.contentResolver, Settings.Secure.ANDROID_ID
+                                )
+                                val token = prefs.fcmToken()
+                                if (token.isNotEmpty()) {
+                                    licenceClient.syncPushToken(result.uid, prefs.deviceId(aid), token)
+                                }
+                                note = "Website account link ho gaya — ab website wala Pro isi app me dikhega."
+                            }
+                        }
+                    }
+                }) { Text("Website account link karo") }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
             Row {
                 Text("Automation consent (manual, visible stop ke saath)")
                 Spacer(modifier = Modifier.padding(4.dp))
@@ -1157,7 +1218,7 @@ private fun SettingsScreen(
             Spacer(modifier = Modifier.height(12.dp))
             Button(onClick = {
                 scope.launch {
-                    val userId = prefs.userId()
+                    val userId = prefs.effectiveUserId()
                     val androidId = Settings.Secure.getString(
                         context.contentResolver, Settings.Secure.ANDROID_ID
                     ) ?: "flora-device"
@@ -1192,7 +1253,7 @@ private fun SettingsScreen(
                     if (vpa.isBlank()) {
                         note = "Pehle admin UPI VPA set kijiye, tabhi UPI payment khulega."
                     } else {
-                        val userId = prefs.userId()
+                        val userId = prefs.effectiveUserId()
                         val uri = Uri.parse(
                             "upi://pay?pa=$vpa&pn=Flora&am=199&cu=INR&tn=FloraPro_$userId"
                         )
