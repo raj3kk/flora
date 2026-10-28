@@ -851,3 +851,9 @@ maujood, index bhi 200. Download page ab live hai.
 ## G0 audit catch fix (2026-10-28 ~20:30 IST, CI PENDING)
 - Maya full audit (MAYA_FULL_AUDIT_20261028.md) ne pakda: Flora ki accessibility config me canTakeScreenshot + canPerformGestures NAHI the — isliye naya screenshot raasta + gesture automation asli phone par fail hote. Dono attributes jod diye (Maya jaisi configuration, code copy nahi).
 - Doosra catch: Flora manifest me backup exclusion nahi thi (default backup ON rehta) — android:allowBackup="false" jod diya (Flora ka apna attribute, Maya ki file copy nahi).
+
+## Camera dekhna + CEO plan + G21 detail (2026-10-28 ~21:00 IST, CI PENDING)
+- CameraLookScreen (naya): ScanScreen wala CameraX pattern — preview + capture (Pictures/Flora) -> JPEG bytes -> user ki Gemini key se VisionClient.askAboutImage -> jawab bol kar + screen par. Voice branches: "camera me kya dikh raha hai / camera dekho / camera se dekho / camera me kya hai" -> CAMERA_LOOK screen; menu entry bhi. Permission user khud Allow karega.
+- Prepush checks (kotlin_prepush_checks): braces/parens balanced dono files; declaration order verify — scope/vision/state launcher se upar, capture AndroidView se upar; nullable guards (savedUri null, bitmap null, stream close); askAboutImage(prompt, jpeg, key) signature + suspend geminiApiKey() coroutine me — sab match. Local gradlew nahi hai (wrapper absent), isliye CI hi build gate hai (Flora practice).
+- Voice samples (style selection): your_files/flora-voice-samples me 3 samples (Isabella/Lily/Myrtle, Hindi, speed 85). IMAANDARI: ye Muse TTS samples hain, Flora ki awaaz nahi — Flora me style G1 Deepgram selection se aayegi.
+- Docs: FLORA_CEO_FULL_PLAN_20261028.md (G1-G18 order + action system + Maya-se-aage systems + G19 workarounds research) + FLORA_G21_DECISIONS_DETAIL_20261028.md (9 faisle detail + sifarish).

@@ -82,7 +82,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -93,6 +93,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.SETTINGS -> "Settings"
     Screen.MEMORIES -> "Yaadein"
     Screen.SCAN -> "Scan"
+    Screen.CAMERA_LOOK -> "Camera dekho"
     Screen.TOOLS -> "Tools"
     Screen.SOS -> "SOS"
     Screen.FACE -> "Face"
@@ -401,6 +402,11 @@ fun FloraApp(
                 screen = Screen.SCAN
                 voice.speak("Scan khol raha hun.")
             }
+            lower == "camera me kya dikh raha hai" || lower == "camera dekho" ||
+                lower == "camera se dekho" || lower == "camera me kya hai" -> {
+                screen = Screen.CAMERA_LOOK
+                voice.speak("Camera khol raha hun — 'Camera me kya dikh raha hai?' dabate hi dekh kar bata dungi.")
+            }
             lower == "sos" || lower == "sos bhejo" || lower == "madad" -> {
                 screen = Screen.SOS
                 voice.speak("SOS screen khol raha hun.")
@@ -593,6 +599,10 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Scan") },
                             onClick = { screen = Screen.SCAN; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Camera dekho") },
+                            onClick = { screen = Screen.CAMERA_LOOK; menuOpen = false },
                         )
                         DropdownMenuItem(
                             text = { Text("Tools") },
@@ -2526,6 +2536,8 @@ fun FloraApp(
                 MemoriesScreen(memoriesStore)
             } else if (screen == Screen.SCAN) {
                 ScanScreen(voice)
+            } else if (screen == Screen.CAMERA_LOOK) {
+                CameraLookScreen(voice, prefs)
             } else if (screen == Screen.SOS) {
                 SosScreen(sosStore)
             } else if (screen == Screen.FACE) {
