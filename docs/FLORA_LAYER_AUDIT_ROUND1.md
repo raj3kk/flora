@@ -69,6 +69,43 @@
   flora-3ez9xuwhn-webbuilder1.vercel.app par 7/7 pages 200
   (/, admin, pricing, pay, signup, login, account) aur pricing
   par imaandari wala text live confirm hua.
-- CI run 40636820057 (v2.7) is waqt in_progress — PASS/artifact
-  size verify hone ke baad hi v2.7 close hoga.
+- CI run 40636820057 (v2.7) completed success, artifact
+  flora-debug-apk 59,408,672 bytes, expired false. v2.7 = latest
+  PASS (v2.8 CI chalne tak).
 - DB SQL check (browser task) ka result abhi pending hai.
+
+## DB SQL verification — RESULT AA GAYA (2026-10-28 ~10:44 IST run, read-only)
+- 8/8 tables maujood hain: admin_audit, licences,
+  payment_submissions, plans, push_tokens, settings, usage,
+  users. RLS sab 8 par ON hai.
+- Row counts (sirf count, koi personal data nahi padha):
+  users 1, plans 2 (seeds), settings 0, usage 0, licences 0,
+  push_tokens 1, payment_submissions 0, admin_audit 0.
+- Policies sirf 7 hain (admin_audit 2, payment_submissions 4,
+  push_tokens 1). licences, plans, settings, usage, users par
+  RLS ON hai par KOI policy nahi → anon key se in tables ka
+  direct read hamesha khaali/denied aayega. Isliye admin ke
+  Users/Usage sections client-side kabhi nahi chalenge — unke
+  liye service-role server function hi raasta hai (Round 2
+  item confirm ho gaya). App/functions isse affect nahi hote
+  (functions service key se chalte hain, live-verified).
+- users=1 aur push_tokens=1 wali rows meri test-UUID ki hain
+  (push-token-sync live test) — asli user abhi koi nahi hai.
+  Test rows ki cleanup Round 2 me (dashboard se delete).
+
+## Round 2 prep (local only, push v2.8 CI PASS ke baad)
+- settings/plans dormant resolution (taiyaar): settings table
+  ka app me koi use nahi hai aur plans table ko koi code read
+  nahi karta — inko schema doc me "dormant config, runtime
+  source-of-truth nahi" likha jayega; licence-verify aur
+  admin-approve hi source-of-truth rahenge (plan_id + 30 din).
+  Koi table delete nahi hogi (destructive nahi).
+- Retention pruning design (taiyaar, implement baad me):
+  Journal entries me ts hai → 30-din pruning seedha ban sakta
+  hai. Memories sirf plain strings hain, unme ts NAHI hai →
+  purani memories ki age jaani hi nahi ja sakti; nayi entries
+  ke liye ts jodna + sirf timestamp wali prune karna hi
+  imaandari wala raasta hai. Privacy text ko isi ke hisaab se
+  theek karna hoga (journal 30-din auto, memories manual
+  delete + nayi entries par 30-din) — jhootha "sab 30 din"
+  vaada nahi rahega.

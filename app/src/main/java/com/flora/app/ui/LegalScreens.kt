@@ -55,7 +55,11 @@ fun PrivacyScreen() {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "6. Retention: sync/memory data 30 din tak rakha jaata hai. " +
+                "6. Retention: Journal entries 30 din baad app-start " +
+                    "par auto-delete hoti hain. Memories me date wali " +
+                    "entries 30 din baad auto-delete hoti hain; bina " +
+                    "date wali purani entries manually delete karni " +
+                    "hongi (unko auto-delete kabhi nahi karega). " +
                     "Licence aur payment ke record (UTR, amount) alag se rakhe jaate hain."
             )
             Spacer(modifier = Modifier.height(8.dp))

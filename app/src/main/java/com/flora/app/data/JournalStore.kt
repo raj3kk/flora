@@ -64,4 +64,13 @@ class JournalStore(private val context: Context) {
             save(current)
         }
     }
+
+    /** 30-din retention (v2.9): cutoff se purani entries delete
+     * hoti hain. Bina date wali (ts <= 0) entries kabhi
+     * auto-delete nahi hoti. App-start par chupchaap chalta hai. */
+    suspend fun pruneOlderThan(cutoffMs: Long) {
+        val current = entries.first()
+        val kept = current.filter { it.ts <= 0L || it.ts >= cutoffMs }
+        if (kept.size != current.size) save(kept)
+    }
 }

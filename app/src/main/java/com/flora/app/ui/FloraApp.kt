@@ -173,8 +173,17 @@ fun FloraApp(
                 val deviceId = prefs.deviceId(androidId)
                 licence = licenceClient.verify(userId, deviceId)
             }
-            // FCM token (v2.2 local save, v2.5 server sync): app khulte
-            // hi token lo, is phone par save karo, aur server ko bhi
+            // 30-din retention (v2.9): app-start par journal +
+            // memories ki purani date-wali entries auto-delete.
+            // Fail ho to app-start nahi rukega; bina date wali
+            // entries isse kabhi delete nahi hoti.
+            try {
+                val cutoff = System.currentTimeMillis() - 30L * 24L * 60L * 60L * 1000L
+                memoriesStore.pruneOlderThan(cutoff)
+                journalStore.pruneOlderThan(cutoff)
+            } catch (e: Exception) {
+            }
+            // FCM token (v2.2 local save, v2.5 server sync): app khulte            // hi token lo, is phone par save karo, aur server ko bhi
             // bhejo taaki send-push dhoondh sake. Sync fail ho to
             // local token phir bhi rehta hai, agle open par retry.
             try {
@@ -1276,7 +1285,7 @@ private fun SettingsScreen(
                 }
             }) { Text("UTR save karo") }
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Data retention: sync/memory 30 din. Licence/payment record alag se rakha jata hai.")
+            Text("Data retention: Journal 30 din baad auto-delete; Memories me date wali entries 30 din baad auto-delete, bina date wali manually. Licence/payment record alag se rakha jata hai.")
             if (note.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(note)

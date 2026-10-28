@@ -203,3 +203,21 @@
 - admin.html: loadAdminList() wired (session token se call,
   users + licences + usage render; koi token/UTR render nahi).
   Push ke baad naye deploy par admin page 200-check hoga.
+
+## v2.9 retention + dormant note — PUSHED (v2.8 CI PASS ke baad)
+- Item A (dormant note): settings/plans ko schema file me
+  "dormant config, runtime source-of-truth nahi" likha gaya;
+  koi table delete nahi hui. Live-verified: settings 0 rows,
+  plans 2 seeds, koi code inko read nahi karta.
+- Item B (retention): JournalStore + MemoriesStore me
+  pruneOlderThan (cutoff 30 din); app-start par chupchaap
+  chalta hai, fail ho to start nahi rukega; bina date wali
+  entries kabhi auto-delete nahi hoti. Memories ki nayi
+  entries ab date ke saath save hoti hain (purani plain
+  strings waise hi padhi jaati hain — migration-safe).
+  Privacy + Settings text precise wording me badla gaya.
+- Code audit: 4 files brace/paren 0/0 (push se pehle check).
+- Build test: CI run — result push ke baad verify hoga.
+- Phone test entry: docs/FLORA_RETENTION_TEST_ENTRY.md
+  (30-din prune ka phone proof 30 din baad hi possible hai
+  — ye limit entry me imaandari se likhi hai).
