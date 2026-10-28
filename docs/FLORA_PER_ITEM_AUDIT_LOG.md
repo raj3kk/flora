@@ -625,3 +625,8 @@ maujood, index bhi 200. Download page ab live hai.
 - CHAT khulte hi due-check: Auto Mode ON ho to due routines auto-run (wahi queue path), OFF ho to sirf message. Payment/delete steps routine me hain hi nahi; call/SMS steps pehle wale Auto Mode rule par.
 - Audit: 8 files brace/paren balance; manifest receiver + permission grep-verify; String.format Java-static form (Kotlin .format route se bacha gaya).
 - Baaki P1: wake tune, Deepgram streaming barge-in, brain-context me memories ka istemal; phir P2–P5, S2/S3, R3, EK final deploy.
+
+## v2.22 chunk 1b/2/3 CI FAIL — root fix (2026-10-28 ~17:10 IST)
+- Wajah (job logs se, guess nahi): VoiceMatcher.kt me `import java.io.File` missing tha — chunk 1b me downloaded-encoder branch aane par `File?` return type unresolved hua, aur usi se lines 85-87 ke overload/length errors cascade hue (ek hi jad, teen errors).
+- Fix: sirf ek line — `import java.io.File` (FileInputStream/FileChannel pehle se the). Brace/paren balance verify.
+- Is fix ke baad chunk 4 ka run (a89072f8) bhi isi code par chalega — uska result aane par dobara check hoga; fail ho to wahi job-log route.
