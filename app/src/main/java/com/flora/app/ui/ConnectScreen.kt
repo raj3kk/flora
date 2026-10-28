@@ -50,6 +50,10 @@ fun ConnectScreen(voice: VoiceEngine, prefs: FloraPreferences) {
     val scope = rememberCoroutineScope()
     var callTalk by remember { mutableStateOf(false) }
     var dialerHeld by remember { mutableStateOf(false) }
+    // note SACH ME yahan upar hai (roleLauncher se pehle) — callback
+    // isko use karta hai, isliye declaration callback se pehle hona
+    // hi chahiye, warna use-before-declaration compile error aata hai.
+    var note by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         callTalk = prefs.callTalk()
@@ -69,9 +73,7 @@ fun ConnectScreen(voice: VoiceEngine, prefs: FloraPreferences) {
                 else "Default dialer nahi bana — bina iske Flora call nahi utha sakti."
         }
     }
-    // note yahan upar hai kyunki roleLauncher ka callback isko use karta
-    // hai — neeche declare karne par compile error aata (use-before-declaration).
-    var note by remember { mutableStateOf("") }
+    // note upar (roleLauncher se pehle) declare hai, isliye yahan dobara nahi.
     var shareText by remember { mutableStateOf("") }
     var callNumber by remember { mutableStateOf("") }
     var smsNumber by remember { mutableStateOf("") }
