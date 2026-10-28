@@ -324,6 +324,10 @@ fun FloraApp(
     // ise voice pipeline se dobara chalata hai — user ko
     // dobara bolna nahi padta. Deny par clear ho jata hai.
     var pendingScreenQuestion by remember { mutableStateOf<String?>(null) }
+    // Session re-ask guard (Phase 3): MediaProjection token marne par
+    // dialog dobara kholna ek baar theek hai; uske baad bhi session na
+    // bane to dialog loop mat chalao — imaandaar failure bolo.
+    var screenReaskCount by remember { mutableStateOf(0) }
     val screenLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -342,6 +346,7 @@ fun FloraApp(
             }
         } else {
             pendingScreenQuestion = null
+            screenReaskCount = 0
             voice.speak("Screen permission ke bina live screen nahi dekh sakti.")
         }
     }
@@ -735,13 +740,28 @@ fun FloraApp(
     }
 
     // Continuous mic (v2.14): suni hui baat seedha sendChat ko —
-    // user ko Bhejo dabana nahi padta. busy ho to us baat ko chhod
-    // do (dobara sunna TTS-done par phir shuru hoga).
+    // user ko Bhejo dabana nahi padta. busy ho to baat queue me
+    // rahegi (Phase 3: neeche wala effect busy khatam hote hi chalayega).
+    // Voice-command queue (Phase 3): busy ho to command DROP mat karo.
+    // Value tab tak rakhi rahegi jab tak busy khatam na ho; busy khatam
+    // hote hi neeche wala effect use chalayega. Kabhi chupchaap drop
+    // nahi — Phase 2B ke execute-effect pattern jaisa (LaunchedEffect
+    // on busy). Dono effects Main par bina suspension ke consume karte
+    // hain, isliye double-invoke nahi hoga (pehle wala clear kar dega).
     LaunchedEffect(voiceCommand.value) {
         val spoken = voiceCommand.value
-        if (spoken.isNotEmpty()) {
+        if (spoken.isNotEmpty() && !busy) {
             voiceCommand.value = ""
-            if (!busy) sendChatHolder[0]?.invoke(spoken)
+            sendChatHolder[0]?.invoke(spoken)
+        }
+    }
+    LaunchedEffect(busy) {
+        if (!busy) {
+            val pending = voiceCommand.value
+            if (pending.isNotEmpty()) {
+                voiceCommand.value = ""
+                sendChatHolder[0]?.invoke(pending)
+            }
         }
     }
 
@@ -2337,6 +2357,13 @@ fun FloraApp(
                     // dono isi se chalte hain.
                     fun lookAtScreen(prompt: String) {
                         scope.launch {
+                            // Key check PEHLE (Phase 3): bina key ke screenshot
+                            // lena bekaar hai — pehle hi imaandaari se batao.
+                            val key = prefs.geminiApiKey()
+                            if (key.isEmpty()) {
+                                voice.speak("Screen dekhne ke liye Settings me apni free Gemini key daaliye.")
+                                return@launch
+                            }
                             // One-time-setup raasta PEHLE: accessibility
                             // ON ho to bina dialog, bina Allow tap ke
                             // screenshot lo. Na mile to neeche wala
@@ -2347,11 +2374,7 @@ fun FloraApp(
                                 null
                             }
                             if (accessJpeg != null) {
-                                val key = prefs.geminiApiKey()
-                                if (key.isEmpty()) {
-                                    voice.speak("Screen dekhne ke liye Settings me apni free Gemini key daaliye.")
-                                    return@launch
-                                }
+                                screenReaskCount = 0
                                 // Tree context (Maya jaisa): vision ko
                                 // sirf photo nahi, saamne wali app +
                                 // screen par likha text bhi batao —
@@ -2387,6 +2410,23 @@ fun FloraApp(
                                 appContext, screenResultCode, screenResultData
                             ) else null
                             if (session == null) {
+                                // Re-ask guard (Phase 3): ek baar dialog
+                                // dobara kholna theek hai; uske baad bhi
+                                // session na bane to loop mat chalao —
+                                // imaandaar failure bolo. MediaProjection
+                                // token process ke saath khatam ho jaata
+                                // hai (Android limit) — isliye purani
+                                // permission ka dobara kaam na karna
+                                // normal hai, chhupana nahi.
+                                if (screenReaskCount >= 1) {
+                                    screenReaskCount = 0
+                                    screenGranted = false
+                                    screenResultData = null
+                                    pendingScreenQuestion = null
+                                    voice.speak("Screen permission dobara dene ke baad bhi session nahi bana. Accessibility service ON karo — usse bina dialog ke dekh lungi, Settings me.")
+                                    return@launch
+                                }
+                                screenReaskCount++
                                 screenGranted = false
                                 screenResultData = null
                                 pendingScreenQuestion = "screen dekho"
@@ -2403,6 +2443,15 @@ fun FloraApp(
                             }
                             if (jpeg == null) {
                                 ScreenCapture.LiveSessionHolder.clear()
+                                if (screenReaskCount >= 1) {
+                                    screenReaskCount = 0
+                                    screenGranted = false
+                                    screenResultData = null
+                                    pendingScreenQuestion = null
+                                    voice.speak("Screen abhi bhi dikh nahi rahi — Accessibility service ON karo, usse bina dialog ke dekh lungi.")
+                                    return@launch
+                                }
+                                screenReaskCount++
                                 screenGranted = false
                                 screenResultData = null
                                 pendingScreenQuestion = "screen dekho"
@@ -2412,12 +2461,114 @@ fun FloraApp(
                                 voice.speak("Screen abhi dikh nahi rahi — permission dobara de do, phir main dekh lungi.")
                                 return@launch
                             }
+                            screenReaskCount = 0
+                            val reply = vision.askAboutImage(prompt, jpeg, key)
+                            if (reply == null) {
+                                voice.speak("Is baar dekh nahi payi — ek baar phir poochho na.")
+                            } else {
+                                messages = messages + ChatMsg(reply, false)
+                                voice.speak(reply.take(500))
+                            }
+                        }
+                    }
+                    // Live screen dekho (Phase 3): accessibility frames
+                    // refresh karke live jaisa — 3 frames, aakhri frame +
+                    // tree vision ko. Sachha continuous video nahi hai
+                    // (one-shot frames hain) — user ko "video" kabhi nahi bolna.
+                    fun lookAtScreenLive() {
+                        scope.launch {
                             val key = prefs.geminiApiKey()
                             if (key.isEmpty()) {
                                 voice.speak("Screen dekhne ke liye Settings me apni free Gemini key daaliye.")
                                 return@launch
                             }
-                            val reply = vision.askAboutImage(prompt, jpeg, key)
+                            // Accessibility-first: 3 frames, ~1.2s gap.
+                            var lastJpeg: ByteArray? = null
+                            var firstTree: List<String>? = null
+                            var lastTree: List<String>? = null
+                            var lastFg: String? = null
+                            var gotFrame = false
+                            for (i in 0 until 3) {
+                                val jpeg = try {
+                                    FloraAutomationService.instance?.screenshotJpeg()
+                                } catch (e: Exception) {
+                                    null
+                                }
+                                if (jpeg != null) {
+                                    gotFrame = true
+                                    lastJpeg = jpeg
+                                    val tree = try {
+                                        FloraAutomationService.instance?.visibleTexts(25)
+                                    } catch (e: Exception) {
+                                        null
+                                    }
+                                    if (firstTree == null) firstTree = tree
+                                    lastTree = tree
+                                    lastFg = try {
+                                        FloraAutomationService.instance?.foregroundPackage()
+                                    } catch (e: Exception) {
+                                        null
+                                    }
+                                    screenReaskCount = 0
+                                }
+                                if (i < 2) delay(1200)
+                            }
+                            if (!gotFrame || lastJpeg == null) {
+                                // Accessibility se na mila to MediaProjection
+                                // fallback — wahi dialog flow (ek baar, loop nahi).
+                                val session = if (screenGranted) ScreenCapture.openShared(
+                                    appContext, screenResultCode, screenResultData
+                                ) else null
+                                if (session == null) {
+                                    if (screenReaskCount >= 1) {
+                                        screenReaskCount = 0
+                                        screenGranted = false
+                                        screenResultData = null
+                                        pendingScreenQuestion = null
+                                        voice.speak("Screen permission dobara dene ke baad bhi session nahi bana. Accessibility service ON karo — usse bina dialog ke dekh lungi, Settings me.")
+                                    } else {
+                                        screenReaskCount++
+                                        screenGranted = false
+                                        screenResultData = null
+                                        pendingScreenQuestion = "live screen dekho"
+                                        val mgr = appContext.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+                                            as MediaProjectionManager
+                                        screenLauncher.launch(mgr.createScreenCaptureIntent())
+                                        voice.speak("Pehle screen permission chahiye — dialog khol raha hun, Allow dabao, phir dobara bolo.")
+                                    }
+                                    return@launch
+                                }
+                                var jpeg: ByteArray? = null
+                                for (attempt in 0 until 3) {
+                                    jpeg = session.captureFrame()
+                                    if (jpeg != null) break
+                                    delay(1200)
+                                }
+                                if (jpeg == null) {
+                                    ScreenCapture.LiveSessionHolder.clear()
+                                    screenGranted = false
+                                    screenResultData = null
+                                    pendingScreenQuestion = null
+                                    voice.speak("Screen abhi dikh nahi rahi — Accessibility service ON karo, usse bina dialog ke dekh lungi.")
+                                    return@launch
+                                }
+                                lastJpeg = jpeg
+                                screenReaskCount = 0
+                            }
+                            val treeNote = if (!lastTree.isNullOrEmpty()) {
+                                "Saamne wali app: ${lastFg ?: "pata nahi"}. Screen par ye likha dikh raha hai: " +
+                                    lastTree.joinToString(" | ") + ". "
+                            } else ""
+                            val changeNote = if (firstTree != null && lastTree != null && firstTree != lastTree) {
+                                "Pehle frame se ab tak screen par ye badla: pehle ye tha: " +
+                                    firstTree.joinToString(" | ") + ". "
+                            } else ""
+                            val reply = vision.askAboutImage(
+                                treeNote + changeNote +
+                                    "Ye live dekhne ka aakhri frame hai (kuch second ke andar liye gaye frames me se). " +
+                                    "Is screen par abhi kya chal raha hai, sab kuch detail me batao?",
+                                lastJpeg, key
+                            )
                             if (reply == null) {
                                 voice.speak("Is baar dekh nahi payi — ek baar phir poochho na.")
                             } else {
@@ -2457,12 +2608,29 @@ fun FloraApp(
                         ScreenCapture.LiveSessionHolder.clear()
                         screenGranted = false
                         screenResultData = null
+                        screenReaskCount = 0
                         voice.speak("Screen share band kar diya.")
                         return
                     }
-                    if (lower == "screen dekho" || lower == "is screen par kya hai" ||
-                        lower == "screen par kya hai" || lower == "screen par kya dikh raha hai"
+                    // Live screen dekho (Phase 3): fuzzy screen branch se
+                    // PEHLE (warna "live screen dekho" wahi gir jaata).
+                    if (lower == "live screen dekho" || lower == "screen live dekho" ||
+                        lower == "live screen dikhao"
                     ) {
+                        input = ""
+                        lookAtScreenLive()
+                        return
+                    }
+                    // Screen dekho — FUZZY (Phase 3): sirf 4 exact strings
+                    // nahi. "pe"/"par" dono, trailing "batao"/"dikhao"
+                    // ignore — contains se. Share branches upar return kar
+                    // chuke hain, isliye "screen share..." yahan nahi pahunchega.
+                    val screenLook = lower == "screen dekho" ||
+                        lower.startsWith("screen dekho ") ||
+                        (lower.contains("screen") && (lower.contains("kya") ||
+                            lower.contains("dikhao") || lower.contains("batao") ||
+                            lower.contains("chal raha")))
+                    if (screenLook) {
                         input = ""
                         lookAtScreen("Is screen par kya dikh raha hai, sab kuch detail me batao?")
                         return

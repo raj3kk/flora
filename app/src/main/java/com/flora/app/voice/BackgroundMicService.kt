@@ -252,8 +252,28 @@ class BackgroundMicService : Service() {
             }
             val key = try { prefs.geminiApiKey() } catch (e: Exception) { "" }
             if (jpeg != null && key.isNotEmpty()) {
+                // Tree context (Phase 3, Maya jaisa): background me bhi
+                // vision ko sirf photo nahi, saamne wali app + likha text
+                // bhi batao — jawab photo + tree dono par tika ho.
+                val treeTexts = try {
+                    FloraAutomationService.instance?.visibleTexts(25)
+                } catch (e: Exception) {
+                    null
+                }
+                val richQuestion = if (!treeTexts.isNullOrEmpty()) {
+                    val fg = try {
+                        FloraAutomationService.instance?.foregroundPackage()
+                    } catch (e: Exception) {
+                        null
+                    }
+                    "Saamne wali app: ${fg ?: "pata nahi"}. " +
+                        "Screen par ye likha dikh raha hai: " +
+                        treeTexts.joinToString(" | ") + ". " + question
+                } else {
+                    question
+                }
                 val reply = try {
-                    VisionClient().askAboutImage(question, jpeg, key)
+                    VisionClient().askAboutImage(richQuestion, jpeg, key)
                 } catch (e: Exception) {
                     null
                 }
