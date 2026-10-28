@@ -232,6 +232,67 @@ fun FloraApp(
     val bargeIn = remember { com.flora.app.voice.BargeInController(appContext) }
     // appContext ke BAAD (declaration order — pehle wali galti se CI fail hua tha).
     val autoLogStore = remember { AutoLogStore(appContext) }
+    // Long memory (Phase 2B, user order 2026-10-29 02:59): baat-cheet +
+    // pending kaam phone par hi encrypted save rahenge — restart par
+    // bhi khatam nahi honge (in-session-only history ki kami ka fix).
+    // 30-din prune is store par NAHI chalta (long-lasting order);
+    // baaki stores ka prune wahi rahega. Server par memory kabhi nahi jati.
+    val chatMemoryStore = remember { com.flora.app.data.ChatMemoryStore(appContext) }
+    val pendingTaskStore = remember { com.flora.app.data.PendingTaskStore(appContext) }
+    var memoryReady by remember { mutableStateOf(false) }
+    var persistedCount by remember { mutableStateOf(0) }
+    var executeAfterReply by remember { mutableStateOf<String?>(null) }
+    // App-start par purani baat-cheet wapas chat me dikhao (aakhri 60
+    // turns; greeting pehle se hai, isliye append karte hain).
+    LaunchedEffect(Unit) {
+        try {
+            val turns = chatMemoryStore.loadAll()
+            if (turns.isNotEmpty()) {
+                val shown = turns.takeLast(60).map { ChatMsg(it.text, it.fromUser) }
+                messages = messages + shown
+            }
+        } catch (e: Exception) {
+        }
+        persistedCount = messages.size
+        memoryReady = true
+    }
+    // Chat me jo naya judta hai, use encrypted store me save karo.
+    // Greeting + khali lines save nahi hoti; "Flora: " prefix hat kar
+    // save hota hai (recall bolte waqt saaf lage). Count tabhi badhta
+    // hai jab save kamyab ho — fail ho to agle turn par dobara koshish.
+    LaunchedEffect(messages) {
+        if (!memoryReady) return@LaunchedEffect
+        val current = messages
+        if (current.size < persistedCount) {
+            persistedCount = current.size
+            return@LaunchedEffect
+        }
+        if (current.size == persistedCount) return@LaunchedEffect
+        val fresh = current.drop(persistedCount).mapNotNull { m ->
+            val t = m.text.removePrefix("Flora: ").trim()
+            if (t.isEmpty() || t == "Namaste! Main Flora hun. Kya madad kar sakti hun?") null
+            else t to m.fromUser
+        }
+        if (fresh.isEmpty()) {
+            persistedCount = current.size
+            return@LaunchedEffect
+        }
+        try {
+            fresh.forEach { (t, u) -> chatMemoryStore.addTurn(u, t) }
+            persistedCount = current.size
+        } catch (e: Exception) {
+        }
+    }
+    // Pending kaam execute: "agla kaam karo" par task yahan rakha
+    // jata hai; busy khatam hote hi sendChat se wahi verified
+    // raaste par chalega (Auto Mode rules usi router me lagte hain).
+    LaunchedEffect(busy, executeAfterReply) {
+        val task = executeAfterReply
+        if (!busy && task != null) {
+            executeAfterReply = null
+            sendChatHolder[0]?.invoke(task)
+        }
+    }
     val voicePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
@@ -1454,6 +1515,148 @@ fun FloraApp(
                         }
                     }
                     val lower = question.lowercase()
+                    // Long memory (Phase 2B): pehle kya bola tha / aage kya
+                    // karna hai / yaad rakhna / agla kaam karo — persisted
+                    // store se jawab, brain ke andaze par nahi. Ye branches
+                    // early hain (user turn append se pehle), isliye inke
+                    // jawab persist effect se store me bhi save hote hain.
+                    val memLower = lower.removePrefix("ye ").trim()
+                    if (memLower == "pehle kya bola tha" || memLower == "pehle kya bole the" ||
+                        memLower == "maine pehle kya bola" || memLower == "maine pehle kya bola tha" ||
+                        memLower == "maine kya kaha tha" || memLower == "maine abhi kya bola" ||
+                        memLower == "pichhli baar kya bola tha" || memLower == "what did i say before" ||
+                        memLower == "what did i say" || memLower.startsWith("pehle maine kya")
+                    ) {
+                        scope.launch {
+                            try {
+                                val turns = chatMemoryStore.loadAll()
+                                val mine = turns.filter { it.fromUser && it.text != question }
+                                    .takeLast(3)
+                                val msg = if (mine.isEmpty()) {
+                                    "Abhi tak tumne mujhse koi purani baat save nahi hai — jo bologe, main yaad rakh lungi."
+                                } else if (mine.size == 1) {
+                                    "Tumne pehle ye bola tha: '${mine[0].text}'."
+                                } else {
+                                    val lines = mine.mapIndexed { i, t -> "${i + 1}. '${t.text}'" }
+                                        .joinToString("; ")
+                                    "Tumne pehle ye bola tha: $lines."
+                                }
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            } catch (e: Exception) {
+                                val msg = "Purani baat nikalne me dikkat aayi, dobara poochho na."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                        return
+                    }
+                    if (memLower == "tumne kya bola tha" || memLower == "tumne pehle kya bola" ||
+                        memLower == "tumne abhi kya kaha" || memLower == "tumne kya kaha tha" ||
+                        memLower == "what did you say"
+                    ) {
+                        scope.launch {
+                            try {
+                                val turns = chatMemoryStore.loadAll()
+                                val mine = turns.filter { !it.fromUser }.takeLast(2)
+                                val msg = if (mine.isEmpty()) {
+                                    "Maine abhi tak tumhe koi jawab save nahi kiya hai."
+                                } else if (mine.size == 1) {
+                                    "Maine ye bola tha: '${mine[0].text}'."
+                                } else {
+                                    "Maine pehle ye bola tha: '${mine[0].text}', phir ye: '${mine[1].text}'."
+                                }
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            } catch (e: Exception) {
+                                val msg = "Purani baat nikalne me dikkat aayi, dobara poochho na."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                        return
+                    }
+                    if (memLower == "aage kya karna hai" || memLower == "aage kya karna h" ||
+                        memLower == "mera agla kaam kya hai" || memLower == "agla kaam kya hai" ||
+                        memLower == "pending kaam" || memLower == "pending kaam kya hain" ||
+                        memLower == "mere pending kaam" || memLower == "mujhe kya karna chahiye" ||
+                        memLower == "kya karna chahiye" || memLower == "what should i do next" ||
+                        memLower == "what to do next" || memLower.startsWith("aage kya karna") ||
+                        memLower.startsWith("pending kaam") || memLower.startsWith("mere pending kaam")
+                    ) {
+                        scope.launch {
+                            try {
+                                val tasks = pendingTaskStore.loadAll()
+                                val msg = if (tasks.isEmpty()) {
+                                    "Koi pending kaam save nahi hai. Koi kaam yaad rakhna ho to 'yaad rakhna' bol kar bata do."
+                                } else {
+                                    val lines = tasks.mapIndexed { i, t -> "${i + 1}. $t" }
+                                        .joinToString("; ")
+                                    "Aage ye kaam hain: $lines. 'Agla kaam karo' bologe to pehla kar dungi."
+                                }
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            } catch (e: Exception) {
+                                val msg = "Pending kaam nikalne me dikkat aayi, dobara poochho na."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                        return
+                    }
+                    if (memLower.startsWith("yaad rakhna") || memLower.startsWith("remember to ") ||
+                        memLower.startsWith("remember this")
+                    ) {
+                        val task = memLower.removePrefix("yaad rakhna")
+                            .removePrefix("remember to").removePrefix("remember this")
+                            .trim().trimStart(':', '-', ' ').trim()
+                        if (task.isEmpty()) {
+                            val msg = "Kya yaad rakhun? Kaam bol kar bata do — jaise 'yaad rakhna kal subah paani ka bill bharna hai'."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else {
+                            scope.launch {
+                                try {
+                                    pendingTaskStore.add(task)
+                                    val msg = "Yaad rakh liya: $task. 'Aage kya karna hai' poochhne par bata dungi."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } catch (e: Exception) {
+                                    val msg = "Yaad rakhne me dikkat aayi, dobara bolo na."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                }
+                            }
+                        }
+                        return
+                    }
+                    if (memLower == "agla kaam karo" || memLower == "agla kaam kar do" ||
+                        memLower == "pending kaam karo" || memLower == "pending kaam kar do" ||
+                        memLower == "do the next task"
+                    ) {
+                        scope.launch {
+                            try {
+                                val tasks = pendingTaskStore.loadAll()
+                                if (tasks.isEmpty()) {
+                                    val msg = "Koi pending kaam save nahi hai — pehle 'yaad rakhna' bol kar koi kaam bata do."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else {
+                                    val task = tasks[0]
+                                    pendingTaskStore.removeAt(0)
+                                    val msg = "Ye kar rahi hun: $task."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                    executeAfterReply = task
+                                }
+                            } catch (e: Exception) {
+                                val msg = "Agla kaam chalane me dikkat aayi, dobara bolo na."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                        return
+                    }
                     // Auto Mode + persona voice commands (v2.17, user order).
                     if (lower == "auto mode on" || lower == "auto mode chalu" ||
                         lower == "auto mode chalu karo"
@@ -3198,17 +3401,22 @@ fun FloraApp(
                             emptyList()
                         }
                         val memCtx = if (mems.isEmpty()) "" else mems.joinToString("; ")
-                        // Phase 2 voice pipeline: pichhli baat-cheet brain ko
-                        // history ke roop me — taaki "khol diya" ke baad brain
-                        // andha follow-up na poochhe. Current sawaal history
-                        // me nahi (wo prompt hai); assistant lines ka "Flora: "
-                        // prefix hataya jata hai. (2961 par current sawaal
-                        // aakhri message ke roop me juda tha.)
-                        val lastIsCurrent = messages.lastOrNull()?.let { it.fromUser && it.text == question } == true
-                        val prior = if (lastIsCurrent) messages.dropLast(1) else messages
-                        val history = prior.takeLast(12).mapNotNull { m ->
-                            val t = m.text.removePrefix("Flora: ").trim()
-                            if (t.isEmpty()) null else BrainClient.ChatTurn(m.fromUser, t)
+                        // Phase 2B long memory: brain history persisted store
+                        // se — in-session + restart se pehle ki baat-cheet
+                        // dono (cap BrainClient.capHistory me: 12 turns /
+                        // ~1500 chars). Current sawaal history me nahi (wo
+                        // prompt hai); agar persist effect use pehle hi
+                        // save kar chuka ho to aakhri turn hata do.
+                        val storedTurns = try {
+                            chatMemoryStore.loadAll()
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                        val historyBase = storedTurns.map { BrainClient.ChatTurn(it.fromUser, it.text) }
+                        val history = if (historyBase.lastOrNull()?.let { it.fromUser && it.text == question } == true) {
+                            historyBase.dropLast(1)
+                        } else {
+                            historyBase
                         }
                         val reply = brain.ask(personaPrefix(prefs.persona()) + question, memCtx, history)
                         messages = messages + ChatMsg(reply, false)
