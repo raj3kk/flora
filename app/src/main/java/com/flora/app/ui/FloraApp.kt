@@ -210,9 +210,6 @@ fun FloraApp(
     var voiceUnlockNote by remember { mutableStateOf("") }
     var voiceCallConfirm by remember { mutableStateOf<String?>(null) }
     var voiceSmsConfirm by remember { mutableStateOf<Pair<String, String>?>(null) }
-    // Termux consent (v2.22, Phase 5, G11): command tabhi
-    // chalega jab user dialog me "Haan" dabaye — kabhi silent nahi.
-    var termuxConfirm by remember { mutableStateOf<String?>(null) }
     var voiceAppConfirm by remember { mutableStateOf<com.flora.app.automation.LaunchableApp?>(null) }
     // Phase 6: macro run state — pending = chal raha/ruka macro + agla step index.
     // macroNeedsConfirm true ho to sensitive step par dialog dikhega; Haan par wahi
@@ -3935,22 +3932,6 @@ fun FloraApp(
                         }
                         return
                     }
-                    // Termux bridge (v2.22, Phase 5, G11): har
-                    // command se pehle consent dialog — kabhi
-                    // silent nahi chalega.
-                    if (lower.startsWith("termux me ") && lower.endsWith(" chalao")) {
-                        input = ""
-                        val cmd = question.substring(9, question.length - 7).trim()
-                        if (cmd.isEmpty()) {
-                            val msg = "Aise boliye: 'termux me ls chalao'."
-                            messages = messages + ChatMsg("Flora: $msg", false)
-                            voice.speak(msg)
-                        } else {
-                            termuxConfirm = cmd
-                            voice.speak("Termux me ye command chalau? Confirm karne ke liye dialog me Haan dabao.")
-                        }
-                        return
-                    }
                     // WhatsApp read (v2.22, Phase 5): notification
                     // list se aakhri WhatsApp messages sunao.
                     // Bhejna wa.me se hi hota hai (user Send dabata
@@ -4521,44 +4502,6 @@ fun FloraApp(
                     dismissButton = {
                         TextButton(onClick = { voiceAppConfirm = null }) { Text("Ruko") }
                     }
-                )
-            }
-            termuxConfirm?.let { cmd ->
-                AlertDialog(
-                    onDismissRequest = { termuxConfirm = null },
-                    title = { Text("Termux me chalau?") },
-                    text = {
-                        Text(
-                            "Ye command Termux me chalegi:\n$cmd\n\n" +
-                                "Termux app khuli honi chahiye aur usme Flora ko " +
-                                "permission deni hogi. Galat command phone ko " +
-                                "nuksaan pahuncha sakti hai — sirf wahi chalao jo tum samajhte ho."
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            termuxConfirm = null
-                            try {
-                                val intent = android.content.Intent("com.termux.RUN_COMMAND").apply {
-                                    setClassName("com.termux", "com.termux.app.RunCommandService")
-                                    putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/sh")
-                                    putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-c", cmd))
-                                    putExtra("com.termux.RUN_COMMAND_BACKGROUND", false)
-                                }
-                                appContext.startService(intent)
-                                val msg = "Termux me command bhej di gayi hai."
-                                messages = messages + ChatMsg("Flora: $msg", false)
-                                voice.speak(msg)
-                            } catch (e: Exception) {
-                                val msg = "Termux me command nahi bheji ja saki — Termux app install hai ya nahi, check karo."
-                                messages = messages + ChatMsg("Flora: $msg", false)
-                                voice.speak(msg)
-                            }
-                        }) { Text("Haan, chalao") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { termuxConfirm = null }) { Text("Ruko") }
-                    },
                 )
             }
             guardianPinPending?.let { pending ->
