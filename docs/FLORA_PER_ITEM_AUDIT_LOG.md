@@ -518,3 +518,26 @@ maujood, index bhi 200. Download page ab live hai.
 - KEPT with reason: AutomationGate.kt (call-count zero hai, par ye consent-policy class hai — safety gate ko ref-count par delete nahi kiya; re-wire P-work me flag hai); READ_PHONE_STATE (CallAnnouncementReceiver me TelephonyManager use karta hai); strings.xml (accessibility config use karta hai); saare 19 Screen routes + ExtraScreens (sab use me hain).
 - Purane hosts ka sweep: getmaya/hunterislive/flow99/turso — Flora tree me ZERO (clean-room barkarar).
 - Audit: gradle + manifest edit ke baad balance check CI par hoga; version 41 / 2.19.0-rebuild.
+
+## v2.18 download page LIVE (2026-10-28 ~16:08 IST)
+- SwissTransfer link: https://www.swisstransfer.com/dl/01a18214-1143-73bd-8af4-ddffceecba0e (106.6 MB, 15 din, 12 Nov 2026 tak; bina password, bina account/payment; 30-day option chuna tha par confirmation 15 din + email extension batata hai).
+- Download page update commit 1b390874 → deploy flora-h33uq14f0-webbuilder1.vercel.app READY; /download par live verify: v2.18.0-rebuild, size 111,768,312, SHA 8d536ae5…, whats-new v2.18 (Auto Mode default ON + romantic).
+
+## v2.19 CI PASS + APK verify (2026-10-28 ~16:14 IST)
+- Run 40673581577 completed SUCCESS (commit 81e1a66a). Artifact 12809722722, zip 59,046,479 bytes (exact match).
+- Real APK: 111,265,998 bytes (v2.18 se 502,314 bytes halka — dead deps hatne ka asar), sha256 5c07682999fcd21ca8753039345309285a46416515a623f4b6685d5fe412a71c, aapt2: com.flora.app, versionCode 41, versionName 2.19.0-rebuild.
+- APK content check: PermissionGate / flora_app_icon ke 0 matches — dead code APK se gayab, confirm.
+- SwissTransfer upload in progress; link milte hi download page update hoga.
+
+## v2.19 download page LIVE (2026-10-28 ~16:23 IST)
+- SwissTransfer link: https://www.swisstransfer.com/dl/01a18222-7560-7099-a289-064d7bce1d90 (106.1 MB, 15 din, 12 Nov 2026 tak; bina password, bina account/payment; 30-day selector par bhi confirmation 15 din + email extension).
+- Download page update commit 85d35517 → deploy flora-glx5z3j2a-webbuilder1.vercel.app READY; /download par live verify: v2.19.0-rebuild, size 111,265,998, SHA 5c076829…, whats-new v2.19 (cleanup, ~500 KB halka).
+
+## v2.20 CODE DONE / CI PENDING (2026-10-28 ~16:30 IST, user order: technical error kabhi nahi, screen share ek baar permission, training + poora comparison)
+- 404 ki asli wajah: gemini-2.5-flash naam SAHI hai (live verify) — user ki key par dono models 404 isliye de rahe hain kyunki us key wale project me Gemini API on nahi hai (ya key Gemini ki nahi hai); Groq keys khaali thi isliye detail me Groq aaya hi nahi. Fix: model auto-discovery (models-list se jo chale wahi use hoga, naam sadne ka khatra khatam) + Keys check me 404 ka alag note (project me API on nahi).
+- PERMANENT RULE (user order): Flora chat/TTS me technical baat KABHI nahi bolegi — na code, na model naam, na "key gadbad". Brain fail ho to BasicTalk (local: greeting/haal/naam/time/date/shukriya/alvida/joke) phir warm fallback line. Asli kaaran sirf Settings > Keys check me.
+- Training: warm system prompt (muskaan + pyar se, user ke tone me) + TTS pitch 1.1 / rate 0.95 (narm awaaz). VoiceEngine edit me ek baar listener line kat gayi thi — turant wapas lagayi, balance verify.
+- Screen share bug ki jad: one-shot capture har baar projection STOP kar deta tha, aur wahi permission token dobara kaam nahi karta → dobara "frame nahi mila". Fix: persistent session (screen chhodne par hi stop), 3 retry, session mare to pyar se dobara permission + dialog khud khole, naya "App kholo aur dekho" flow (naam → app kholo → 3 sec → usi session se dekho).
+- Comparison doc: docs/FLORA_MAYA_COMPARISON_20261028.md (server/app + AI use + gadbad table + kaun kis point par behtar).
+- Audit: 4 files brace/paren 0/0; retry loop break-sahi; liveSession line order safe (state → openSession → use).
+- Test entry: docs/FLORA_V220_TEST_ENTRY.md.

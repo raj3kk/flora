@@ -36,6 +36,8 @@ class VoiceEngine(context: Context) {
                 if (hindi == TextToSpeech.LANG_MISSING_DATA || hindi == TextToSpeech.LANG_NOT_SUPPORTED) {
                     tts?.setLanguage(Locale.ENGLISH)
                 }
+                tts?.setSpeechRate(0.95f)
+                tts?.setPitch(1.1f)
                 tts?.setOnUtteranceProgressListener(
                     object : android.speech.tts.UtteranceProgressListener() {
                         override fun onStart(utteranceId: String?) {

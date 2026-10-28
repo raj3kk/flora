@@ -45,9 +45,15 @@ class BrainClient(private val prefs: FloraPreferences) {
             prefs.groqApiKey2().trim(),
         )
         if (keys.all { it.isEmpty() }) {
-            return@withContext "Koi brain key saved nahi hai. Settings me apni " +
-                "free Gemini key daalo, 'Keys save karo' dabao, phir " +
-                "'Keys check karo' se verify karo."
+            // v2.20 user order: Flora apne bare me technical baat
+            // kabhi nahi bolegi — na "key", na "code", na model ka
+            // naam. Basic baat local hi ho jayegi; gehra sawaal ho
+            // to pyar se ek line me line jodne ko bolegi.
+            return@withContext BasicTalk.reply(prompt)
+                ?: "Main tumse baat to kar rahi hun, par gehre sawaalon " +
+                    "ke liye meri soch wali line abhi judi nahi hai. " +
+                    "Settings me meri line jod do, phir main sab kuch " +
+                    "achhe se bata paungi. Tab tak kuch halka poochho na!"
         }
         // v2.15 root-cause fix: purane model names band ho chuke
         // hain (Gemini 1.5-flash retired, Groq llama-3.1-8b-instant
@@ -61,33 +67,15 @@ class BrainClient(private val prefs: FloraPreferences) {
             ?: groqAsk(prompt, keys[2], laneCodes)
             ?: groqAsk(prompt, keys[3], laneCodes)
         if (reply != null) return@withContext reply
-        val codes = laneCodes.map { it.second }
-        val detail = laneCodes.filter { it.second != 0 }
-            .joinToString(", ") { "${it.first}: ${if (it.second == -1) "network" else "code ${it.second}"}" }
-        when {
-            codes.any { it == 401 || it == 403 } ->
-                "Key saved hai par kaam nahi kar rahi — key galat ya " +
-                    "expired ho sakti hai. Settings me 'Keys check karo' " +
-                    "se dekho kaunsi lane fail hai, phir sahi key " +
-                    "dobara daal kar save karo. ($detail)"
-            codes.any { it == 429 } ->
-                "Key sahi lag rahi hai par uska quota khatam ho gaya " +
-                    "hai (free tier limit). Thodi der baad ya doosri " +
-                    "key se koshish karo. ($detail)"
-            codes.any { it == 404 } ->
-                "Server ne mana kiya (model nahi mila, $detail) — " +
-                    "provider ne model ka naam badal diya ho sakta " +
-                    "hai. App update me model list sudhar di gayi " +
-                    "hai; phir bhi ye aaye to 'Keys check karo' se " +
-                    "lane verify karo."
-            codes.all { it == -1 } ->
-                "Phone se internet par baat hi nahi ho payi " +
-                    "(network fail). Internet/Data ON karke dobara " +
-                    "koshish karo."
-            else ->
-                "Server se baat hui par jawab nahi mila " +
-                    "($detail). Thodi der baad dobara koshish karo."
-        }
+        // v2.20 user order: brain fail ho to chat me technical
+        // error KABHI nahi — na code, na model naam, na "key
+        // gadbad". Pehle basic baat local karo, phir warm line.
+        // Asli kaaran sirf Settings > "Keys check karo" me dikhega.
+        return@withContext BasicTalk.reply(prompt)
+            ?: "Hmm, abhi meri soch wali line thodi atak gayi hai, " +
+                "isliye poora jawab nahi de pa rahi hun. Tum phir se " +
+                "bolo na, main sun rahi hun — main yahin hun, " +
+                "tumhare saath."
     }
 
     /**
@@ -131,6 +119,12 @@ class BrainClient(private val prefs: FloraPreferences) {
             401, 403 -> LaneCheck(name, saved = true, valid = false, note = "galat ya expired hai — dobara daalo")
             429 -> LaneCheck(name, saved = true, valid = false, note = "quota khatam hai, baad me chalegi")
             -1 -> LaneCheck(name, saved = true, valid = false, note = "network se check nahi ho paya")
+            // v2.20: Gemini models-list par 404 ka matlab naam
+            // galat nahi — is key wale project me Gemini API on
+            // nahi hai, ya ye Gemini key hi nahi hai. Yehi wajah
+            // generate par bhi 404 deti hai (naam sahi hone par bhi).
+            404 -> if (name.startsWith("Gemini")) LaneCheck(name, saved = true, valid = false, note = "is key wale project me Gemini API on nahi lag rahi — AI Studio se nayi key banao")
+                else LaneCheck(name, saved = true, valid = false, note = "server ne mana kiya (code 404)")
             else -> LaneCheck(name, saved = true, valid = false, note = "server ne mana kiya (code $code)")
         }
     }
@@ -180,21 +174,26 @@ class BrainClient(private val prefs: FloraPreferences) {
         laneCodes: MutableList<Pair<String, Int>>,
     ): String? {
         if (key.isEmpty()) return null
-        // v2.15: 1.5-flash RETIRED hai — 2.5-flash pehle, phir
-        // 2.5-flash-lite (free tier). 404 par agla model try karo.
-        val models = listOf("gemini-2.5-flash", "gemini-2.5-flash-lite")
+        // v2.20 auto-discovery: hardcoded naam phir kabhi sade
+        // nahi — pehle is key par kaunse models chalte hain, wo
+        // list se poochho, phir unhi me se flash-prefer karke
+        // try karo. List na mile to purani fallback list.
+        val discovered = discoverGeminiModels(key)
+        val models = if (discovered.isNotEmpty()) discovered.take(3) else
+            listOf("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash")
         for (model in models) {
             val body = JSONObject()
                 .put("contents", JSONArray().put(
                     JSONObject().put("parts", JSONArray().put(
                         JSONObject().put(
                             "text",
-                            "Tum Flora ho, ek friendly AI assistant. User se aise baat karo " +
-                                "jaise dost se casual conversation ho — chhota jawab do, " +
-                                "aam taur par 1-2 line me, lamba ya formal mat bano. " +
-                                "Hindi/English mix me, user jis language me bole usi me " +
-                                "jawab do. Kaam ki baat pehle; extra detail sirf poochhe " +
-                                "par. Sawal: $prompt"
+                            "Tum Flora ho, ek friendly AI assistant. Muskura kar, pyar se, " +
+                                "meethi boli me jawab do — jaise apne dost se has kar baat " +
+                                "karte hain. User jis tone me bole (pyar se, mazak me), waisa " +
+                                "hi apnao. Chhota jawab do, aam taur par 1-2 line me, lamba " +
+                                "ya formal mat bano. Hindi/English mix me, user jis language " +
+                                "me bole usi me jawab do. Kaam ki baat pehle; extra detail " +
+                                "sirf poochhe par. Sawal: $prompt"
                         )
                     ))
                 ))
@@ -222,6 +221,59 @@ class BrainClient(private val prefs: FloraPreferences) {
         return null
     }
 
+    /**
+     * v2.20: is key par kaunse Gemini models generateContent
+     * kar sakte hain — models-list se poochho. Key ki value
+     * kabhi log nahi hoti, sirf naam wapas aate hain.
+     * Order: 2.5-flash > 2.5-flash-lite > koi flash > koi bhi.
+     */
+    private fun discoverGeminiModels(key: String): List<String> {
+        return try {
+            val conn = URL(
+                "https://generativelanguage.googleapis.com/v1beta/models?key=$key"
+            ).openConnection() as HttpURLConnection
+            try {
+                conn.requestMethod = "GET"
+                conn.connectTimeout = 15_000
+                conn.readTimeout = 15_000
+                if (conn.responseCode !in 200..299) return emptyList()
+                val text = BufferedReader(InputStreamReader(conn.inputStream, StandardCharsets.UTF_8)).readText()
+                val names = mutableListOf<String>()
+                val arr = JSONObject(text).optJSONArray("models") ?: return emptyList()
+                for (i in 0 until arr.length()) {
+                    val m = arr.optJSONObject(i) ?: continue
+                    val methods = m.optJSONArray("supportedGenerationMethods")
+                    var ok = false
+                    if (methods != null) {
+                        for (j in 0 until methods.length()) {
+                            if (methods.optString(j) == "generateContent") { ok = true; break }
+                        }
+                    }
+                    if (!ok) continue
+                    val full = m.optString("name", "")
+                    val short = full.removePrefix("models/")
+                    if (short.isBlank() || short.contains("image") || short.contains("tts") ||
+                        short.contains("embedding") || short.contains("aqa")
+                    ) continue
+                    names += short
+                }
+                val flash = names.filter { it.contains("flash") }
+                val first = names.firstOrNull { it == "gemini-2.5-flash" }
+                val lite = names.firstOrNull { it == "gemini-2.5-flash-lite" }
+                val ordered = mutableListOf<String>()
+                if (first != null) ordered += first
+                if (lite != null && lite != first) ordered += lite
+                for (n in flash) if (n !in ordered) ordered += n
+                for (n in names) if (n !in ordered) ordered += n
+                ordered
+            } finally {
+                conn.disconnect()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     private fun groqAsk(
         prompt: String,
         key: String,
@@ -238,11 +290,13 @@ class BrainClient(private val prefs: FloraPreferences) {
                 .put("messages", JSONArray()
                     .put(JSONObject().put("role", "system").put(
                         "content",
-                        "Tum Flora ho, ek friendly AI assistant. User se aise baat karo " +
-                            "jaise dost se casual conversation ho — chhota jawab do, " +
-                            "aam taur par 1-2 line me, lamba ya formal mat bano. " +
-                            "Hindi/English mix me, user jis language me bole usi me " +
-                            "jawab do. Kaam ki baat pehle; extra detail sirf poochhe par."
+                        "Tum Flora ho, ek friendly AI assistant. Muskura kar, pyar se, " +
+                            "meethi boli me jawab do — jaise apne dost se has kar baat " +
+                            "karte hain. User jis tone me bole (pyar se, mazak me), waisa " +
+                            "hi apnao. Chhota jawab do, aam taur par 1-2 line me, lamba " +
+                            "ya formal mat bano. Hindi/English mix me, user jis language " +
+                            "me bole usi me jawab do. Kaam ki baat pehle; extra detail " +
+                            "sirf poochhe par."
                     ))
                     .put(JSONObject().put("role", "user").put("content", prompt))
                 )
