@@ -560,3 +560,6 @@ maujood, index bhi 200. Download page ab live hai.
 - Host: Supabase Storage public bucket flora-models (URL FloraConfig me); bucket abhi bana nahi hai — tab tak app bundled list dikhayegi. Bucket dashboard browser task se banega (API ke liye service key nahi hai).
 - Audit: 5 files brace/paren 0/0; manifest JSON valid; unused imports hataye.
 - Test entry: docs/FLORA_V221_TEST_ENTRY.md.
+
+## v2.21 test-entry naam collision — pakda aur sudhara (2026-10-28 ~16:42 IST)
+- FLORA_V221_TEST_ENTRY.md pehle se maujood thi (purani v2.2.1 stale-fix ki) — usko overwrite NAHI kiya; nayi file docs/FLORA_V2_21_TEST_ENTRY.md banayi (v2.21 ke liye). Purani file ka content commit 277d1056 me v2.21 ke saath chala gaya tha (docs-only, code par asar nahi) — sahi test entry is naye commit me hai.
