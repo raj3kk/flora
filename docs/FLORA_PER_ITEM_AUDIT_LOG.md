@@ -221,3 +221,30 @@
 - Phone test entry: docs/FLORA_RETENTION_TEST_ENTRY.md
   (30-din prune ka phone proof 30 din baad hi possible hai
   — ye limit entry me imaandari se likhi hai).
+
+## Free "15 tools" claim — HONEST TEXT FIX (PREP, push v2.9 CI PASS ke baad)
+- Problem: "lagbhag 15 tools" ka vaada tha par 15 tools ki
+  koi list kabhi define nahi hui; ToolsScreen me 7 sections
+  + baaki screens ke tools hain, count ka koi matlab nahi.
+  Fake gating lagana free users se chalte hue tools chheenna
+  hota — bina user order ke nahi kiya gaya.
+- Fix: har jagah "app me maujood saare tools" likha gaya
+  (FloraConfig comment, FloraApp, LegalScreens, pricing);
+  unused FREE_TOOLS_COUNT constant hata diya gaya.
+- Ye claim-fix hai, feature-removal nahi — free users ko
+  kuch kam nahi milega.
+
+## v2.9 retention — CI PASS VERIFIED (2026-10-28 ~11:12 IST)
+- Run 40638744449 completed success, artifact flora-debug-apk
+  59,413,304 bytes, expired false. v2.9 = latest PASS.
+- Admin-wiring run 40638511792 bhi success (59,412,232 bytes).
+- Gate clear: v2.10 push ho sakta hai.
+
+## v2.10 free-tools honest text + dormant CLOSED repo note — PUSHED
+- "15 tools" vaada hata kar "app me maujood saare tools"
+  likha (FloraConfig, FloraApp, LegalScreens, pricing);
+  unused FREE_TOOLS_COUNT constant hataya. Ye claim-fix hai,
+  free users ko kuch kam nahi milega.
+- Round 1 items 3-4 CLOSED section ab repo doc me hai
+  (pehle sirf local file me tha — sudhaar).
+- Build test: CI run — result push ke baad verify hoga.

@@ -354,7 +354,7 @@ fun FloraApp(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "Free: 10 min/day, ~15 tools  •  Pro: ${FloraConfig.PRO_PRICE_TEXT}  •  " +
+                "Free: 10 min/day, app me maujood saare tools  •  Pro: ${FloraConfig.PRO_PRICE_TEXT}  •  " +
                     "Support: ${FloraConfig.SUPPORT_EMAIL}"
             )
             licence?.let {

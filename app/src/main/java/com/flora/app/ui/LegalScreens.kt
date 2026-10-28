@@ -80,7 +80,7 @@ fun TermsScreen() {
             Text("Flora — Terms of Use")
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "1. Free plan: roz 10 minute baat, lagbhag 15 tools. Pro plan: " +
+                "1. Free plan: roz 10 minute baat, app me maujood saare tools. Pro plan: " +
                     "₹199/month — unlimited baat, saare tools, FCM push " +
                     "(server live hai; push ke liye admin + phone ka token " +
                     "sync zaroori hai). Live wallpaper aur conversation mode " +

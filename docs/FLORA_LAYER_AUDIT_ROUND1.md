@@ -93,7 +93,17 @@
   (push-token-sync live test) — asli user abhi koi nahi hai.
   Test rows ki cleanup Round 2 me (dashboard se delete).
 
-## Round 2 prep (local only, push v2.8 CI PASS ke baad)
+## Round 1 items 3–4 — CLOSED (dormant note repo me)
+- settings table (0 rows) aur plans table (2 seeds) ko app ka
+  koi code runtime par read nahi karta — ye live SQL check se
+  pakka hua (policies bhi in par koi nahi hain).
+- Resolution: licence-verify + admin-approve hi source-of-truth
+  hain (plan_id + 30 din). Tables delete NAHI ki gayi hain
+  (destructive nahi); ye note ab repo ke isi doc me darj hai.
+- Sudhaar note: pehle ye note sirf local schema file me likha
+  gaya tha (jo repo ke bahar hai, push me nahi gaya tha) —
+  isliye isko yahan repo doc me dobara darj kiya gaya hai
+  taaki pushed history me bhi mile.
 - settings/plans dormant resolution (taiyaar): settings table
   ka app me koi use nahi hai aur plans table ko koi code read
   nahi karta — inko schema doc me "dormant config, runtime

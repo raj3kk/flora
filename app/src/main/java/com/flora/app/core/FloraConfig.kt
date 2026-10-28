@@ -9,9 +9,12 @@ object FloraConfig {
     const val APP_NAME = "Flora"
     const val SUPPORT_EMAIL = "flipify.com@gmail.com"
 
-    // Free plan: 10 minutes talk per day, ~15 tools.
+    // Free plan: 10 minutes talk per day, all tools currently
+    // built in the app. NOTE: koi "15 tools" ki list kabhi
+    // define nahi hui thi — isliye is count par koi gating
+    // nahi hai (gating lagana free users se chalte hue tools
+    // chheenna hota, bina user order ke nahi kiya gaya).
     const val FREE_TALK_SECONDS_PER_DAY = 600
-    const val FREE_TOOLS_COUNT = 15
 
     // Pro plan: Rs 199 per month (19900 paise), unlimited talk, all tools.
     const val PRO_PRICE_PAISA_PER_MONTH = 19900
