@@ -4091,7 +4091,7 @@ private fun SettingsScreen(
             }) { Text("PIN set karo") }
             Spacer(modifier = Modifier.height(12.dp))
             Row {
-                Text("Guardian mode (ON = sensitive kaam ke liye PIN dobara chahiye)")
+                Text("Guardian mode (ye setting save hoti hai; sensitive kaam par PIN dobara maangna is version me abhi lagu nahi hai)")
                 Spacer(modifier = Modifier.padding(4.dp))
                 Switch(checked = guardianMode, onCheckedChange = { value ->
                     scope.launch {
@@ -4105,7 +4105,7 @@ private fun SettingsScreen(
                     }
                 })
             }
-            Text("Voice-match abhi is gate me nahi hai — jab tak aapke consent samples aur model step poora nahi hota, PIN hi gate hai.")
+            Text("Is gate ka PIN check sensitive kaam par abhi lagu nahi hai — setting save hoti hai, wiring baaki hai. Chat lock ka PIN + awaaz check alag se chalta hai.")
             Spacer(modifier = Modifier.height(12.dp))
             var verifyPin by remember { mutableStateOf("") }
             var faceLock by remember { mutableStateOf(false) }

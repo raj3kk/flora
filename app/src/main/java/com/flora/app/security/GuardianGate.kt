@@ -10,6 +10,12 @@ package com.flora.app.security
  * aur matcher available hai, tab unlock ke liye PIN + voice
  * dono chahiye. Enrolled nahi hai to PIN hi kaafi hai (pehle
  * jaisa) — aur face-match akela kabhi unlock nahi karta.
+ *
+ * NOTE (sweep 2026-10-29): is class ke check methods
+ * (canUnlock/canUnlockFull/canAccessSensitive) abhi kisi
+ * sensitive action se wired nahi hain — chat lock apna PIN +
+ * awaaz check alag se karta hai; sensitive-action wiring
+ * pending hai (user faisla: kaunse actions gate honge).
  */
 class GuardianGate {
     private var pinVerifiedThisSession = false
