@@ -644,3 +644,8 @@ maujood, index bhi 200. Download page ab live hai.
 - Imaandari: ye abhi bhi tuning ka pehla kadam hai — asli phone-speech tune tab hoga jab user "Hey Flora" recordings dega (tab tak false trigger possible hai, ye baat service comment me khuli hai).
 - Audit: 3 files brace/paren balance; sensitivity row Settings me wakeStatus ke neeche, enrol button se pehle (grep-verify); declaration order: wakeThreshold state launcher se pehle wale block me.
 - Baaki P1: Deepgram streaming barge-in; phir P2–P5, S2/S3, R3, EK final deploy.
+
+## v2.22 chunk 4b CI FAIL — root fix (2026-10-28 ~17:30 IST)
+- Wajah (job log, d5aaead6): FloraApp.kt:2203 `Unresolved reference: voice` — chunk 4 me Settings ke persona row me `voice.setPersona(id)` likha tha, par wo row SettingsScreen composable me hai jiske params me `voice` tha hi nahi (voice sirf main FloraApp composable me hai). Pehle ke fail (VoiceMatcher import) ne is error ko chhupaya hua tha — ek error fix hote hi agla dikha.
+- Fix: SettingsScreen signature me `voice: VoiceEngine` param + call site par `voice` pass + app-start LaunchedEffect me `voice.setPersona(prefs.persona())` (taaki restart ke baad bhi persona ki awaaz wahi rahe, sirf command/Settings switch par nahi).
+- Audit: SettingsScreen ka ek hi call site (grep); VoiceEngine import pehle se tha; SettingsScreen range me `voice.` ka ek hi use; brace/paren balance.

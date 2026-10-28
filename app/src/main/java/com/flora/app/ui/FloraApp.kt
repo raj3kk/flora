@@ -247,6 +247,7 @@ fun FloraApp(
         try { showGate = !prefs.permissionsGateDone() } catch (e: Exception) { }
         try {
             theme = prefs.theme()
+            try { voice.setPersona(prefs.persona()) } catch (e: Exception) { }
             try { voiceView = prefs.voiceView() } catch (e: Exception) { }
             // Auto mode (v2.17): ON tha to notification wapas dikhao.
             try {
@@ -1588,7 +1589,7 @@ fun FloraApp(
                 }
                 }
             } else if (screen == Screen.SETTINGS) {
-                SettingsScreen(prefs, licenceClient, pinVault, guardian, brain, { showGate = true }, { status ->
+                SettingsScreen(prefs, licenceClient, pinVault, guardian, brain, voice, { showGate = true }, { status ->
                     licence = status
                 }, autoMode, { value ->
                     autoMode = value
@@ -1720,6 +1721,7 @@ private fun SettingsScreen(
     pinVault: PinVault,
     guardian: GuardianGate,
     brain: BrainClient,
+    voice: VoiceEngine,
     onShowPermissions: () -> Unit,
     onLicence: (LicenceStatus) -> Unit,
     autoMode: Boolean,
