@@ -689,3 +689,12 @@ maujood, index bhi 200. Download page ab live hai.
 - sendChat me "notification batao / notifications batao / koi notification aayi" branch: NotificationStore se aakhri 3 (title warna text, 100 chars) bolkar + chat me likhkar. Khali ho to access ON karne ka raasta batata hai.
 - Privacy: sirf user ke poochhne par bolta hai — auto-announce kabhi nahi (private content apne aap bolna leak hota).
 - Audit: branch normal-mode block ke baad, call block se pehle (return ke saath, brain tak nahi jaata); brace/paren balance.
+
+## v2.22 P2 audit — F4 PARTIAL, F7/F8 WIRED (2026-10-28 ~18:25 IST, code check only, phone test pending)
+- F4 general tap/type/swipe — PARTIAL: FloraAutomationService me primitives poore hain (clickText/clickAnyText, setTextOnFirstEditable/typeIntoFocused, swipeUp/swipeDown via dispatchGesture, scroll, goBack/goHome; manifest me BIND_ACCESSIBILITY_SERVICE registered) — par sendChat me general voice commands ("is par tap karo", "neeche scroll karo", "type karo X") wired NAHI hain. Sirf 2 flows primitives use karte hain: ChatGPT image prompt + Play Store install. Fix path: general commands ko Auto Mode gate + confirm ke saath sendChat me jodna (naya feature, isliye R3 se pehle alag item me banega, chupke se nahi).
+- F7/F8 continuous vision — WIRED: LiveScreen me persistent MediaProjection session (v2.20) + continuous loop — max 10 frame/session, 10s gap, har frame VisionClient (Gemini key) ko; session sawaal ke liye zinda rehta hai, dispose par stop. Frame sirf user ke sawaal ke liye jaata hai (server par continuous stream nahi). Phone test (permission dialog + asli vision jawab) abhi pending hai.
+
+## v2.22 P2-F4 poora — general tap/type/swipe voice commands (2026-10-28 ~18:30 IST, CI PENDING)
+- sendChat me naye commands: "tap karo X" / "click karo X" / "X par tap karo", "scroll up/down karo" (upar/neeche), "type karo X", "back/wapas jao", "home jao" — sab FloraAutomationService primitives par.
+- GATE: Accessibility OFF ho to sirf guidance (execute nahi); Auto Mode OFF ho to execute nahi (sirf "Auto Mode ON karo" batana); har chalaya kaam Auto Log me. Koi chhupa execution nahi.
+- Audit: prefix lengths verify (tap 9, click 11, type 10, " par tap karo" 13); sab service calls Boolean; brace/paren balance.

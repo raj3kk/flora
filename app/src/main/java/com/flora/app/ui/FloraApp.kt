@@ -1186,6 +1186,71 @@ fun FloraApp(
                         }
                         return
                     }
+                    // General tap/type/swipe voice commands (v2.22,
+                    // P2-F4 poora): primitives FloraAutomationService
+                    // me pehle se the, ab awaaz se bhi chalte hain.
+                    // GATE: Accessibility OFF ho to guidance; Auto
+                    // Mode OFF ho to execute NAHI (sirf batana) —
+                    // har chalaya hua kaam Auto Log me darj hota hai.
+                    if (lower.startsWith("tap karo ") ||
+                        lower.startsWith("click karo ") ||
+                        lower.endsWith(" par tap karo") ||
+                        lower == "scroll up karo" ||
+                        lower == "upar scroll karo" ||
+                        lower == "scroll down karo" ||
+                        lower == "neeche scroll karo" ||
+                        lower.startsWith("type karo ") ||
+                        lower == "back jao" ||
+                        lower == "wapas jao" ||
+                        lower == "home jao"
+                    ) {
+                        input = ""
+                        val service = FloraAutomationService.instance
+                        if (service == null) {
+                            val msg = "Tap/type/scroll ke liye Accessibility ON chahiye. Permissions screen me Accessibility ON karo, phir dobara bol dena."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                            return
+                        }
+                        if (!autoMode) {
+                            val msg = "Ye kaam Auto Mode me hota hai — Auto Mode ON karo, phir bol dena."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                            return
+                        }
+                        val (desc, ok) = when {
+                            lower.startsWith("tap karo ") ->
+                                "Tap: ${question.substring(9).trim()}" to
+                                    service.clickText(question.substring(9).trim())
+                            lower.startsWith("click karo ") ->
+                                "Tap: ${question.substring(11).trim()}" to
+                                    service.clickText(question.substring(11).trim())
+                            lower.endsWith(" par tap karo") ->
+                                "Tap: ${question.dropLast(13).trim()}" to
+                                    service.clickText(question.dropLast(13).trim())
+                            lower == "scroll up karo" || lower == "upar scroll karo" ->
+                                "Scroll up" to service.swipeUp()
+                            lower == "scroll down karo" || lower == "neeche scroll karo" ->
+                                "Scroll down" to service.swipeDown()
+                            lower.startsWith("type karo ") -> {
+                                val t = question.substring(10).trim()
+                                val typed = service.typeIntoFocused(t) ||
+                                    service.setTextOnFirstEditable(t)
+                                "Type: $t" to typed
+                            }
+                            lower == "back jao" || lower == "wapas jao" ->
+                                "Back" to service.goBack()
+                            else ->
+                                "Home" to service.goHome()
+                        }
+                        val msg = if (ok) "$desc ho gaya." else "$desc nahi ho paya — screen par wo cheez dikh rahi hai ya nahi, dekh lo."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        scope.launch {
+                            try { autoLogStore.add("Voice $desc -> ${if (ok) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                        }
+                        return
+                    }
                     if (lower.startsWith("call ")) {
                         val raw = question.substring(5).trim()
                         val number = raw.filter { it.isDigit() || it == '+' }
