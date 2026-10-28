@@ -326,8 +326,8 @@ fun FloraApp(
     // likha jata hai; ongoing notification + "auto mode band" chhede nahi.
     var guardianPinInput by remember { mutableStateOf("") }
     var guardianPinNote by remember { mutableStateOf("") }
-    var guardianPinPending by remember { mutableStateOf<(() -> Unit)?>(null) }
-    fun runGuardedVoice(action: () -> Unit) {
+    var guardianPinPending by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
+    fun runGuardedVoice(action: suspend () -> Unit) {
         scope.launch {
             val gOn = try { prefs.guardianMode() } catch (e: Exception) { false }
             val pOn = try { prefs.pinEnabled() } catch (e: Exception) { false }
@@ -3971,7 +3971,7 @@ fun FloraApp(
                                 guardianPinPending = null
                                 guardianPinInput = ""
                                 guardianPinNote = ""
-                                pending()
+                                scope.launch { pending() }
                             } else {
                                 guardianPinNote = "Galat PIN."
                                 guardianPinInput = ""
@@ -4062,8 +4062,8 @@ private fun SettingsScreen(
     // kaam rehta hai (fail-safe: bina PIN ke kuch nahi chalta).
     var guardianPinInput by remember { mutableStateOf("") }
     var guardianPinNote by remember { mutableStateOf("") }
-    var guardianPinPending by remember { mutableStateOf<(() -> Unit)?>(null) }
-    fun runGuardedSettings(action: () -> Unit) {
+    var guardianPinPending by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
+    fun runGuardedSettings(action: suspend () -> Unit) {
         scope.launch {
             val gOn = try { prefs.guardianMode() } catch (e: Exception) { false }
             val pOn = try { prefs.pinEnabled() } catch (e: Exception) { false }
@@ -4974,7 +4974,7 @@ private fun SettingsScreen(
                                 guardianPinPending = null
                                 guardianPinInput = ""
                                 guardianPinNote = ""
-                                pending()
+                                scope.launch { pending() }
                             } else {
                                 guardianPinNote = "Galat PIN."
                                 guardianPinInput = ""
