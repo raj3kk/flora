@@ -326,3 +326,54 @@
   bhi isi push me honest text se sudhara; licence-verify repo
   copy deployed code se sync ki gayi.
 - Build test: Vercel deploy + /download live check push ke baad.
+
+## Download page — LIVE VERIFIED (2026-10-28 ~12:50 IST)
+- Naya deploy flora-2318h9ew5-webbuilder1.vercel.app READY;
+/download clean URL 200, SwissTransfer link + SHA-256 page par
+maujood, index bhi 200. Download page ab live hai.
+
+## Brain proxy Phase B step 1 — CODE READY, deploy baaki
+- supabase/functions/brain-proxy/index.ts likha: Gemini ->
+  Groq fallback, short-casual style, prompt cap 4000 chars,
+  keys sirf env se (GEMINI_API_KEY/GROQ_API_KEY), kabhi log
+  nahi hongi. Keys missing hon to saaf 503.
+- HONEST LIMIT: JWT gate abhi nahi (app me Auth session nahi
+  hai) — key-burn risk step 2 me band hoga. Owner keys tabhi
+  daale jab proxy istemal chahiye.
+
+## Brain proxy Phase B step 1 — DEPLOYED + LIVE TEST PASS (2026-10-28 ~12:51 IST)
+- Dashboard editor se NAYA function brain-proxy banaya,
+  confirmation "Successfully deployed edge function" mili.
+  Koi purana function/secret/table nahi chheda; GEMINI_API_KEY
+  / GROQ_API_KEY unset hain (owner baad me set karega).
+- Live test: POST par HTTP 503 {"error":"brain keys not
+  configured"} — keys unset hone par yehi expected hai, isliye
+  ye PASS hai, fail nahi. Ab functions total 7 live hain.
+- Baaki: owner keys set kare tabhi asli reply test hoga; JWT
+  gate + quota step 2 me (app Auth ke baad).
+
+## Backup refresh + restore test — PASS (2026-10-28 ~12:59 IST)
+- Naya backup: apk-recovery-backups/backup-20261028-1255/
+  apk-recovery.tar.gz, 105,684,969 bytes, 43,557 entries.
+- Restore test PASS: tar listing OK; 2 spot-check files
+  (audit log + brain-proxy code) byte-identical nikli;
+  tar se nikala original Maya APK sha256
+  886f6bca...c456 se match (original untouched).
+- Flora v2.11 APK sha256 5e320e94...b5a45 manifest me darj
+  hai (APK file khud tar se exclude hai — wo GitHub artifact
+  + SwissTransfer par maujood hai).
+- NOTE: extract karte waqt ownership change block hota hai
+  (uid 0) — --no-same-owner se extract karo, content sahi
+  milta hai.
+
+## Voice-match frontend validation — PASS (2026-10-28 ~13:05 IST)
+- Asli conformer encoder + VAD (HF tflite-hub, Apache-2.0) par
+  Lingvo-exact frontend ke saath end-to-end test chala:
+  same-speaker cosine mean 0.671, noise ~0.33, silence
+  VAD-reject, noise stability 0.877. Script:
+  wakeword/validate_voice_match.py (local workspace).
+- Kotlin port ke liye: exact TF mel matrix asset me ship
+  karna hai, HTK formula nahi. Threshold starting guess
+  ~0.45-0.50; final phone test + doosre speaker data se.
+- Baaki: Kotlin port + enrol/match UI + phone test (ye item
+  phone test ke bina PASS nahi mana jayega).
