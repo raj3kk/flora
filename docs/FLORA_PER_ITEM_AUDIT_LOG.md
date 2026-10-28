@@ -738,3 +738,9 @@ maujood, index bhi 200. Download page ab live hai.
 - Audit: prefix length verify (routine sikhao = 15); teaching check sendChat ke shuru me (pending se pehle, taaki steps execute na hon); Routine(name, commands) + load/save signatures verify; brace/paren balance.
 - P4 baaki: F21 PC link — phone-only code se nahi banega (PC companion + pairing design chahiye), isliye pending rakha hai, jhootha "ho gaya" nahi.
 - CI: 3a5cd20b (F4) bhi SUCCESS — green chain jaari.
+
+## v2.22 P5-F9 poora — number-guessing game voice (2026-10-28 ~19:15 IST, CI PENDING)
+- "game khelo" → 1-10 number, guess par chhota/bada hint, jeet par tries ke saath badhai, "game band karo" par number batakar band. Poora on-device, koi key/network nahi. Game ke beech baaki commands normal chalte hain (game background me rehta hai); pending clarification se game ko naya command mana jaata hai.
+- Audit: brace/paren balance.
+- CI: 005ebe52 (F12 research) bhi SUCCESS — green chain jaari.
+- P5 survey: Home relay code ZERO, game ZERO tha (ab game hai); dedup/weak-network/learning ke code-level survey baaki.

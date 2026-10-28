@@ -203,6 +203,9 @@ fun FloraApp(
     // Teach-by-doing state (v2.22, P4-F20): naam + darj steps.
     var teachingRoutine by remember { mutableStateOf<String?>(null) }
     var teachingSteps by remember { mutableStateOf<List<String>>(emptyList()) }
+    // Number-guessing game state (v2.22, P5-F9): poora on-device.
+    var gameNumber by remember { mutableStateOf<Int?>(null) }
+    var gameTries by remember { mutableStateOf(0) }
     val appContext = LocalContext.current
     // Barge-in controller (v2.22, chunk 7): appContext ke BAAD hi
     // (order trap — pehle likhne par CI ne Unresolved reference
@@ -1111,6 +1114,7 @@ fun FloraApp(
                         val isNewCommand = ansLower.startsWith("call ") ||
                             ansLower.startsWith("sms ") ||
                             ansLower.startsWith("whatsapp ") ||
+                            ansLower.startsWith("game") ||
                             ansLower.startsWith("auto mode") ||
                             ansLower == "romantic mode" ||
                             ansLower == "normal mode"
@@ -1292,6 +1296,50 @@ fun FloraApp(
                             }
                         }
                         return
+                    }
+                    // Number-guessing game (v2.22, P5-F9): poora
+                    // on-device, koi key/network nahi. "game khelo"
+                    // se shuru, number bolo, "game band karo" se band.
+                    if (teachLower.startsWith("game khelo") ||
+                        teachLower == "game" ||
+                        teachLower == "khelo"
+                    ) {
+                        input = ""
+                        gameNumber = (1..10).random()
+                        gameTries = 0
+                        val msg = "Game shuru! 1 se 10 ke beech ek number socha hai — guess karo."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        return
+                    }
+                    if (gameNumber != null) {
+                        val target = gameNumber!!
+                        if (teachLower == "game band karo" || teachLower == "game chhodo") {
+                            input = ""
+                            gameNumber = null
+                            val msg = "Theek hai, game band. Number $target tha."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                            return
+                        }
+                        val guess = question.filter { it.isDigit() }.toIntOrNull()
+                        if (guess != null && guess in 1..10) {
+                            input = ""
+                            gameTries += 1
+                            val msg = when {
+                                guess == target -> {
+                                    gameNumber = null
+                                    "Sahi jawab! $gameTries baar me jeet gaye. Dobara khelna ho to 'game khelo' bolo."
+                                }
+                                guess < target -> "Chhota hai — bada number bolo."
+                                else -> "Bada hai — chhota number bolo."
+                            }
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                            return
+                        }
+                        // Number nahi hai to game background me rehta
+                        // hai — baaki commands normal chalenge.
                     }
                     // Research voice commands (v2.22, P3-F12):
                     // ToolsScreen me ye tools pehle se the, awaaz
