@@ -134,3 +134,16 @@
   risk test entry me pehle se likha hai.
 - v2.5 FCM token sync (2026-10-28): push-token-sync Edge Function DEPLOYED + live-verified (invalid->400 detail, test-UUID->ok:true); app: FloraConfig path, LicenceClient.syncPushToken, FloraApp token-fetch sync, FloraMessagingService onNewToken sync; balance 0/0/0 all touched files; CI pending; phone test entry FLORA_FCM_SYNC_TEST_ENTRY.md. AUDIT: code PASS, build PENDING.
 - v2.5 FCM token sync PASS (2026-10-28 ~10:18 IST): CI run 40633826232 completed success, job build success, artifact 12792533866 flora-debug-apk 59,405,126 bytes, expired false. AUDIT: code PASS + build PASS + test entry FLORA_FCM_SYNC_TEST_ENTRY.md = DONE (phone test still pending separately).
+- v2.6 usage wiring PASS (2026-10-28 ~10:26 IST): CI run 40634394059 completed success, artifact 12792629668 flora-debug-apk 59,405,561 bytes, expired false. AUDIT: code PASS + build PASS + test entry FLORA_USAGE_TEST_ENTRY.md = DONE (phone test still pending separately).
+
+## v2.7 (Round 1 strings fix) — audit entry (push pending)
+- Item: Terms Pro text + website Pro text me jhootha vaada
+  (live wallpaper / conversation mode Pro feature) hata kar
+  imaandari se "abhi available nahi, baad me aayenge" likha.
+- Code audit: LegalScreens brace/paren 0/0; sirf text change,
+  koi logic change nahi; koi copy/old-key violation nahi.
+- Build test: CI run (v2.7) — result push ke baad verify hoga.
+- Phone test entry: Terms screen kholo, Pro line padho —
+  wallpaper/conversation "abhi nahi" dikhna chahiye.
+- Web: admin.html Audit list wired + plans text honest;
+  index/pricing text honest. Deploy ke baad 200-check hoga.

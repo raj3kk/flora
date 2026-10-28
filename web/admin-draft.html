@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flora Admin — Phase A</title>
+<!--
+  Flora Admin Panel Phase A — payments approvals LIVE via
+  admin-approve Edge Function (deployed 2026-10-28).
+  Tables live hain (payment_submissions, admin_audit,
+  users.is_admin). Owner ko dashboard/SQL se apne account
+  par is_admin=true set karna hoga, tabhi approve/reject
+  chalega — non-admin ko function 403 dega.
+  Is page me koi secret value NAHI hai aur kabhi nahi hogi:
+  SUPABASE_URL / ANON_KEY sirf publishable client config hai
+  (RLS data ki raksha karta hai). Service role key yahan kabhi
+  nahi aayegi. Secrets ki status sirf present/missing dikhegi.
+  Money flow: website signup -> UPI pay -> UTR submit ->
+  admin approval -> licence active. Koi payment gateway,
+  koi auto-charge nahi.
+  Sections Users/Usage/Secrets/Audit abhi placeholder hain —
+  sirf Payments list + approve/reject wired hai.
+-->
+<style>
+body { font-family: system-ui, sans-serif; margin: 24px; line-height: 1.5; }
+h1 { font-size: 22px; }
+section { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 16px 0; }
+label { display: block; margin: 8px 0 4px; }
+input, button { padding: 8px; font-size: 15px; }
+.note { color: #555; font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>Flora Admin (Phase A)</h1>
+<p class="note">Login ke baad hi sections dikhenge. Admin check server-side
+RLS se hota hai — is page ka JavaScript kisi ko admin nahi banata.</p>
+
+<section id="login-section">
+  <h2>Login</h2>
+  <label>Email <input id="admin-email" type="email" placeholder="owner email"></label>
+  <label>Password <input id="admin-password" type="password"></label>
+  <button id="login-btn" type="button">Login</button>
+  <p class="note" id="login-status">Abhi login nahi hua hai.</p>
+</section>
+
+<section id="users-section">
+  <h2>Users &amp; Licences</h2>
+  <p class="note">List/search, plan, status, device, activate/revoke.
+  Har action admin_audit me darj hoga.</p>
+  <div id="users-list">Login ke baad list yahan aayegi.</div>
+</section>
+
+<section id="payments-section">
+  <h2>Payments / UTR approvals</h2>
+  <p class="note">Pending list: amount + note + UTR match karke
+  approve (licence active) ya reject (reason zaroori) karo.</p>
+  <div id="payments-list">Login ke baad list yahan aayegi.</div>
+</section>
+
+<section id="usage-section">
+  <h2>Usage</h2>
+  <p class="note">Har user ka daily talk seconds vs 600 sec free limit.</p>
+  <div id="usage-list">Login ke baad list yahan aayegi.</div>
+</section>
+
+<section id="plans-section">
+  <h2>Plans</h2>
+  <p class="note">Sirf view. Price change owner-gated hai — admin
+  propose karega, owner confirm karega.</p>
+  <div>Free: 600 talk sec/day, basic tools. Pro: ₹199/mahina,
+  unlimited talk, sab tools, FCM push. (Live wallpaper aur conversation mode abhi available nahi hain — baad me aayenge.)</div>
+</section>
+
+<section id="secrets-section">
+  <h2>Secrets status</h2>
+  <p class="note">Sirf present/missing dikhega — koi value yahan
+  kabhi nahi dikhegi, edit bhi nahi hogi. Rotation Supabase
+  dashboard (owner-only) se hi hogi.</p>
+  <div id="secrets-list">Login ke baad status yahan aayega.</div>
+</section>
+
+<section id="audit-section">
+  <h2>Audit log</h2>
+  <p class="note">Append-only: kaun admin, kya action, kis user par,
+  pehle/baad me kya tha.</p>
+  <div id="audit-list">Login ke baad log yahan aayega.</div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// Phase A wiring — approve/reject admin-approve Edge Function
+// se hota hai (server-side admin check + licence activation +
+// audit insert, sab function ke andar). Client kabhi licence
+// ya payment status seedha update nahi karta — pehle wala
+// client-side draft isi wajah se badla gaya hai.
+const SUPABASE_URL = "https://keomyweghrmhqglaxmyv.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_qMjX-cw11dB_Y9nT8IlVzw_nPup-Yxe";
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let adminSession = null;
+
+async function callApprove(paymentId, action, rejectReason) {
+  const res = await fetch(SUPABASE_URL + "/functions/v1/admin-approve", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + adminSession.access_token,
+    },
+    body: JSON.stringify({ payment_id: paymentId, action, reject_reason: rejectReason || undefined }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}
+
+async function loadPayments() {
+  const { data, error } = await client
+    .from("payment_submissions")
+    .select("id,user_id,amount_paisa,utr,note,status,created_at")
+    .eq("status", "pending").order("created_at", { ascending: true });
+  const el = document.getElementById('payments-list');
+  if (error) { el.textContent = "Load fail: " + error.message; return; }
+  if (!data.length) { el.textContent = "Koi pending payment nahi hai."; return; }
+  el.innerHTML = "";
+  data.forEach(row => {
+    const div = document.createElement('div');
+    div.textContent = row.user_id + " | ₹" + (row.amount_paisa / 100) +
+      " | UTR " + row.utr + " | " + row.note + " ";
+    const ok = document.createElement('button');
+    ok.textContent = "Approve";
+    ok.onclick = async () => {
+      try {
+        const data = await callApprove(row.id, "approve");
+        alert("Approved. Licence active, expires: " + (data.expires_at || "?"));
+      } catch (e) { alert("Approve fail: " + e.message); return; }
+      loadPayments();
+    };
+    const no = document.createElement('button');
+    no.textContent = "Reject";
+    no.onclick = async () => {
+      const reason = prompt("Reject reason (zaroori):");
+      if (!reason) return;
+      try { await callApprove(row.id, "reject", reason); }
+      catch (e) { alert("Reject fail: " + e.message); return; }
+      loadPayments();
+    };
+    div.appendChild(ok); div.appendChild(no); el.appendChild(div);
+  });
+}
+
+document.getElementById('login-btn').addEventListener('click', async () => {
+  const email = document.getElementById('admin-email').value;
+  const password = document.getElementById('admin-password').value;
+  const { data, error } = await client.auth.signInWithPassword({ email, password });
+  const st = document.getElementById('login-status');
+  if (error) { st.textContent = "Login fail: " + error.message; return; }
+  adminSession = data.session;
+  st.textContent = "Login ho gaya: " + data.user.email +
+    " (admin check server-side function me hoga — non-admin ko approve/reject par 403 milega).";
+  loadPayments();
+});
+</script>
+</body>
+</html>

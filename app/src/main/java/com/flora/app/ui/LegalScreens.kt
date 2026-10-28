@@ -77,9 +77,11 @@ fun TermsScreen() {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 "1. Free plan: roz 10 minute baat, lagbhag 15 tools. Pro plan: " +
-                    "₹199/month — unlimited baat, saare tools/characters, live " +
-                    "wallpaper, conversation mode, FCM push (client taiyaar hai; " +
-                    "server se push jab server secret set ho)."
+                    "₹199/month — unlimited baat, saare tools, FCM push " +
+                    "(server live hai; push ke liye admin + phone ka token " +
+                    "sync zaroori hai). Live wallpaper aur conversation mode " +
+                    "abhi available nahi hain — ye baad me aayenge, isliye " +
+                    "inhne Pro ka hissa samajhkar mat khareedna."
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(

@@ -18,8 +18,10 @@
   Money flow: website signup -> UPI pay -> UTR submit ->
   admin approval -> licence active. Koi payment gateway,
   koi auto-charge nahi.
-  Sections Users/Usage/Secrets/Audit abhi placeholder hain —
-  sirf Payments list + approve/reject wired hai.
+  Sections Users/Usage abhi placeholder hain (unki list ke liye
+  server function baaki hai); Audit list wired hai; Secrets
+  section by-design sirf note hai (values kabhi page par nahi
+  aayengi — status dashboard se hi dekha jayega).
 -->
 <style>
 body { font-family: system-ui, sans-serif; margin: 24px; line-height: 1.5; }
@@ -68,7 +70,7 @@ RLS se hota hai — is page ka JavaScript kisi ko admin nahi banata.</p>
   <p class="note">Sirf view. Price change owner-gated hai — admin
   propose karega, owner confirm karega.</p>
   <div>Free: 600 talk sec/day, basic tools. Pro: ₹199/mahina,
-  unlimited talk, sab tools, live wallpaper, conversation mode, FCM push.</div>
+  unlimited talk, sab tools, FCM push. (Live wallpaper aur conversation mode abhi available nahi hain — baad me aayenge.)</div>
 </section>
 
 <section id="secrets-section">
@@ -82,7 +84,7 @@ RLS se hota hai — is page ka JavaScript kisi ko admin nahi banata.</p>
 <section id="audit-section">
   <h2>Audit log</h2>
   <p class="note">Append-only: kaun admin, kya action, kis user par,
-  pehle/baad me kya tha.</p>
+  pehle/baad me kya tha. Admin hi dekh sakta hai (RLS).</p>
   <div id="audit-list">Login ke baad log yahan aayega.</div>
 </section>
 
@@ -147,6 +149,23 @@ async function loadPayments() {
   });
 }
 
+async function loadAudit() {
+  const { data, error } = await client
+    .from("admin_audit")
+    .select("id,admin_user_id,action,target_user_id,created_at")
+    .order("created_at", { ascending: false }).limit(50);
+  const el = document.getElementById('audit-list');
+  if (error) { el.textContent = "Load fail: " + error.message; return; }
+  if (!data.length) { el.textContent = "Koi audit entry nahi hai."; return; }
+  el.innerHTML = "";
+  data.forEach(row => {
+    const div = document.createElement('div');
+    div.textContent = row.created_at + " | " + row.action +
+      " | admin " + row.admin_user_id + " | user " + row.target_user_id;
+    el.appendChild(div);
+  });
+}
+
 document.getElementById('login-btn').addEventListener('click', async () => {
   const email = document.getElementById('admin-email').value;
   const password = document.getElementById('admin-password').value;
@@ -157,6 +176,7 @@ document.getElementById('login-btn').addEventListener('click', async () => {
   st.textContent = "Login ho gaya: " + data.user.email +
     " (admin check server-side function me hoga — non-admin ko approve/reject par 403 milega).";
   loadPayments();
+  loadAudit();
 });
 </script>
 </body>
