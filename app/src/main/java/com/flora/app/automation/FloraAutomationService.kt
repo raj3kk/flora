@@ -3,6 +3,7 @@ package com.flora.app.automation
 import android.accessibilityservice.AccessibilityService
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -32,7 +33,21 @@ class FloraAutomationService : AccessibilityService() {
         var instance: FloraAutomationService? = null
             private set
 
+        /**
+         * Aakhri window-state event ka package naam (sirf naam +
+         * waqt — screen ka content kabhi yahan store nahi hota).
+         * Verified app-open isi se jaanta hai ki target app sach
+         * me saamne aayi ya nahi.
+         */
+        @Volatile
+        var lastForegroundPackage: String? = null
+            private set
+
         fun isEnabled(): Boolean = instance != null
+
+        fun noteForeground(packageName: String) {
+            lastForegroundPackage = packageName
+        }
     }
 
     override fun onServiceConnected() {
@@ -47,11 +62,67 @@ class FloraAutomationService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         // No passive listening: actions run only when the user asked
-        // for one (click/scroll/type). Events are not stored.
+        // for one (click/scroll/type). Events are not stored — SIRF
+        // window-state change ka package naam tracker me jaata hai,
+        // taaki verified app-open jaan sake ki target app saamne
+        // aayi ya nahi. Node text/content yahan kabhi nahi aata.
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            event.packageName?.toString()?.let { noteForeground(it) }
+        }
     }
 
     override fun onInterrupt() {
         // Nothing queued: interruption simply stops the current action.
+    }
+
+    /**
+     * Saamne wali window ka package: pehle live window tree
+     * (sabse taaza), na mile to window-state tracker. Sirf
+     * package naam — content yahan se kabhi nahi nikalta.
+     */
+    fun foregroundPackage(): String? {
+        try {
+            rootInActiveWindow?.packageName?.toString()?.let { return it }
+        } catch (e: Exception) {
+        }
+        return lastForegroundPackage
+    }
+
+    /** [pkg] ke foreground me aane ka [timeoutMs] tak intezar karo. */
+    suspend fun waitForForeground(pkg: String, timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (foregroundPackage() == pkg) return true
+            delay(150)
+        }
+        return foregroundPackage() == pkg
+    }
+
+    /**
+     * Saamne wali screen par dikh raha text (node-tree traversal):
+     * vision prompt ke context ke liye. Sirf text/contentDescription
+     * — koi tap/type yahan nahi hota, aur ye list kahin save nahi
+     * hoti, sirf usi turn ke jawab me kaam aati hai.
+     */
+    fun visibleTexts(limit: Int = 25): List<String> {
+        val root = try {
+            rootInActiveWindow
+        } catch (e: Exception) {
+            null
+        } ?: return emptyList()
+        val out = LinkedHashSet<String>()
+        fun collect(node: AccessibilityNodeInfo?) {
+            if (node == null || out.size >= limit) return
+            val clean = ((node.text?.toString() ?: "") +
+                " " + (node.contentDescription?.toString() ?: "")).trim()
+            if (clean.isNotEmpty()) out.add(clean.take(60))
+            for (i in 0 until node.childCount) {
+                if (out.size >= limit) return
+                collect(node.getChild(i))
+            }
+        }
+        collect(root)
+        return out.toList()
     }
 
     private fun findNode(

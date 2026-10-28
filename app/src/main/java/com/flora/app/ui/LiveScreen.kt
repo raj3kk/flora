@@ -26,7 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.flora.app.assistant.VisionClient
 import com.flora.app.assistant.VoiceEngine
-import com.flora.app.automation.AppLauncher
+import com.flora.app.automation.VerifiedAppLauncher
 import com.flora.app.automation.FloraAutomationService
 import com.flora.app.automation.ScreenCapture
 import com.flora.app.data.FloraPreferences
@@ -217,16 +217,40 @@ fun LiveScreen(
             return
         }
         scope.launch {
-            val match = AppLauncher.findByName(context, name).firstOrNull()
-            if (match == null || !AppLauncher.launch(context, match.packageName)) {
-                note = "'$name' naam ki app nahi mili."
-                voice.speak("'$name' naam ki app nahi mili, dobara naam bolo.")
-                return@launch
+            val matches = VerifiedAppLauncher.findByName(context, name)
+            when {
+                matches.isEmpty() -> {
+                    note = "'$name' naam ki app nahi mili."
+                    voice.speak("'$name' naam ki app nahi mili, dobara naam bolo.")
+                    return@launch
+                }
+                matches.size > 1 -> {
+                    val names = matches.take(3).joinToString(", ") { it.label }
+                    note = "Ek se zyada app mili: $names."
+                    voice.speak("Ek se zyada app mili: $names. Poora naam boliye.")
+                    return@launch
+                }
+                else -> {
+                    val match = matches[0]
+                    when (VerifiedAppLauncher.openVerified(context, match)) {
+                        VerifiedAppLauncher.OpenResult.Opened,
+                        VerifiedAppLauncher.OpenResult.AlreadyOpen -> {
+                            note = "${match.label} khol diya, screen dekh rahi hun..."
+                            voice.speak("${match.label} khol diya, ab screen dekh rahi hun.")
+                            delay(1_500)
+                            ask("Is screen par kya dikh raha hai, sab kuch detail me batao?")
+                        }
+                        VerifiedAppLauncher.OpenResult.NoVerifier -> {
+                            note = "${match.label} kholna verify nahi kar paya — Accessibility ON karna hoga."
+                            voice.speak("${match.label} kholna verify nahi kar paya — Accessibility service ON karna hoga, Settings me.")
+                        }
+                        else -> {
+                            note = "${match.label} nahi khul paya."
+                            voice.speak("${match.label} nahi khul paya, dobara naam bolo.")
+                        }
+                    }
+                }
             }
-            note = "${match.label} khol diya, screen dekh rahi hun..."
-            voice.speak("${match.label} khol diya, ab screen dekh rahi hun.")
-            delay(3_000)
-            ask("Is screen par kya dikh raha hai, sab kuch detail me batao?")
         }
     }
 

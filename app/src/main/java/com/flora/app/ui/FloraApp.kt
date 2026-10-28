@@ -56,7 +56,7 @@ import com.flora.app.assistant.BrainClient
 import com.flora.app.assistant.VisionClient
 import com.flora.app.assistant.VoiceEngine
 import com.google.firebase.messaging.FirebaseMessaging
-import com.flora.app.automation.AppLauncher
+import com.flora.app.automation.VerifiedAppLauncher
 import com.flora.app.automation.AutoActions
 import com.flora.app.automation.ContactLookup
 import com.flora.app.automation.ContactResolver
@@ -408,27 +408,54 @@ fun FloraApp(
         when {
             lower.startsWith("open ") || lower.startsWith("kholo ") -> {
                 val name = cmd.substringAfter(" ").trim()
-                val match = AppLauncher.findByName(appContext, name).firstOrNull()
-                if (match != null && AppLauncher.launch(appContext, match.packageName)) {
-                    voice.speak("${match.label} khol diya.")
-                } else {
-                    voice.speak("'$name' naam ki app nahi mili, step chhod diya.")
+                val matches = VerifiedAppLauncher.findByName(appContext, name)
+                when {
+                    matches.isEmpty() -> {
+                        voice.speak("'$name' naam ki app nahi mili, step chhod diya.")
+                    }
+                    matches.size > 1 -> {
+                        val names = matches.take(3).joinToString(", ") { it.label }
+                        voice.speak("Ek se zyada app mili: $names. Kaunsi kholun, poora naam boliye — step chhod diya.")
+                    }
+                    else -> {
+                        val app = matches[0]
+                        when (VerifiedAppLauncher.openVerified(appContext, app)) {
+                            VerifiedAppLauncher.OpenResult.Opened,
+                            VerifiedAppLauncher.OpenResult.AlreadyOpen -> {
+                                voice.speak("${app.label} khol diya.")
+                            }
+                            VerifiedAppLauncher.OpenResult.NoVerifier -> {
+                                voice.speak("${app.label} kholna verify nahi kar paya — Accessibility service ON karna hoga, step chhod diya.")
+                            }
+                            else -> {
+                                voice.speak("${app.label} nahi khul paya, step chhod diya.")
+                            }
+                        }
+                    }
                 }
             }
             lower.startsWith("chrome me ") || lower.startsWith("website ") -> {
                 val site = cmd.substringAfter("kholo", "").trim()
                     .ifEmpty { cmd.substringAfter("me", "").trim() }
-                if (site.isNotBlank() && AppLauncher.openWebsite(appContext, site)) {
-                    voice.speak("$site khol raha hun.")
-                } else {
+                if (site.isBlank()) {
                     voice.speak("Website nahi khul payi, step chhod diya.")
+                } else {
+                    when (VerifiedAppLauncher.openWebsiteVerified(appContext, site)) {
+                        VerifiedAppLauncher.OpenResult.NotVisible,
+                        VerifiedAppLauncher.OpenResult.NoLaunchIntent -> {
+                            voice.speak("Website nahi khul payi, step chhod diya.")
+                        }
+                        else -> {
+                            voice.speak("$site khol raha hun.")
+                        }
+                    }
                 }
             }
             lower.startsWith("gaana bajao ") || lower.startsWith("gaana chalao ") -> {
                 val song = cmd.substringAfter("bajao", "").trim()
                     .ifEmpty { cmd.substringAfter("chalao", "").trim() }
                 if (song.isNotBlank()) {
-                    AppLauncher.openWebsite(
+                    VerifiedAppLauncher.openWebsiteVerified(
                         appContext,
                         "https://www.youtube.com/results?search_query=" +
                             android.net.Uri.encode(song)
@@ -1027,7 +1054,10 @@ fun FloraApp(
                         }
                     }
                     voice.speak("ChatGPT khol raha hun, $fillText ki image bana raha hun.")
-                    if (!AppAutomation.launch(appContext, AppAutomation.CHATGPT_PKG)) {
+                    val chatGptOpened = AppAutomation.launch(appContext, AppAutomation.CHATGPT_PKG)
+                    if (chatGptOpened != VerifiedAppLauncher.OpenResult.Opened &&
+                        chatGptOpened != VerifiedAppLauncher.OpenResult.AlreadyOpen
+                    ) {
                         val msg = "ChatGPT khol nahi paya. App khud khol kar dobara bol dena."
                         messages = messages + ChatMsg("Flora: $msg", false)
                         voice.speak(msg)
@@ -1076,7 +1106,18 @@ fun FloraApp(
                     }
                     if (AppAutomation.isInstalled(appContext, pkg)) {
                         voice.speak("$name pehle se installed hai, khol raha hun.")
-                        AppAutomation.launch(appContext, pkg)
+                        val opened = AppAutomation.launch(appContext, pkg)
+                        if (opened == VerifiedAppLauncher.OpenResult.NotVisible ||
+                            opened == VerifiedAppLauncher.OpenResult.NoLaunchIntent
+                        ) {
+                            val msg = "$name khul nahi paya, app khud khol lo."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else if (opened == VerifiedAppLauncher.OpenResult.NoVerifier) {
+                            val msg = "$name kholna verify nahi kar paya — Accessibility service ON karna hoga, Settings me."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        }
                         return
                     }
                     val service = FloraAutomationService.instance
@@ -1090,7 +1131,18 @@ fun FloraApp(
                     val installed = AppAutomation.waitForInstalled(appContext, pkg, 180_000L)
                     if (installed) {
                         voice.speak("$name install ho gaya hai, khol raha hun.")
-                        AppAutomation.launch(appContext, pkg)
+                        val opened = AppAutomation.launch(appContext, pkg)
+                        if (opened == VerifiedAppLauncher.OpenResult.NotVisible ||
+                            opened == VerifiedAppLauncher.OpenResult.NoLaunchIntent
+                        ) {
+                            val msg = "$name khul nahi paya, app khud khol lo."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else if (opened == VerifiedAppLauncher.OpenResult.NoVerifier) {
+                            val msg = "$name kholna verify nahi kar paya — Accessibility service ON karna hoga, Settings me."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        }
                     } else {
                         val msg = "Play Store khula hua hai — $name par Install dabate hi install shuru ho jayega. (Install nahi dikh raha to app ka naam dobara bol dena.)"
                         messages = messages + ChatMsg("Flora: $msg", false)
@@ -1139,13 +1191,24 @@ fun FloraApp(
                     }
                 }
 
-                fun autoExecuteOpen(app: com.flora.app.automation.LaunchableApp) {
-                    val ok = AppLauncher.launch(appContext, app.packageName)
-                    val msg = if (ok) "${app.label} khol diya." else "${app.label} nahi khul paya."
-                    messages = messages + ChatMsg("Flora: $msg", false)
-                    voice.speak(msg)
+                fun autoExecuteOpen(
+                    app: com.flora.app.automation.LaunchableApp,
+                    onDone: ((VerifiedAppLauncher.OpenResult) -> Unit)? = null,
+                ) {
                     scope.launch {
-                        try { autoLogStore.add("App khola (auto): ${app.label} -> ${if (ok) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                        val result = VerifiedAppLauncher.openVerified(appContext, app)
+                        val verified = result == VerifiedAppLauncher.OpenResult.Opened ||
+                            result == VerifiedAppLauncher.OpenResult.AlreadyOpen
+                        val msg = when (result) {
+                            VerifiedAppLauncher.OpenResult.Opened -> "${app.label} khol diya."
+                            VerifiedAppLauncher.OpenResult.AlreadyOpen -> "${app.label} pehle se khula hua hai."
+                            VerifiedAppLauncher.OpenResult.NoVerifier -> "${app.label} kholna verify nahi kar paya — Accessibility service ON karna hoga, Settings me."
+                            else -> "${app.label} nahi khul paya."
+                        }
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        try { autoLogStore.add("App khola (auto): ${app.label} -> ${if (verified) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                        onDone?.invoke(result)
                     }
                 }
 
@@ -2086,7 +2149,29 @@ fun FloraApp(
                                     voice.speak("Screen dekhne ke liye Settings me apni free Gemini key daaliye.")
                                     return@launch
                                 }
-                                val reply = vision.askAboutImage(prompt, accessJpeg, key)
+                                // Tree context (Maya jaisa): vision ko
+                                // sirf photo nahi, saamne wali app +
+                                // screen par likha text bhi batao —
+                                // taaki jawab photo + tree dono par
+                                // tika ho. Ye list kahin save nahi hoti.
+                                val treeTexts = try {
+                                    FloraAutomationService.instance?.visibleTexts(25)
+                                } catch (e: Exception) {
+                                    null
+                                }
+                                val richPrompt = if (!treeTexts.isNullOrEmpty()) {
+                                    val fg = try {
+                                        FloraAutomationService.instance?.foregroundPackage()
+                                    } catch (e: Exception) {
+                                        null
+                                    }
+                                    "Saamne wali app: ${fg ?: "pata nahi"}. " +
+                                        "Screen par ye likha dikh raha hai: " +
+                                        treeTexts.joinToString(" | ") + ". " + prompt
+                                } else {
+                                    prompt
+                                }
+                                val reply = vision.askAboutImage(richPrompt, accessJpeg, key)
                                 if (reply == null) {
                                     voice.speak("Is baar dekh nahi payi — ek baar phir poochho na.")
                                 } else {
@@ -2192,7 +2277,7 @@ fun FloraApp(
                         if (name.isEmpty()) {
                             voice.speak("Kaun si app khol kar dekhun? Naam boliye, jaise 'WhatsApp kholo aur dekho'.")
                         } else {
-                            val matches = AppLauncher.findByName(appContext, name)
+                            val matches = VerifiedAppLauncher.findByName(appContext, name)
                             if (matches.isEmpty()) {
                                 voice.speak("'$name' naam ki app nahi mili, naam dobara boliye.")
                             } else if (matches.size > 1) {
@@ -2200,14 +2285,21 @@ fun FloraApp(
                                 voice.speak("Ek se zyada app mili: $names. Poora naam boliye.")
                             } else {
                                 val app = matches[0]
-                                if (AppLauncher.launch(appContext, app.packageName)) {
-                                    voice.speak("${app.label} khol diya, screen dekh rahi hun.")
-                                    scope.launch {
-                                        delay(3000)
-                                        lookAtScreen("Is screen par kya dikh raha hai, sab kuch detail me batao?")
+                                scope.launch {
+                                    when (VerifiedAppLauncher.openVerified(appContext, app)) {
+                                        VerifiedAppLauncher.OpenResult.Opened,
+                                        VerifiedAppLauncher.OpenResult.AlreadyOpen -> {
+                                            voice.speak("${app.label} khol diya, screen dekh rahi hun.")
+                                            delay(1500)
+                                            lookAtScreen("Is screen par kya dikh raha hai, sab kuch detail me batao?")
+                                        }
+                                        VerifiedAppLauncher.OpenResult.NoVerifier -> {
+                                            voice.speak("${app.label} kholna verify nahi kar paya — Accessibility service ON karna hoga, Settings me.")
+                                        }
+                                        else -> {
+                                            voice.speak("${app.label} nahi khul paya.")
+                                        }
                                     }
-                                } else {
-                                    voice.speak("${app.label} nahi khul paya.")
                                 }
                             }
                         }
@@ -2258,7 +2350,7 @@ fun FloraApp(
                         }
                         if (appName.isNotEmpty() && rest.isNotEmpty()) {
                             input = ""
-                            val matches = AppLauncher.findByName(appContext, appName)
+                            val matches = VerifiedAppLauncher.findByName(appContext, appName)
                             when {
                                 matches.isEmpty() -> {
                                     val msg = "'$appName' naam ki app nahi mili, naam dobara boliye."
@@ -2272,10 +2364,15 @@ fun FloraApp(
                                     voice.speak(msg)
                                 }
                                 else -> {
-                                    autoExecuteOpen(matches[0])
-                                    scope.launch {
-                                        delay(2500)
-                                        sendChatHolder[0]?.invoke(rest)
+                                    autoExecuteOpen(matches[0]) { result ->
+                                        val verified = result == VerifiedAppLauncher.OpenResult.Opened ||
+                                            result == VerifiedAppLauncher.OpenResult.AlreadyOpen
+                                        if (verified) {
+                                            scope.launch {
+                                                delay(1000)
+                                                sendChatHolder[0]?.invoke(rest)
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -2286,7 +2383,7 @@ fun FloraApp(
                     if (lower.startsWith("open ") || lower.startsWith("kholo ")) {
                         val name = question.substringAfter(" ").trim()
                         input = ""
-                        val matches = AppLauncher.findByName(appContext, name)
+                        val matches = VerifiedAppLauncher.findByName(appContext, name)
                         when {
                             matches.isEmpty() -> {
                                 val msg = "'$name' naam ki app nahi mili, naam dobara boliye."
@@ -2325,14 +2422,19 @@ fun FloraApp(
                             val msg = "Kaun si website kholu? Naam boliye, jaise 'chrome me example.com kholo'."
                             messages = messages + ChatMsg("Flora: $msg", false)
                             voice.speak(msg)
-                        } else if (AppLauncher.openWebsite(appContext, site)) {
-                            val msg = "$site khol raha hun."
-                            messages = messages + ChatMsg("Flora: $msg", false)
-                            voice.speak(msg)
                         } else {
-                            val msg = "Website nahi khul payi."
-                            messages = messages + ChatMsg("Flora: $msg", false)
-                            voice.speak(msg)
+                            scope.launch {
+                                val result = VerifiedAppLauncher.openWebsiteVerified(appContext, site)
+                                val msg = if (result == VerifiedAppLauncher.OpenResult.NotVisible ||
+                                    result == VerifiedAppLauncher.OpenResult.NoLaunchIntent
+                                ) {
+                                    "Website nahi khul payi."
+                                } else {
+                                    "$site khol raha hun."
+                                }
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
                         }
                         return
                     }
@@ -2346,11 +2448,13 @@ fun FloraApp(
                             messages = messages + ChatMsg("Flora: $msg", false)
                             voice.speak(msg)
                         } else {
-                            AppLauncher.openWebsite(
-                                appContext,
-                                "https://www.youtube.com/results?search_query=" +
-                                    android.net.Uri.encode(song)
-                            )
+                            scope.launch {
+                                VerifiedAppLauncher.openWebsiteVerified(
+                                    appContext,
+                                    "https://www.youtube.com/results?search_query=" +
+                                        android.net.Uri.encode(song)
+                                )
+                            }
                             val msg = "$song YouTube par khol raha hun."
                             messages = messages + ChatMsg("Flora: $msg", false)
                             voice.speak(msg)
@@ -2697,6 +2801,48 @@ fun FloraApp(
                             return
                         }
                     }
+                    // Voice: "<app> kholo" (suffix, natural Hindi) —
+                    // prefix branch jaisa hi behaviour: ek match →
+                    // confirm/auto, zyada → ambiguity, zero →
+                    // not-found. Flora ki apni screens upar wale
+                    // map me pakdi ja chuki hain; G16 (chrome /
+                    // github / vercel) neeche aata hai, isliye ye
+                    // teen + "link" wale naam yahan nahi pakde jaate.
+                    if (lower.endsWith(" kholo")) {
+                        val name = lower.removeSuffix(" kholo").trim()
+                        if (name.isNotEmpty() && name !in setOf("chrome", "github", "vercel") &&
+                            !name.endsWith(" link")
+                        ) {
+                            input = ""
+                            val matches = VerifiedAppLauncher.findByName(appContext, name)
+                            when {
+                                matches.isEmpty() -> {
+                                    val msg = "'$name' naam ki app nahi mili, naam dobara boliye."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                }
+                                matches.size == 1 -> {
+                                    val app = matches[0]
+                                    if (autoMode) {
+                                        autoExecuteOpen(app)
+                                    } else {
+                                        messages = messages + ChatMsg(
+                                            "Flora: Theek hai, ${app.label} khol raha hun — ek baar confirm kijiye.", false
+                                        )
+                                        voice.speak("Theek hai, ${app.label} khol raha hun, ek baar confirm kijiye.")
+                                        voiceAppConfirm = app
+                                    }
+                                }
+                                else -> {
+                                    val names = matches.take(3).joinToString(", ") { it.label }
+                                    val msg = "Ek se zyada app mili: $names. Poora naam boliye ya Auto screen se chuniye."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                }
+                            }
+                            return
+                        }
+                    }
                     // Live wallpaper (v2.22, Phase 5, G9): system
                     // chooser khulta hai, user khud Flora
                     // wallpaper chunta hai — chhupke nahi lagta.
@@ -2831,13 +2977,29 @@ fun FloraApp(
                         }
                         scope.launch {
                             try {
-                                val found = AppLauncher.findByName(appContext, appName)
-                                val ok = if (found.isNotEmpty()) {
-                                    AppLauncher.launch(appContext, found.first().packageName)
-                                } else {
-                                    AppLauncher.openWebsite(appContext, fallback)
+                                val found = VerifiedAppLauncher.findByName(appContext, appName)
+                                val msg = when {
+                                    found.size > 1 -> {
+                                        val names = found.take(3).joinToString(", ") { it.label }
+                                        "Ek se zyada app mili: $names. Poora naam boliye."
+                                    }
+                                    found.size == 1 -> {
+                                        when (VerifiedAppLauncher.openVerified(appContext, found[0])) {
+                                            VerifiedAppLauncher.OpenResult.Opened,
+                                            VerifiedAppLauncher.OpenResult.AlreadyOpen -> "$appName khol diya."
+                                            VerifiedAppLauncher.OpenResult.NoVerifier -> "$appName kholna verify nahi kar paya — Accessibility service ON karna hoga, Settings me."
+                                            else -> "$appName nahi khul paya."
+                                        }
+                                    }
+                                    else -> {
+                                        when (VerifiedAppLauncher.openWebsiteVerified(appContext, fallback)) {
+                                            VerifiedAppLauncher.OpenResult.Opened,
+                                            VerifiedAppLauncher.OpenResult.AlreadyOpen -> "$appName khol diya."
+                                            VerifiedAppLauncher.OpenResult.FiredUnverified -> "$appName khol raha hun — browser me khul raha hai."
+                                            else -> "$appName nahi khul paya."
+                                        }
+                                    }
                                 }
-                                val msg = if (ok) "$appName khol diya." else "$appName nahi khul paya."
                                 messages = messages + ChatMsg("Flora: $msg", false)
                                 voice.speak(msg)
                             } catch (e: Exception) {
@@ -3285,10 +3447,16 @@ fun FloraApp(
                     confirmButton = {
                         TextButton(onClick = {
                             voiceAppConfirm = null
-                            val ok = AppLauncher.launch(appContext, app.packageName)
-                            val msg = if (ok) "${app.label} khol diya." else "${app.label} nahi khul paya."
-                            messages = messages + ChatMsg("Flora: $msg", false)
-                            voice.speak(msg)
+                            scope.launch {
+                                val msg = when (VerifiedAppLauncher.openVerified(appContext, app)) {
+                                    VerifiedAppLauncher.OpenResult.Opened -> "${app.label} khol diya."
+                                    VerifiedAppLauncher.OpenResult.AlreadyOpen -> "${app.label} pehle se khula hua hai."
+                                    VerifiedAppLauncher.OpenResult.NoVerifier -> "${app.label} kholna verify nahi kar paya — Accessibility service ON karna hoga, Settings me."
+                                    else -> "${app.label} nahi khul paya."
+                                }
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
                         }) { Text("Haan, kholo") }
                     },
                     dismissButton = {

@@ -185,6 +185,10 @@ class BackgroundMicService : Service() {
         listener?.start()
     }
 
+    // Natural Hindi suffix bhi command hai ("youtube kholo") —
+    // background se queue hokar chat router ki suffix branch par
+    // jaata hai, wahi verified flow par. Sirf " kholo" — "khol do"
+    // nahi, kyunki router me uska branch nahi hai.
     private fun isCommand(lower: String): Boolean {
         return lower.startsWith("call ") || lower.startsWith("sms ") ||
             lower.startsWith("open ") || lower.startsWith("kholo ") ||
@@ -192,6 +196,7 @@ class BackgroundMicService : Service() {
             lower.startsWith("install karo ") || lower.startsWith("install kar do ") ||
             lower.startsWith("download karo ") ||
             lower.endsWith(" install karo") || lower.endsWith(" install kar do") ||
+            lower.endsWith(" kholo") ||
             lower.startsWith("chrome me ") || lower.startsWith("website ") ||
             lower.startsWith("website kholo ") ||
             lower.startsWith("gaana bajao ") || lower.startsWith("gaana chalao ") ||

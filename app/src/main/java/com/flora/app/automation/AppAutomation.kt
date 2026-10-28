@@ -51,8 +51,16 @@ object AppAutomation {
             false
         }
 
-    fun launch(context: Context, pkg: String): Boolean =
-        AppLauncher.launch(context, pkg)
+    /**
+     * Verified app-open (Maya jaisa): "khol diya" sirf tab jab
+     * target sach me foreground me aaye. Service OFF ho to fire
+     * hi nahi hota (NoVerifier) — caller imaandaar failure bolega.
+     */
+    suspend fun launch(
+        context: Context,
+        pkg: String,
+    ): VerifiedAppLauncher.OpenResult =
+        VerifiedAppLauncher.openVerified(context, LaunchableApp("", pkg))
 
     fun openPlayStoreDetails(context: Context, pkg: String): Boolean {
         val market = Intent(

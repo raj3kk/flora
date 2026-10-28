@@ -17,14 +17,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.flora.app.assistant.VoiceEngine
-import com.flora.app.automation.AppLauncher
+import com.flora.app.automation.VerifiedAppLauncher
 import com.flora.app.automation.FloraAutomationService
 import com.flora.app.automation.LaunchableApp
+import kotlinx.coroutines.launch
 
 /**
  * Auto screen (v1.0): universal automation control.
@@ -44,10 +46,11 @@ fun AutoScreen(voice: VoiceEngine) {
     var confirmApp by remember { mutableStateOf<LaunchableApp?>(null) }
     var clickText by remember { mutableStateOf("") }
     var typeText by remember { mutableStateOf("") }
-    val apps = remember { AppLauncher.listApps(context) }
+    val apps = remember { VerifiedAppLauncher.listApps(context) }
     val shown = if (query.isBlank()) apps.take(50)
     else apps.filter { it.label.lowercase().contains(query.lowercase()) }.take(50)
     val serviceOn = FloraAutomationService.isEnabled()
+    val scope = rememberCoroutineScope()
 
     fun say(message: String) {
         note = message
@@ -146,10 +149,13 @@ fun AutoScreen(voice: VoiceEngine) {
             confirmButton = {
                 TextButton(onClick = {
                     confirmApp = null
-                    if (AppLauncher.launch(context, app.packageName)) {
-                        say("${app.label} khol diya.")
-                    } else {
-                        say("${app.label} nahi khul paya.")
+                    scope.launch {
+                        when (VerifiedAppLauncher.openVerified(context, app)) {
+                            VerifiedAppLauncher.OpenResult.Opened -> say("${app.label} khol diya.")
+                            VerifiedAppLauncher.OpenResult.AlreadyOpen -> say("${app.label} pehle se khula hua hai.")
+                            VerifiedAppLauncher.OpenResult.NoVerifier -> say("${app.label} kholna verify nahi kar paya — Accessibility service ON karna hoga, Settings me.")
+                            else -> say("${app.label} nahi khul paya.")
+                        }
                     }
                 }) { Text("Haan, kholo") }
             },
