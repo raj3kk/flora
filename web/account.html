@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flora — Account</title>
+<style>body{font-family:system-ui,sans-serif;margin:24px;line-height:1.5}button{padding:8px;font-size:15px}.note{color:#555;font-size:14px}</style>
+</head>
+<body>
+<h1>Flora account</h1>
+<button id="btn" type="button">Licence status dekho</button>
+<p id="status" class="note">Login ke baad status yahan aayega.</p>
+<p class="note">Licence status licence-verify function se aata hai.
+Agar website Pro approve ho gaya hai lekin app me nahi dikh raha,
+to wajah app-link step ka baaki hona hai (website account aur app
+ka random user id abhi alag hain) — ye gap khula hua darj hai.</p>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const client = supabase.createClient("https://keomyweghrmhqglaxmyv.supabase.co", "sb_publishable_qMjX-cw11dB_Y9nT8IlVzw_nPup-Yxe");
+document.getElementById('btn').addEventListener('click', async () => {
+  const st = document.getElementById('status');
+  const { data: { session } } = await client.auth.getSession();
+  if (!session) { st.textContent = "Pehle login karo."; return; }
+  const res = await fetch("https://keomyweghrmhqglaxmyv.supabase.co/functions/v1/licence-verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + session.access_token },
+    body: JSON.stringify({ user_id: session.user.id, device_id: "" }),
+  });
+  const data = await res.json().catch(() => ({}));
+  st.textContent = "Plan: " + (data.plan || "?") + ", status: " + (data.status || "?");
+});
+</script>
+</body>
+</html>

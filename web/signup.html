@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flora — Signup</title>
+<style>body{font-family:system-ui,sans-serif;margin:24px;line-height:1.5}input,button{padding:8px;font-size:15px}label{display:block;margin:8px 0 4px}.note{color:#555;font-size:14px}</style>
+</head>
+<body>
+<h1>Flora account banao</h1>
+<label>Email <input id="email" type="email"></label>
+<label>Password <input id="password" type="password"></label>
+<button id="btn" type="button">Signup</button>
+<p id="status" class="note"></p>
+<p class="note">Account banne ke baad: <a href="pricing.html">Pro (₹199/mahina)</a> dekh lo.
+Imandari se ek baat: website account aur app ka account abhi alag pehchaan
+hain — app me website account link karne ka step abhi baaki hai, isliye
+website se kharida Pro tabhi app me dikhega jab app-link aa jayega.
+Tab tak website account se UTR submit karke approval liya ja sakta hai.</p>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const client = supabase.createClient("https://keomyweghrmhqglaxmyv.supabase.co", "sb_publishable_qMjX-cw11dB_Y9nT8IlVzw_nPup-Yxe");
+document.getElementById('btn').addEventListener('click', async () => {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  const st = document.getElementById('status');
+  const { error } = await client.auth.signUp({ email, password });
+  st.textContent = error ? ("Signup fail: " + error.message) : "Account ban gaya. Ab login karo.";
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flora — Pro payment (UPI + UTR)</title>
+<style>body{font-family:system-ui,sans-serif;margin:24px;line-height:1.5}input,button{padding:8px;font-size:15px}label{display:block;margin:8px 0 4px}.note{color:#555;font-size:14px}</style>
+</head>
+<body>
+<h1>Flora Pro — ₹199 (UPI + UTR)</h1>
+<p class="note">Step 1: Flora app ke Pro screen par diye gaye UPI ID par ₹199
+bhejo (app ke Settings me owner ka UPI ID hota hai). Step 2: yahan
+login karke UTR + note submit karo. Step 3: admin approve karega —
+tab licence active hoga. Koi auto-charge nahi.</p>
+<label>UTR number <input id="utr" type="text"></label>
+<label>Note (optional) <input id="note" type="text"></label>
+<button id="btn" type="button">UTR submit karo</button>
+<p id="status" class="note"></p>
+<p class="note"><a href="login.html">Login</a> | <a href="pricing.html">Pricing</a></p>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const client = supabase.createClient("https://keomyweghrmhqglaxmyv.supabase.co", "sb_publishable_qMjX-cw11dB_Y9nT8IlVzw_nPup-Yxe");
+document.getElementById('btn').addEventListener('click', async () => {
+  const st = document.getElementById('status');
+  const { data: { session } } = await client.auth.getSession();
+  if (!session) { st.textContent = "Pehle login karo."; return; }
+  const utr = document.getElementById('utr').value.trim();
+  if (!utr) { st.textContent = "UTR zaroori hai."; return; }
+  const note = document.getElementById('note').value;
+  const { error } = await client.from("payment_submissions").insert({
+    user_id: session.user.id, amount_paisa: 19900, utr, note, status: "pending",
+  });
+  st.textContent = error ? ("Submit fail: " + error.message) : "UTR submit ho gaya. Admin approval ka intezar karo.";
+});
+</script>
+</body>
+</html>
