@@ -2926,6 +2926,38 @@ fun FloraApp(
                         }
                         return
                     }
+                    // Live update, chat se (v2.22, Phase 6 fix):
+                    // ye branch sirf routine executor me thi —
+                    // chat/voice se "live update batao" bolne par
+                    // brain fallback par ja raha tha, taaza
+                    // mausam+khabar wala raasta nahi mil raha tha.
+                    // Ab dono raaste ek hi kaam karte hain.
+                    if (lower == "live update batao" || lower == "taaza khabar batao" ||
+                        lower == "realtime update batao" || lower == "aaj ki khabar batao"
+                    ) {
+                        input = ""
+                        voice.speak("Live update nikal rahi hun — mausam aur taaza khabar dekh rahi hun.")
+                        scope.launch {
+                            try {
+                                val weather = try { searchTools.weatherHere(appContext) } catch (e: Exception) { "" }
+                                val news = try { searchTools.search("taaza khabar India today") } catch (e: Exception) { "" }
+                                val msg = listOf(weather, news).filter { it.isNotBlank() }.joinToString(" • ")
+                                if (msg.isBlank()) {
+                                    val fail = "Is waqt live update nahi nikal payi, internet check kar ke dobara bolo."
+                                    messages = messages + ChatMsg("Flora: $fail", false)
+                                    voice.speak(fail)
+                                } else {
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg.take(600))
+                                }
+                            } catch (e: Exception) {
+                                val fail = "Live update me dikkat aayi, dobara koshish karo."
+                                messages = messages + ChatMsg("Flora: $fail", false)
+                                voice.speak(fail)
+                            }
+                        }
+                        return
+                    }
                     messages = messages + ChatMsg(question, true)
                     input = ""
                     busy = true

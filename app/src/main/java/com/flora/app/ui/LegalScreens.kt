@@ -22,10 +22,13 @@ fun PrivacyScreen() {
             Text("Flora — Privacy Policy")
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "1. Jo data sirf aapke phone par rehta hai: Yaadein, Documents, " +
-                    "SOS contacts, settings aur API keys (Gemini/Groq/Supabase anon key) " +
-                    "sirf is phone par DataStore me save hote hain. Ye kisi server par " +
-                    "nahi bheje jaate, kisi backup me nahi jaate."
+                "1. Jo data sirf aapke phone par rehta hai: Yaadein, Journal, " +
+                    "Documents, Routines, Jobs, Chains, SOS contacts, Notifications " +
+                    "aur Auto Log encrypted store me save hote hain. Settings aur " +
+                    "API keys sirf is phone par app ke private store me rehte hain, " +
+                    "kisi server par save nahi hote aur kisi backup me nahi jaate. " +
+                    "(Key sirf tab us provider ko pehchaan ke liye jaati hai jab " +
+                    "aap usse baat karte hain — point 4 dekho.)"
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -37,40 +40,77 @@ fun PrivacyScreen() {
             Text(
                 "3. Licence check: jab aap Licence check dabate hain, tabhi aapka " +
                     "user ID aur device ID Flora ke Supabase Edge Function ko jaata hai, " +
-                    "sirf plan/status jaanne ke liye. Iske alawa koi chat, yaad ya " +
-                    "document server par nahi bheja jaata."
+                    "sirf plan/status jaanne ke liye."
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "4. Camera/mic: camera sirf Scan/Face screen par, aapke permission " +
+                "4. Baat karna (AI): jab aap Flora se baat karte hain, tabhi aapka " +
+                    "sawaal + aakhri 20 yaadein (context ke liye) us AI provider ko " +
+                    "jaate hain jiski key aapne Settings me daali hai (Gemini/Groq). " +
+                    "Key na ho to Flora bina-key tools se jawab deti hai, tab kuch " +
+                    "server par nahi jaata. Aapki poori yaadein kabhi upload nahi hoti."
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "5. Khoj, mausam, market, photo dekhna: jab aap poochhte hain tabhi " +
+                    "aapka sawaal us free service ko jaata hai (DuckDuckGo, Open-Meteo, " +
+                    "Yahoo Finance, Tavily) — sirf utna hi jitna poochha gaya. Image " +
+                    "banane par aapka prompt Pollinations ko jaata hai, bani hui photo " +
+                    "sirf aapki gallery me save hoti hai. Camera " +
+                    "se dekhi hui photo sirf tab Gemini ko jaati hai jab aap 'camera " +
+                    "dekho' ya 'screen dekho' bolte hain."
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "6. Awaaz sunna: Mic sirf tab jab aap Mic dabate hain. Continuous mic " +
+                    "ON ho to background me sunta hai (notification hamesha dikhegi). " +
+                    "Wake Word ON ho to 'Hey Flora' sunne ke liye mic chalu rehta hai " +
+                    "(audio kabhi save/server par nahi jata). Deepgram key daali ho to " +
+                    "aapki awaaz text banane ke liye Deepgram ko jaati hai, warna " +
+                    "system wali sunne ki suvidha chalti hai."
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "7. Browser: in-app browser me aap jo site kholte hain, wo site " +
+                    "aapke phone se seedha us website ko dikhegi (jaise kisi bhi " +
+                    "browser me). Browser history sirf is phone par rehti hai. " +
+                    "Download aapke confirm karne par hi hota hai."
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "8. Push: FCM push ke liye aapka device token + device ID Flora ke " +
+                    "Supabase ko jaata hai (sirf tab jab aapne website account link " +
+                    "kiya ho). Push ka text kabhi kisi teesre ko nahi becha jaata."
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "9. Camera: camera sirf Scan/Face screen par, aapke permission " +
                     "ke baad khulta hai. Scan ki photo sirf aapke phone ki gallery " +
                     "(Pictures/Flora) me save hoti hai. Face screen chehra sirf isi " +
-                    "phone par match karti hai — photo server par kabhi nahi jaati. " +
-                    "Mic sirf tab jab aap Mic dabate hain."
+                    "phone par match karti hai — photo server par kabhi nahi jaati."
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "5. Calls/SMS: Auto Call/SMS sirf aapke ek confirmation ke baad " +
+                "10. Calls/SMS: Auto Call/SMS sirf aapke ek confirmation ke baad " +
                     "hote hain, aur sirf us number par jo aapne likha hai. Flora " +
                     "kabhi chupke se call, SMS ya post nahi karti."
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "6. Retention: Journal entries 30 din baad app-start " +
-                    "par auto-delete hoti hain. Memories me date wali " +
-                    "entries 30 din baad auto-delete hoti hain; bina " +
-                    "date wali purani entries manually delete karni " +
-                    "hongi (unko auto-delete kabhi nahi karega). " +
-                    "Licence aur payment ke record (UTR, amount) alag se rakhe jaate hain."
+                "11. Retention: Journal entries, Memories me date wali entries aur " +
+                    "Auto Log 30 din baad app-start par auto-delete hote hain. Bina " +
+                    "date wali purani yaadein manually delete karni hongi (unko " +
+                    "auto-delete kabhi nahi karega). Licence aur payment ke record " +
+                    "(UTR, amount) alag se rakhe jaate hain."
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "7. Bachchon ki suraksha: Flora me koi 18+ ya explicit content nahi hai. " +
+                "12. Bachchon ki suraksha: Flora me koi 18+ ya explicit content nahi hai. " +
                     "Romantic mode sirf baat karne ka tone hai, explicit baat nahi. " +
                     "Flora caring aur professional tareeke se baat karti hai."
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Text("8. Support: flipify.com@gmail.com par sampark kijiye.")
+            Text("13. Support: flipify.com@gmail.com par sampark kijiye.")
         }
     }
 }
@@ -85,9 +125,8 @@ fun TermsScreen() {
                 "1. Free plan: roz 10 minute baat, app me maujood saare tools. Pro plan: " +
                     "₹199/month — unlimited baat, saare tools, FCM push " +
                     "(server live hai; push ke liye admin + phone ka token " +
-                    "sync zaroori hai). Live wallpaper aur conversation mode " +
-                    "abhi available nahi hain — ye baad me aayenge, isliye " +
-                    "inhne Pro ka hissa samajhkar mat khareedna."
+                    "sync zaroori hai). Live wallpaper aur continuous mic " +
+                    "isi version me maujood hain (wallpaper system chooser se lagta hai)."
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(

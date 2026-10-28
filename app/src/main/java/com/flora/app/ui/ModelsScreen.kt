@@ -59,7 +59,7 @@ fun ModelsScreen(voice: VoiceEngine, prefs: FloraPreferences) {
             Text(
                 "Bundled models phone me pehle se hain. Neural models " +
                     "(jaise nayi wake word) jab taiyaar honge, tab yahan " +
-                    "se download honge — Maya ke models kabhi nahi."
+                    "se download honge — kisi aur app ke models kabhi nahi."
             )
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = { refresh() }) { Text("Refresh karo") }
