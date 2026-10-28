@@ -426,6 +426,9 @@ se dobara khul sakta hai, is plan se nahi.
 - Frontend: kuch naya nahi (confirm UI hi hai).
 - Backend: kuch nahi.
 - Database: sent_dedup_local (id, waqt, 1 din retention).
+- Gates: dedup kabhi user ke "phir bhi bhejo" ko override nahi
+  karega; payment wale send par dedup lagu nahi (wahan hamesha
+  explicit approval hi chalega).
 
 ## U2 — Kamzor network par stable (AADHA → P5)
 - Hai: v2.15 me asli error code (network vs 401 vs 404 vs quota
@@ -440,6 +443,8 @@ se dobara khul sakta hai, is plan se nahi.
 - Frontend: Queue screen (pending items + retry/cancel).
 - Backend: kuch naya nahi (wahi lanes).
 - Database: offline_queue_local (id, kaam, waqt).
+- Gates: queue wale item kabhi chhupke nahi chalenge — user ko
+  list dikhegi; payment wale kaam queue me kabhi nahi jayenge.
 
 ## U3 — Jo zyada use ho, usme tez (NAHI → P5)
 - Hai: kuch nahi (koi seekhne wali layer nahi).
@@ -450,6 +455,8 @@ se dobara khul sakta hai, is plan se nahi.
 - Frontend: kuch naya nahi (andar hi andar).
 - Backend: kuch nahi.
 - Database: usage_stats_local (feature, count, on-device).
+- Gates: stats sirf on-device; koi personal pasand server par nahi
+  jayegi; user stats delete kar sakega.
 
 ## Cross-cutting (har phase par lagu)
 - Server (Supabase Flora, pehle se live): 7 Edge Functions
