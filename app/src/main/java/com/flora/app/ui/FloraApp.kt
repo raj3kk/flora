@@ -2563,11 +2563,22 @@ fun FloraApp(
                                 "Pehle frame se ab tak screen par ye badla: pehle ye tha: " +
                                     firstTree.joinToString(" | ") + ". "
                             } else ""
+                            // Nullable fix (CI fail 40775751163): lastJpeg ek
+                            // mutable var hai — if-block ke andar assignment
+                            // ke baad pehle wali null-check cast nahi rehti.
+                            // Isliye naya val + explicit null-check (AGENTS.md
+                            // wala `?: return` lesson, yahan if-form me taaki
+                            // imaandaar message bhi bole).
+                            val frame = lastJpeg
+                            if (frame == null) {
+                                voice.speak("Screen abhi dikh nahi rahi — Accessibility service ON karo, usse bina dialog ke dekh lungi.")
+                                return@launch
+                            }
                             val reply = vision.askAboutImage(
                                 treeNote + changeNote +
                                     "Ye live dekhne ka aakhri frame hai (kuch second ke andar liye gaye frames me se). " +
                                     "Is screen par abhi kya chal raha hai, sab kuch detail me batao?",
-                                lastJpeg, key
+                                frame, key
                             )
                             if (reply == null) {
                                 voice.speak("Is baar dekh nahi payi — ek baar phir poochho na.")
