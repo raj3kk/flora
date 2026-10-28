@@ -464,3 +464,14 @@ maujood, index bhi 200. Download page ab live hai.
 ## Screenshot feature plan (2026-10-28 ~15:45 IST, user ke 2 screenshots se)
 - Dono screenshots ke 22 feature cards + latest-updates ke 10 points, sab ka audit: code grep se haalat verify (LiveScreen vision HAI, notification listener/watchlist/whiteboard/game/PC-link NAHI, website starter stub, routines teach NAHI, docs voice-create NAHI, torch/brightness NAHI, sleep phrase NAHI, email NAHI).
 - Natija: HAI-poora 0, AADHA 16, NAHI 9, romantic persona EXCLUDED (standing rule). Plan doc: docs/FLORA_SCREENSHOT_FEATURE_PLAN_20261028.md — har feature par frontend + backend + database + workflow + gates, 5 phases me order (P1 → P5), har item ka gate (audit → CI → phone test).
+
+## v2.15 CI PASS + APK verified (2026-10-28 ~15:41 IST)
+- CI run 40669189539 (commit c1349187) completed success. Asli APK 111,735,544 bytes, sha256 e53590eda1b87ec867d355f175c8e6e1c42f102d7260edf167e228cb51554809, aapt2: com.flora.app vCode 37 / 2.15.0-rebuild, sdk 26/34. Artifact zip size 59,524,009 bytes (APK size se alag).
+- SwissTransfer upload (v2.15) browser task se chal raha hai; link milte hi download page 2.15 par update hoga.
+
+## v2.16 CODE DONE / CI PENDING (2026-10-28 ~15:45 IST, user order: image = ChatGPT, install = Play Store)
+- Image flow badla (user order): "image banao X" ab ChatGPT app kholta hai → prompt box me prompt bharta hai → Send dabata hai → image ChatGPT me banti hai. ChatGPT na ho to Play Store se install karke wahi flow. Accessibility OFF ho to Flora settings khol kar bolegi. Prompt box/Send na mile to saaf failure + bata kar Pollinations fallback (chhupke nahi).
+- Install flow (user order): "X install karo" → jaani apps (ChatGPT, WhatsApp/Business, Instagram, Facebook, YouTube, Chrome, Gmail, Maps, Telegram, Spotify) ka Play Store page → Install (accessibility se) → install detect (launch-intent poll, 180s) → app kholo. Anjaani app → Play Store search kholo, user Install dabaye. Pehle se installed ho to seedha kholo. Paid app ka payment step hamesha user khud Play Store me karega.
+- Background: image/install commands ab command-bus se activity me aate hain (foreground me execute, confirmation rule barkarar).
+- Audit: 4 kt files brace/paren 0/0; helpers sendChat se pehle declare (594 < 720); imports verify (AppAutomation, FloraAutomationService, delay).
+- Test entry: docs/FLORA_V216_TEST_ENTRY.md.

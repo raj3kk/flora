@@ -179,6 +179,10 @@ class BackgroundMicService : Service() {
     private fun isCommand(lower: String): Boolean {
         return lower.startsWith("call ") || lower.startsWith("sms ") ||
             lower.startsWith("open ") || lower.startsWith("kholo ") ||
+            lower.startsWith("image banao ") || lower.startsWith("photo banao ") ||
+            lower.startsWith("install karo ") || lower.startsWith("install kar do ") ||
+            lower.startsWith("download karo ") ||
+            lower.endsWith(" install karo") || lower.endsWith(" install kar do") ||
             lower.startsWith("chrome me ") || lower.startsWith("website ") ||
             lower.startsWith("website kholo ") ||
             lower.startsWith("gaana bajao ") || lower.startsWith("gaana chalao ") ||

@@ -66,6 +66,40 @@ class FloraAutomationService : AccessibilityService() {
         return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
     }
 
+    /** Clicks the first label that matches, trying each in order. */
+    fun clickAnyText(vararg texts: String): Boolean {
+        for (t in texts) {
+            if (clickText(t)) return true
+        }
+        return false
+    }
+
+    private fun findEditable(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (node == null) return null
+        if (node.isEditable) return node
+        for (i in 0 until node.childCount) {
+            val found = findEditable(node.getChild(i))
+            if (found != null) return found
+        }
+        return null
+    }
+
+    /** First editable node in the tree (input box, even when not focused). */
+    fun findEditableNode(): AccessibilityNodeInfo? {
+        val root = rootInActiveWindow ?: return null
+        return findEditable(root)
+    }
+
+    /** Sets text into the first editable node found. */
+    fun setTextOnFirstEditable(text: String): Boolean {
+        val field = findEditableNode() ?: return false
+        val args = android.os.Bundle()
+        args.putCharSequence(
+            AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text
+        )
+        return field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+    }
+
     /** Types [text] into the currently focused editable field. */
     fun typeIntoFocused(text: String): Boolean {
         val root = rootInActiveWindow ?: return false

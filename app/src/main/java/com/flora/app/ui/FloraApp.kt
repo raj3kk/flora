@@ -27,7 +27,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import android.provider.Settings
+import com.flora.app.automation.AppAutomation
+import com.flora.app.automation.FloraAutomationService
 import com.flora.app.tools.ImageTools
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -582,6 +585,135 @@ fun FloraApp(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 }
+                // App automation flows (v2.16, user order):
+                // "image banao X" → ChatGPT app kholo → prompt bharo →
+                // generate. "X install karo" → Play Store se install →
+                // kholo. Dono me Flora bol kar batayega; "ruk" par
+                // Stop dabana kaafi hai. Paid app ka payment step
+                // hamesha user khud Play Store me karega.
+                suspend fun runChatGptImage(promptRaw: String): Boolean {
+                    val prompt = promptRaw.trim()
+                    val fillText = if (prompt.contains("image") ||
+                        prompt.contains("photo")
+                    ) prompt else "$prompt ki image banao"
+                    val service = FloraAutomationService.instance
+                    if (service == null) {
+                        val msg = "ChatGPT me prompt bharne ke liye Accessibility ON chahiye. Permissions screen me Accessibility ON karo, phir dobara bol dena."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        try {
+                            appContext.startActivity(
+                                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                            )
+                        } catch (e: Exception) { }
+                        return false
+                    }
+                    if (!AppAutomation.isInstalled(appContext, AppAutomation.CHATGPT_PKG)) {
+                        voice.speak("ChatGPT app installed nahi hai, Play Store se install kar raha hun.")
+                        AppAutomation.openPlayStoreDetails(appContext, AppAutomation.CHATGPT_PKG)
+                        val installed = AppAutomation.waitForInstalled(
+                            appContext, AppAutomation.CHATGPT_PKG, 180_000L
+                        )
+                        if (!installed) {
+                            val msg = "ChatGPT install poora nahi hua. Play Store khula hua hai — install poora hote hi dobara 'image banao' bol dena."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                            return false
+                        }
+                    }
+                    voice.speak("ChatGPT khol raha hun, $fillText ki image bana raha hun.")
+                    if (!AppAutomation.launch(appContext, AppAutomation.CHATGPT_PKG)) {
+                        val msg = "ChatGPT khol nahi paya. App khud khol kar dobara bol dena."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        return false
+                    }
+                    delay(3000)
+                    var typed = service.setTextOnFirstEditable(fillText)
+                    if (!typed) {
+                        service.clickAnyText("Message", "Ask anything")
+                        delay(800)
+                        typed = service.setTextOnFirstEditable(fillText)
+                    }
+                    if (!typed) {
+                        val msg = "ChatGPT khul gaya hai, par prompt box nahi mila. Prompt wahan likha hua dikhe to khud bhej dena, ya dobara bol dena."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        return false
+                    }
+                    delay(500)
+                    if (!service.clickAnyText("Send", "Send message")) {
+                        val msg = "Prompt ChatGPT me bhar diya hai, par Send button nahi mila — wahan Send dabate hi image banegi."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        return false
+                    }
+                    delay(20000)
+                    val msg = "Prompt ChatGPT ko bhej diya hai, image ban rahi hai — ChatGPT app me dekh lo. Ban jaate hi wahi dikh jayegi. (ChatGPT me login/subscription manga to wo tumhe khud karna hoga.)"
+                    messages = messages + ChatMsg("Flora: $msg", false)
+                    voice.speak(msg)
+                    return true
+                }
+
+                suspend fun runInstallFlow(appNameRaw: String) {
+                    val name = appNameRaw.trim()
+                    if (name.isEmpty()) {
+                        val msg = "Kaunsi app install karun? Aise boliye: 'WhatsApp install karo'."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        return
+                    }
+                    val pkg = AppAutomation.resolvePackage(name)
+                    if (pkg == null) {
+                        voice.speak("Play Store me $name search kar raha hun — jo app chahiye us par Install dabao.")
+                        AppAutomation.openPlayStoreSearch(appContext, name)
+                        return
+                    }
+                    if (AppAutomation.isInstalled(appContext, pkg)) {
+                        voice.speak("$name pehle se installed hai, khol raha hun.")
+                        AppAutomation.launch(appContext, pkg)
+                        return
+                    }
+                    val service = FloraAutomationService.instance
+                    voice.speak("Play Store se $name install kar raha hun. Agar ye paid app hai to payment tumhe khud confirm karni hogi.")
+                    AppAutomation.openPlayStoreDetails(appContext, pkg)
+                    delay(3000)
+                    if (service != null) {
+                        service.clickAnyText("Install")
+                        delay(2000)
+                    }
+                    val installed = AppAutomation.waitForInstalled(appContext, pkg, 180_000L)
+                    if (installed) {
+                        voice.speak("$name install ho gaya hai, khol raha hun.")
+                        AppAutomation.launch(appContext, pkg)
+                    } else {
+                        val msg = "Play Store khula hua hai — $name par Install dabate hi install shuru ho jayega. (Install nahi dikh raha to app ka naam dobara bol dena.)"
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                    }
+                }
+
+                fun parseInstallRequest(lower: String, question: String): String? {
+                    val prefixes = listOf(
+                        "install karo ", "install kar do ",
+                        "download karo ", "install "
+                    )
+                    for (p in prefixes) {
+                        if (lower.startsWith(p)) return question.substring(p.length).trim()
+                    }
+                    val suffixes = listOf(
+                        " install karo", " install kar do", " install kar"
+                    )
+                    for (s in suffixes) {
+                        if (lower.endsWith(s)) {
+                            return question.substring(0, question.length - s.length).trim()
+                        }
+                    }
+                    return null
+                }
+
                 // sendChat (v2.14): Bhejo button ka pipeline, ab continuous
                 // mic bhi isi se auto-send karta hai. Holder ke zariye
                 // upar ke LaunchedEffect se call hota hai.
@@ -879,25 +1011,39 @@ fun FloraApp(
                     input = ""
                     busy = true
                     scope.launch {
-                        // Image banao (v2.15, Pollinations bina key):
-                        // "image banao <prompt>" bolte hi image banegi
-                        // aur Gallery > Flora me save hogi.
+                        // Image via ChatGPT (v2.16, user order):
+                        // "image banao <prompt>" → ChatGPT app kholo →
+                        // prompt bharo → generate. ChatGPT flow fail ho
+                        // to bata kar Gallery wala tareeka (Pollinations)
+                        // fallback hai — chhupke nahi.
                         if (lower.startsWith("image banao ") || lower.startsWith("photo banao ")) {
                             val prompt = question.substringAfter("banao", "").trim()
                             if (prompt.isBlank()) {
-                                val msg = "Kaisi image banau? Aise boliye: 'image banao ek billi'."
+                                val msg = "Kaisi image banau? Aise boliye: 'image banao ek sher'."
                                 messages = messages + ChatMsg("Flora: $msg", false)
                                 voice.speak(msg)
                             } else {
-                                val saved = ImageTools.generateImage(appContext, prompt)
-                                val msg = if (saved != null) {
-                                    "Image ban gayi, Gallery ke Flora folder me save ho gayi."
-                                } else {
-                                    "Image nahi ban payi, internet check karke dobara boliye."
+                                val ok = runChatGptImage(prompt)
+                                if (!ok) {
+                                    voice.speak("ChatGPT se nahi bana to Gallery wale tareeke se bana raha hun.")
+                                    val saved = ImageTools.generateImage(appContext, prompt)
+                                    val msg = if (saved != null) {
+                                        "Image ban gayi, Gallery ke Flora folder me save ho gayi."
+                                    } else {
+                                        "Image nahi ban payi, internet check karke dobara boliye."
+                                    }
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
                                 }
-                                messages = messages + ChatMsg("Flora: $msg", false)
-                                voice.speak(msg)
                             }
+                            busy = false
+                            return@launch
+                        }
+                        // App install via Play Store (v2.16, user order):
+                        // "X install karo" / "install karo X".
+                        val installName = parseInstallRequest(lower, question)
+                        if (installName != null) {
+                            runInstallFlow(installName)
                             busy = false
                             return@launch
                         }
