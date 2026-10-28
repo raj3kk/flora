@@ -200,7 +200,7 @@ fun BrowserScreen(voice: VoiceEngine) {
                     settings.allowContentAccess = false
                     settings.allowFileAccessFromFileURLs = false
                     settings.allowUniversalAccessFromFileURLs = false
-                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER
+                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                     settings.safeBrowsingEnabled = true
                     settings.setSupportZoom(true)
                     settings.builtInZoomControls = true
