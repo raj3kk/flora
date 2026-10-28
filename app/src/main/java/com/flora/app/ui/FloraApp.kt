@@ -292,6 +292,7 @@ fun FloraApp(
         try {
             theme = prefs.theme()
             try { voice.persona = prefs.persona() } catch (e: Exception) { }
+            try { voice.voiceSample = prefs.voiceSample() } catch (e: Exception) { }
             try { voiceView = prefs.voiceView() } catch (e: Exception) { }
             try { avatarStyle = prefs.avatar() } catch (e: Exception) { }
             // Auto mode (v2.17): ON tha to notification wapas dikhao.
@@ -2693,6 +2694,9 @@ private fun SettingsScreen(
     var eventAnnounce by remember { mutableStateOf(false) }
     // Persona state (v1.8, local): launcher se PEHLE declare (order trap).
     var persona by remember { mutableStateOf("flora") }
+    // Voice sample state (v2.22, user selection): persona ke saath,
+    // launcher se pehle. Default "lily" (Sample 2 fixed).
+    var voiceSample by remember { mutableStateOf("lily") }
     // Theme state (v1.9): persona ke saath, launcher se pehle.
     var theme by remember { mutableStateOf("light") }
     // FCM status (v2.2): token value KABHI screen par nahi dikhegi.
@@ -2769,6 +2773,7 @@ private fun SettingsScreen(
         callAnnounce = prefs.callAnnounce()
         eventAnnounce = prefs.eventAnnounce()
         persona = prefs.persona()
+        voiceSample = prefs.voiceSample()
         theme = prefs.theme()
         fcmStatus = if (prefs.fcmToken().isNotEmpty()) {
             "Push: chalu (token sirf is phone par save hai)"
@@ -3177,6 +3182,19 @@ private fun SettingsScreen(
                 }
             }
             Text("Flora: friendly + professional. Saathi: dostana, chhote jawab. Guru: step-by-step, to-the-point. Romantic: pyaar bhara, caring tone (user ke kehne par ON hua hai).")
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Flora ki awaaz — Sample 2 Lily fixed hai (gahri, dheemi, mellow)")
+            Row {
+                listOf("isabella" to "Sample 1 Isabella", "lily" to "Sample 2 Lily", "myrtle" to "Sample 3 Myrtle").forEach { (id, label) ->
+                    Button(onClick = {
+                        voiceSample = id
+                        voice.voiceSample = id
+                        scope.launch { prefs.setVoiceSample(id) }
+                    }) { Text(if (voiceSample == id) "✓ $label" else label) }
+                    Spacer(modifier = Modifier.padding(2.dp))
+                }
+            }
+            Text("Ye setting Flora ki har awaaz par lagti hai — chat, background, Auto Mode, sab jagah — kyunki sab ek hi VoiceEngine se bolte hain. System TTS par ye pitch/rate profile lagti hai; Deepgram aane par isi style ki voice dhoondhi jayegi.")
             Spacer(modifier = Modifier.height(12.dp))
             Text("Auto mode — bina har baar poochhe kaam (default ON, user order)")
             Row {

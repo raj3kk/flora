@@ -31,12 +31,32 @@ class VoiceEngine(context: Context) {
 
     /** Voice-per-persona (v2.22, chunk 4): persona ke hisaab se
      *  pitch/rate — flora: saaf aur halki; romantic: thodi narm
-     *  aur dheemi. Sirf tone badalta hai, koi voice copy nahi. */
+     *  aur dheemi. Sirf tone badalta hai, koi voice copy nahi.
+     *  Voice sample (v2.22, user selection 2026-10-28: Sample 2
+     *  Lily fixed): sample = awaaz ki pehchaan, isliye sample
+     *  profile persona se upar lagti hai — har speak() par,
+     *  har jagah. Lily: gahri (pitch neeche) + dheemi + mellow. */
     @Volatile
     var persona: String = "flora"
 
+    /** Chuna hua voice sample: "isabella" / "lily" / "myrtle".
+     *  Default "lily" — user ne Sample 2 ko har jagah fix kiya
+     *  hai (2026-10-28). Deepgram aane par isi style ki voice
+     *  dhoondhi jayegi; tab tak system TTS par ye profile. */
+    @Volatile
+    var voiceSample: String = "lily"
+
     private fun applyPersona() {
-        if (persona == "romantic") {
+        if (voiceSample == "lily") {
+            tts?.setPitch(0.95f)
+            tts?.setSpeechRate(0.88f)
+        } else if (voiceSample == "isabella") {
+            tts?.setPitch(1.05f)
+            tts?.setSpeechRate(0.90f)
+        } else if (voiceSample == "myrtle") {
+            tts?.setPitch(1.15f)
+            tts?.setSpeechRate(0.92f)
+        } else if (persona == "romantic") {
             tts?.setPitch(1.25f)
             tts?.setSpeechRate(0.90f)
         } else {

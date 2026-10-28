@@ -40,6 +40,7 @@ class FloraPreferences(private val context: Context) {
         val EVENT_ANNOUNCE = booleanPreferencesKey("event_announce")
         val DRIVING_MODE = booleanPreferencesKey("driving_mode")
         val PERSONA = stringPreferencesKey("persona")
+        val VOICE_SAMPLE = stringPreferencesKey("voice_sample")
         val THEME = stringPreferencesKey("theme")
         val MODELS_MANIFEST_URL = stringPreferencesKey("models_manifest_url")
         val DEEPGRAM_API_KEY = stringPreferencesKey("deepgram_api_key")
@@ -369,6 +370,15 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setPersona(value: String) {
         context.floraDataStore.edit { it[Keys.PERSONA] = value }
+    }
+
+    /** Voice sample (v2.22, user selection 2026-10-28): Sample 2
+     *  Lily har jagah fixed. Default "lily". */
+    suspend fun voiceSample(): String =
+        context.floraDataStore.data.map { it[Keys.VOICE_SAMPLE] ?: "lily" }.first()
+
+    suspend fun setVoiceSample(value: String) {
+        context.floraDataStore.edit { it[Keys.VOICE_SAMPLE] = value }
     }
 
     /** Theme (v1.9): light/dark/warm. Default light. */

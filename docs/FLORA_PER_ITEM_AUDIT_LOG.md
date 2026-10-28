@@ -857,3 +857,9 @@ maujood, index bhi 200. Download page ab live hai.
 - Prepush checks (kotlin_prepush_checks): braces/parens balanced dono files; declaration order verify — scope/vision/state launcher se upar, capture AndroidView se upar; nullable guards (savedUri null, bitmap null, stream close); askAboutImage(prompt, jpeg, key) signature + suspend geminiApiKey() coroutine me — sab match. Local gradlew nahi hai (wrapper absent), isliye CI hi build gate hai (Flora practice).
 - Voice samples (style selection): your_files/flora-voice-samples me 3 samples (Isabella/Lily/Myrtle, Hindi, speed 85). IMAANDARI: ye Muse TTS samples hain, Flora ki awaaz nahi — Flora me style G1 Deepgram selection se aayegi.
 - Docs: FLORA_CEO_FULL_PLAN_20261028.md (G1-G18 order + action system + Maya-se-aage systems + G19 workarounds research) + FLORA_G21_DECISIONS_DETAIL_20261028.md (9 faisle detail + sifarish).
+
+## Voice Sample 2 Lily fixed everywhere (2026-10-28 ~21:05 IST, CI PENDING)
+- VoiceEngine.voiceSample (default "lily") + applyPersona: lily -> pitch 0.95/rate 0.88 (gahri+dheemi); isabella 1.05/0.90; myrtle 1.15/0.92; warna persona logic. Sample persona se upar (sample = voice, persona = tone/wording).
+- FloraPreferences VOICE_SAMPLE key + voiceSample()/setVoiceSample() (default "lily", persona pattern par).
+- FloraApp LaunchedEffect me voiceSample load; SettingsScreen me state (persona ke saath, launcher se pehle) + load + 3-sample selector row.
+- Prepush checks: braces/parens balanced teeno files; declaration order — state launcher se pehle, load persona ke saath, voice/scope params upar; nullable nahi hai is change me; local gradlew absent, CI hi build gate.
