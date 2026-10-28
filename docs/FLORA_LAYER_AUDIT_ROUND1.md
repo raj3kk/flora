@@ -27,22 +27,31 @@
    select policy maujood hai); Users/Usage list ke liye server
    function baaki hai (Round 2 item); Secrets by-design sirf
    note hai (values kabhi page par nahi aayengi).
-3. [OPEN] settings table: app me ZERO reference — DB table bina
-   frontend/backend use ke (dormant). Fix: ya to use karo ya
-   schema doc me dormant likho (Round 2).
-4. [OPEN] plans table: koi code runtime par isko read nahi karta
+3. [CLOSED — dormant note repo doc me (v2.10 CLOSED section)]
+   settings table: app me ZERO reference — DB table bina
+   frontend/backend use ke (dormant). Resolution: schema doc me
+   dormant config likha; licence-verify + admin-approve hi
+   source-of-truth hain. Table delete NAHI hui.
+4. [CLOSED — dormant note repo doc me (v2.10 CLOSED section)]
+   plans table: koi code runtime par isko read nahi karta
    (licence-verify licences.plan_id deta hai; admin-approve
-   plan_id='pro' hardcode karta hai). Price badalne par kuch
-   nahi badlega — plans section ka text seedha seeds se match
-   karna padta hai. Fix: plans ko source-of-truth banao ya
-   dormant-config likho (Round 2).
-5. [OPEN] Retention claim vs code: Privacy me "30 din" likha hai,
+   plan_id='pro' hardcode karta hai). Resolution: dormant config
+   likha; plans section ka text seeds se match karna padta hai.
+   Table delete NAHI hui.
+5. [CLOSED-implemented — v2.9 CI PASS; 30-din phone proof time par pending] Retention claim vs code: Privacy me "30 din" likha hai,
    lekin koi auto-delete enforcement nahi hai (sirf constant +
    text). Fix: Memories/Journal pruning implement karo (Round 2 —
    data delete hai, isliye alag item me careful audit ke saath).
-6. [OPEN] Free "15 tools" limit: constant hai, ToolsScreen par
-   koi gating nahi (free user ko sab milta hai — zyada milna,
-   kam ka jhootha vaada nahi). Fix: gating ya text (Round 2).
+6. [CLOSED — honest text, watcher-verified 2026-10-28 ~11:24 IST]
+   Free "15 tools" vaada hataya (text route; gating nahi lagayi —
+   free users se chalta tool chheenna hota). Evidence: v2.10
+   commit 35ab32d8, CI run 40639602390 completed success,
+   artifact flora-debug-apk 59,412,864 bytes; local
+   web/pricing.html:13 + LegalScreens.kt:83 + FloraApp.kt:357
+   par "app me maujood saare tools"; live naye deploy
+   flora-fxx247dqz-webbuilder1.vercel.app par /pricing 200 +
+   naya wording confirm, purana "15 tools" nahi mila. Free
+   users ko kuch kam nahi mila.
 7. [OPEN] APP-LINK (sabse bada): website account (Auth uid) vs
    app random UUID alag hain — website Pro app me nahi dikhega.
    Design taiyaar (FLORA_APP_LINK_DESIGN.md). Fix: v2.7+ me
@@ -119,3 +128,34 @@
   theek karna hoga (journal 30-din auto, memories manual
   delete + nayi entries par 30-din) — jhootha "sab 30 din"
   vaada nahi rahega.
+
+## Watcher tick verification — 2026-10-28 ~11:24 IST
+- Live (read-only): GitHub latest run abhi bhi 40639602390
+  (v2.10, head 35ab32d8) completed success, artifact
+  59,412,864 bytes, expired false — 11:20 tick ke baad koi
+  naya CI run nahi. Website naye deploy
+  flora-fxx247dqz-webbuilder1.vercel.app par clean URLs 7/7
+  200 (/, /admin, /pricing, /pay, /signup, /login, /account)
+  aur /pricing par naya wording "maujood saare tools" live
+  confirm (purana "15 tools" nahi mila) — 11:21 per-item entry
+  ka live daava watcher-verified hai; 11:20 tick ka khula
+  nuance (v2.10 pricing text live confirm) ab band hai.
+  Purana host flora-9tphr0lpk-webbuilder1.vercel.app bhi
+  200 hai (stale deploy, outage nahi). Supabase 5/5 Edge
+  Functions unauthenticated POST par 401 (auth gate, down
+  nahi); licence-verify authenticated read 200
+  {"plan":"free","status":"free"}.
+- CORRECTION (11:15 tick ke daave par): pushed Round 1 doc
+  dobara check kiya gaya (GitHub contents API,
+  docs/FLORA_LAYER_AUDIT_ROUND1.md, 6618 bytes, sha 33df04c4)
+  — usme items 3-4 ki list abhi bhi [OPEN] hai aur CLOSED
+  section maujood NAHI hai. Isliye items 3-4 sirf local doc
+  me closed hain; pushed sync agle push me baaki hai. List
+  lines upar isi hisaab se sudhaari gayi hain (OPEN par wapas
+  nahi, kyunki local resolution khada hai).
+- Item 6 is tick par CLOSED hua (evidence list line me hai);
+  ye sirf doc closure hai, koi code push nahi hua.
+- Abhi bhi OPEN: 5 (retention prune ka phone test), 7
+  (app-link phone test), 8 (Brain Phase B proxy), 9 (wake/
+  face/FCM-sync/usage phone test), 10 (Turso dormant note,
+  by-design). Issue count abhi bhi 0 NAHI hai — cycle jaari.
