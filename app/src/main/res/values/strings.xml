@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="flora_accessibility_description">Flora Automation: aapke bolne par app kholna, button dabana, scroll karna aur form bharna — sirf is phone par, aapke confirmation ke baad. Screen ka content kabhi server par nahi bheja jaata.</string>
+    <string name="flora_wallpaper_description">Flora ka halka dhadakta orb — sirf drawing, koi data ya mic nahi.</string>
 </resources>

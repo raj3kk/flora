@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <wallpaper xmlns:android="http://schemas.android.com/apk/res/android"
     android:label="Flora Live Wallpaper"
-    android:description="Flora ka halka dhadakta orb — sirf drawing, koi data ya mic nahi."
+    android:description="@string/flora_wallpaper_description"
     android:settingsActivity="com.flora.app.MainActivity" />
