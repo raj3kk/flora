@@ -3036,7 +3036,19 @@ fun FloraApp(
                             emptyList()
                         }
                         val memCtx = if (mems.isEmpty()) "" else mems.joinToString("; ")
-                        val reply = brain.ask(personaPrefix(prefs.persona()) + question, memCtx)
+                        // Phase 2 voice pipeline: pichhli baat-cheet brain ko
+                        // history ke roop me — taaki "khol diya" ke baad brain
+                        // andha follow-up na poochhe. Current sawaal history
+                        // me nahi (wo prompt hai); assistant lines ka "Flora: "
+                        // prefix hataya jata hai. (2961 par current sawaal
+                        // aakhri message ke roop me juda tha.)
+                        val lastIsCurrent = messages.lastOrNull()?.let { it.fromUser && it.text == question } == true
+                        val prior = if (lastIsCurrent) messages.dropLast(1) else messages
+                        val history = prior.takeLast(12).mapNotNull { m ->
+                            val t = m.text.removePrefix("Flora: ").trim()
+                            if (t.isEmpty()) null else BrainClient.ChatTurn(m.fromUser, t)
+                        }
+                        val reply = brain.ask(personaPrefix(prefs.persona()) + question, memCtx, history)
                         messages = messages + ChatMsg(reply, false)
                         voice.speak(reply)
                         busy = false

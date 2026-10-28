@@ -35,9 +35,18 @@ class BrainClient(private val prefs: FloraPreferences) {
         val note: String,
     )
 
+    /**
+     * Phase 2 voice pipeline: chat history ka ek turn.
+     * fromUser = user ka message, warna Flora ka jawab.
+     * FloraApp isko apne in-memory messages se banata hai
+     * (assistant lines ka "Flora: " prefix hat kar).
+     */
+    data class ChatTurn(val fromUser: Boolean, val text: String)
+
     private data class PostResult(val code: Int, val body: String?)
 
-    suspend fun ask(prompt: String, memoryContext: String = ""): String = withContext(Dispatchers.IO) {
+    suspend fun ask(prompt: String, memoryContext: String = "", history: List<ChatTurn> = emptyList()): String = withContext(Dispatchers.IO) {
+        val cappedHistory = capHistory(history)
         val keys = listOf(
             prefs.geminiApiKey().trim(),
             prefs.geminiApiKey2().trim(),
@@ -65,10 +74,10 @@ class BrainClient(private val prefs: FloraPreferences) {
         // par agla (quota bhi per-model hota hai, isliye 429 par
         // bhi rukna galat tha). Key ki value kahin log nahi hoti.
         val laneCodes = mutableListOf<Pair<String, Int>>()
-        val reply = geminiAsk(prompt, keys[0], laneCodes, memoryContext)
-            ?: geminiAsk(prompt, keys[1], laneCodes, memoryContext)
-            ?: groqAsk(prompt, keys[2], laneCodes, memoryContext)
-            ?: groqAsk(prompt, keys[3], laneCodes, memoryContext)
+        val reply = geminiAsk(prompt, keys[0], laneCodes, memoryContext, cappedHistory)
+            ?: geminiAsk(prompt, keys[1], laneCodes, memoryContext, cappedHistory)
+            ?: groqAsk(prompt, keys[2], laneCodes, memoryContext, cappedHistory)
+            ?: groqAsk(prompt, keys[3], laneCodes, memoryContext, cappedHistory)
         if (reply != null) return@withContext reply
         // v2.20 user order: brain fail ho to chat me technical
         // error KABHI nahi — na code, na model naam, na "key
@@ -192,11 +201,55 @@ class BrainClient(private val prefs: FloraPreferences) {
         }
     }
 
+    /**
+     * Phase 2 voice pipeline: history ko cap karo — aakhri 12
+     * turns, total ~1500 chars se zyada nahi (prompt cap ka
+     * khayal; purane turns poore-poore drop hote hain, aadhe
+     * nahi). Khali turns nikaal diye jaate hain. Sabse recent
+     * turn hamesha rakha jata hai, chahe wo akela hi cap se
+     * zyada lamba ho.
+     */
+    private fun capHistory(history: List<ChatTurn>): List<ChatTurn> {
+        val clean = history.filter { it.text.isNotBlank() }.takeLast(12)
+        val kept = mutableListOf<ChatTurn>()
+        var total = 0
+        for (turn in clean.asReversed()) {
+            if (kept.isNotEmpty() && total + turn.text.length > 1500) break
+            kept += turn
+            total += turn.text.length
+        }
+        return kept.asReversed()
+    }
+
+    /**
+     * Gemini ko roles alternate karne chahiye (user/model) —
+     * lagatar ek hi role ke turns "\n" se jod diye jaate hain.
+     * Aakhri user turn = final instruction + sawaal.
+     */
+    private fun mergeGeminiTurns(history: List<ChatTurn>, finalText: String): List<Pair<String, String>> {
+        val raw = mutableListOf<Pair<String, String>>()
+        for (turn in history) {
+            raw += (if (turn.fromUser) "user" else "model") to turn.text
+        }
+        raw += "user" to finalText
+        val merged = mutableListOf<Pair<String, String>>()
+        for ((role, text) in raw) {
+            val last = merged.lastOrNull()
+            if (last != null && last.first == role) {
+                merged[merged.lastIndex] = role to (last.second + "\n" + text)
+            } else {
+                merged += role to text
+            }
+        }
+        return merged
+    }
+
     private fun geminiAsk(
         prompt: String,
         key: String,
         laneCodes: MutableList<Pair<String, Int>>,
         memoryContext: String = "",
+        history: List<ChatTurn> = emptyList(),
     ): String? {
         if (key.isEmpty()) return null
         // v2.20 auto-discovery: hardcoded naam phir kabhi sade
@@ -206,26 +259,35 @@ class BrainClient(private val prefs: FloraPreferences) {
         val discovered = discoverGeminiModels(key)
         val models = if (discovered.isNotEmpty()) discovered.take(6) else
             listOf("gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash")
+        // Phase 2 voice pipeline: final instruction + sawaal, usse
+        // pehle history ke turns (user/model roles ke saath).
+        // Ban line: jawab me kabhi emoji, markdown ya technical
+        // baat nahi — ye PERMANENT RULE prompt level par bhi hai
+        // (TTS sanitizer VoiceEngine me alag se hai).
+        val finalText = "Tum Flora ho, ek friendly AI assistant. Muskura kar, pyar se, " +
+            "meethi boli me jawab do — jaise apne dost se has kar baat " +
+            "karte hain. User jis tone me bole (pyar se, mazak me), waisa " +
+            "hi apnao. Chhota jawab do, aam taur par 1-2 line me, lamba " +
+            "ya formal mat bano. Hindi/English mix me, user jis language " +
+            "me bole usi me jawab do. Kaam ki baat pehle; extra detail " +
+            "sirf poochhe par. Jawab me kabhi emoji, markdown formatting " +
+            "ya technical baat (code, model ka naam, key ki baat) mat likhna — " +
+            "sirf saaf, saadi boli me jawab do." +
+            (if (memoryContext.isNotEmpty()) " User ke baare me tumhe ye yaad hai " +
+                "(sirf tab istemal karo jab sawaal se juda ho, kabhi seedha " +
+                "repeat mat karo): $memoryContext." else "") +
+            " Sawal: $prompt"
+        val turns = mergeGeminiTurns(history, finalText)
         for (model in models) {
-            val body = JSONObject()
-                .put("contents", JSONArray().put(
-                    JSONObject().put("parts", JSONArray().put(
-                        JSONObject().put(
-                            "text",
-                            "Tum Flora ho, ek friendly AI assistant. Muskura kar, pyar se, " +
-                                "meethi boli me jawab do — jaise apne dost se has kar baat " +
-                                "karte hain. User jis tone me bole (pyar se, mazak me), waisa " +
-                                "hi apnao. Chhota jawab do, aam taur par 1-2 line me, lamba " +
-                                "ya formal mat bano. Hindi/English mix me, user jis language " +
-                                "me bole usi me jawab do. Kaam ki baat pehle; extra detail " +
-                                "sirf poochhe par." +
-                                (if (memoryContext.isNotEmpty()) " User ke baare me tumhe ye yaad hai " +
-                                    "(sirf tab istemal karo jab sawaal se juda ho, kabhi seedha " +
-                                    "repeat mat karo): $memoryContext." else "") +
-                                " Sawal: $prompt"
-                        )
+            val contents = JSONArray()
+            for ((role, text) in turns) {
+                contents.put(
+                    JSONObject().put("role", role).put("parts", JSONArray().put(
+                        JSONObject().put("text", text)
                     ))
-                ))
+                )
+            }
+            val body = JSONObject().put("contents", contents)
             val result = postJson(
                 "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key",
                 body, null
@@ -307,6 +369,7 @@ class BrainClient(private val prefs: FloraPreferences) {
         key: String,
         laneCodes: MutableList<Pair<String, Int>>,
         memoryContext: String = "",
+        history: List<ChatTurn> = emptyList(),
     ): String? {
         if (key.isEmpty()) return null
         // v2.15: llama-3.1-8b-instant 16 Aug 2026 ko free/dev se
@@ -314,24 +377,32 @@ class BrainClient(private val prefs: FloraPreferences) {
         // pehle, phir gpt-oss-120b (dono free tier par hain).
         val models = listOf("openai/gpt-oss-20b", "openai/gpt-oss-120b")
         for (model in models) {
+            val messages = JSONArray()
+                .put(JSONObject().put("role", "system").put(
+                    "content",
+                    "Tum Flora ho, ek friendly AI assistant. Muskura kar, pyar se, " +
+                        "meethi boli me jawab do — jaise apne dost se has kar baat " +
+                        "karte hain. User jis tone me bole (pyar se, mazak me), waisa " +
+                        "hi apnao. Chhota jawab do, aam taur par 1-2 line me, lamba " +
+                        "ya formal mat bano. Hindi/English mix me, user jis language " +
+                        "me bole usi me jawab do. Kaam ki baat pehle; extra detail " +
+                        "sirf poochhe par. Jawab me kabhi emoji, markdown formatting " +
+                        "ya technical baat (code, model ka naam, key ki baat) mat likhna — " +
+                        "sirf saaf, saadi boli me jawab do." +
+                        (if (memoryContext.isNotEmpty()) " User ke baare me yaad " +
+                            "(sirf zaroorat par istemal karo, kabhi seedha repeat mat karo): " +
+                            "$memoryContext." else "")
+                ))
+            for (turn in history) {
+                messages.put(
+                    JSONObject().put("role", if (turn.fromUser) "user" else "assistant")
+                        .put("content", turn.text)
+                )
+            }
+            messages.put(JSONObject().put("role", "user").put("content", prompt))
             val body = JSONObject()
                 .put("model", model)
-                .put("messages", JSONArray()
-                    .put(JSONObject().put("role", "system").put(
-                        "content",
-                        "Tum Flora ho, ek friendly AI assistant. Muskura kar, pyar se, " +
-                            "meethi boli me jawab do — jaise apne dost se has kar baat " +
-                            "karte hain. User jis tone me bole (pyar se, mazak me), waisa " +
-                            "hi apnao. Chhota jawab do, aam taur par 1-2 line me, lamba " +
-                            "ya formal mat bano. Hindi/English mix me, user jis language " +
-                            "me bole usi me jawab do. Kaam ki baat pehle; extra detail " +
-                            "sirf poochhe par." +
-                            (if (memoryContext.isNotEmpty()) " User ke baare me yaad " +
-                                "(sirf zaroorat par istemal karo, kabhi seedha repeat mat karo): " +
-                                "$memoryContext." else "")
-                    ))
-                    .put(JSONObject().put("role", "user").put("content", prompt))
-                )
+                .put("messages", messages)
             val result = postJson(
                 "https://api.groq.com/openai/v1/chat/completions",
                 body, "Bearer $key"
