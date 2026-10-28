@@ -3,7 +3,6 @@ package com.flora.app.automation
 import android.accessibilityservice.AccessibilityService
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import kotlinx.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -202,8 +201,19 @@ class FloraAutomationService : AccessibilityService() {
                                 override fun onSuccess(result: ScreenshotResult) {
                                     if (!cont.isActive) return
                                     val jpeg = try {
-                                        val raw = result.bitmap ?: run {
-                                            cont.resume(null)
+                                        // Asli API: ScreenshotResult me
+                                        // bitmap property NAHI hai —
+                                        // hardwareBuffer + colorSpace
+                                        // se wrap karna padta hai (CI
+                                        // fail se seekha, 2026-10-28).
+                                        val hw = result.hardwareBuffer ?: run {
+                                            cont.resumeWith(Result.success(null))
+                                            return
+                                        }
+                                        val raw = android.graphics.Bitmap.wrapHardwareBuffer(
+                                            hw, result.colorSpace
+                                        ) ?: run {
+                                            cont.resumeWith(Result.success(null))
                                             return
                                         }
                                         val soft = if (raw.config ==
@@ -216,7 +226,7 @@ class FloraAutomationService : AccessibilityService() {
                                         } else {
                                             raw
                                         } ?: run {
-                                            cont.resume(null)
+                                            cont.resumeWith(Result.success(null))
                                             return
                                         }
                                         val out =
@@ -230,16 +240,16 @@ class FloraAutomationService : AccessibilityService() {
                                     } catch (e: Exception) {
                                         null
                                     }
-                                    cont.resume(jpeg)
+                                    cont.resumeWith(Result.success(jpeg))
                                 }
 
                                 override fun onFailure(errorCode: Int) {
-                                    if (cont.isActive) cont.resume(null)
+                                    if (cont.isActive) cont.resumeWith(Result.success(null))
                                 }
                             }
                         )
                     } catch (e: Exception) {
-                        if (cont.isActive) cont.resume(null)
+                        if (cont.isActive) cont.resumeWith(Result.success(null))
                     }
                 }
             }

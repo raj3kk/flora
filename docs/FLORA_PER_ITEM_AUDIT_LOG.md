@@ -843,3 +843,7 @@ maujood, index bhi 200. Download page ab live hai.
 - Background screen-Q&A: BackgroundMicService.handleHeard me screen sawaal (screen/is app/kya karu) par accessibility screenshot + vision + TTS jawab, app aage laye bina. Accessibility OFF/key missing ho to seedha batao. Execution commands abhi bhi bring-forward + confirmation (rule nahi toota).
 - Website dropdown: 8 pages (index/signup/login/account/pay/pricing/admin/download) par "Sab pages" dropdown — saare pages ek jagah se. admin-draft ka apna nav nahi (admin par redirect hai).
 - Baaki mega-order items (overlay mic button, code-likho branch, website-link hosting faisla, Chrome/GitHub/Vercel flow, journal/docs encryption, hisaab branch) agle chunks + user faislon par — plan doc me darj hoga.
+
+## CI fail fix — screenshotJpeg compile errors (2026-10-28 ~19:30 IST, CI PENDING)
+- Run 40698840209 (4fe5742e) job-log se pakde gaye 2 asli errors, guess nahi: (1) kotlinx.coroutines.resume internal hai (is coroutines version me) → cont.resumeWith(Result.success(...)) par laya gaya; (2) ScreenshotResult me bitmap property hoti hi nahi → hardwareBuffer + colorSpace se Bitmap.wrapHardwareBuffer() par laya gaya (baaki errors isi ke cascade the).
+- AGENTS lesson: takeScreenshot API ko yaad se mat likho — ScreenshotResult = hardwareBuffer/colorSpace, bitmap nahi; continuation resume = resumeWith(Result.success()).
