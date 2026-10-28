@@ -47,23 +47,26 @@ serve(async (req) => {
 
   const geminiKey = Deno.env.get("GEMINI_API_KEY") || "";
   if (geminiKey) {
-    try {
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: `${STYLE} Sawal: ${prompt}` }] }],
-          }),
-        },
-      );
-      if (r.ok) {
-        const j = await r.json();
-        const reply = j.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        if (reply.trim()) return json({ reply, lane: "gemini" });
-      }
-    } catch (_e) { /* fallback to Groq */ }
+    // v2.22: ek model sadne par chain (Maya wala tareeqa) — flash, phir lite.
+    for (const model of ["gemini-2.5-flash", "gemini-2.5-flash-lite"]) {
+      try {
+        const r = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `${STYLE} Sawal: ${prompt}` }] }],
+            }),
+          },
+        );
+        if (r.ok) {
+          const j = await r.json();
+          const reply = j.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          if (reply.trim()) return json({ reply, lane: "gemini" });
+        }
+      } catch (_e) { /* next model, then Groq */ }
+    }
   }
 
   const groqKey = Deno.env.get("GROQ_API_KEY") || "";

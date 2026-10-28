@@ -807,3 +807,15 @@ maujood, index bhi 200. Download page ab live hai.
 - account.html FULL REWRITE: nav header, auto-load, login card (bina login), Pro steps checklist (signup/confirm/pay status badges), payments auto-load + status badges (pending/approved/rejected), Refresh + Logout.
 - Baaki 6 pages (index/login/signup/pricing/pay/download) par wahi nav header joda — har page se har panel ek click par.
 - Logic change NAHI: wahi functions, wahi RLS notes, koi secret nahi. Sirf design + UX states.
+
+## Table-count dobara verify — "empty" wali read GALAT thi (2026-10-28 ~18:26 IST)
+- Dobara jaanch: public.users me 4 rows hain (khali nahi) — pichhli "0 rows/table empty" wali read galat thi (filter/grid misread). Koi delete nahi hua.
+- Owner ki row abhi bhi NAHI hai; Auth users total 10 hain (public 4 se alag list — auto-create na hone ki wajah se expected hai).
+- Admin flag abhi bhi app link par atka hai — row banne ke baad UPDATE turant chalega.
+
+## Screen vision + session + continuous — ROOT FIX (2026-10-28 ~18:35 IST, CI PENDING)
+- VisionClient BUG MILA (screen na dikhne ki asli wajah): hardcoded gemini-1.5-flash (retired) — har vision call 404 par girti thi. Fix: chat wali auto-discovery chain hi (flash-prefer, 404 par agla) — Maya ka bhi fixed model nahi tha, "latest free chain" tha.
+- Session/permission loop ki jad: session composable `remember` me tha + screen chhodte hi DisposableEffect STOP karta tha; mari projection ka purana token dobara kaam nahi karta — isliye har wapasi par naya dialog. Fix: app-level LiveSessionHolder (screen badalne par zinda), asli maut MediaProjection.Callback se, explicit "session band karo" button. Process marne par Android dobara permission maangega hi (OS niyam).
+- Continuous 10-frame cap HATA DIYA (user order): ab ROKO dabane tak chalega, har 10 sec ek frame (har frame = user key par 1 Gemini call, isliye gap rakha hai).
+- brain-proxy (repo only): Gemini chain flash -> lite (deploy pending).
+- NOTE: ye fixes code me hain, phone tak v2.22 final ke saath aayenge (single-deploy order barkarar).

@@ -15,7 +15,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,11 +33,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Live screen (v1.2): user poochhe to Flora screen ka frame dekh
+ * Live screen (v2.22): user poochhe to Flora screen ka frame dekh
  * kar jawab deti hai — sirf text nahi, poori tasveer (icon, button,
- * colour, layout). Permission system dialog se milti hai, frame
- * ke baad projection turant band hoti hai, continuous dekhna nahi
- * hota. Frame sirf user ke sawaal ke liye vision ko jaata hai.
+ * colour, layout). Permission system dialog se milti hai.
+ * Session app-level holder me zinda rehta hai — screen badalne par
+ * bhi nahi marta, band sirf "session band karo" par ya projection
+ * ke marne par hota hai. Continuous sirf user ke Chalu dabane par
+ * chalta hai, har 10 sec ek frame, ROKO dabane tak (har frame ek
+ * Gemini call = user key ka kharcha, isliye gap rakha hai).
  */
 @Composable
 fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
@@ -55,36 +57,31 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
     var lastSummary by remember { mutableStateOf("") }
     var appName by remember { mutableStateOf("") }
     val vision = remember { VisionClient() }
-    // v2.20 fix — "ek baar permission, phir dobara frame nahi
-    // mila" ki jad: purana one-shot capture har baar projection
-    // STOP kar deta tha, aur wahi permission dobara kaam nahi
-    // karti (MediaProjection token ek baar ka hota hai). Ab ek
-    // hi session poori Live screen ke liye zinda rehta hai —
-    // har sawaal usi se frame leta hai, band sirf screen
-    // chhodne par hota hai. Dobara permission tabhi chahiye
-    // jab session mar jaye.
-    var liveSession by remember { mutableStateOf<ScreenCapture.Session?>(null) }
-    DisposableEffect(Unit) {
-        onDispose { try { liveSession?.stop() } catch (e: Exception) { } }
-    }
+    // v2.22 fix — session ab composable ke `remember` me nahi,
+    // ScreenCapture.LiveSessionHolder me rehta hai: screen
+    // chhodne par bhi zinda, band sirf user ke kehne par ya
+    // projection ke marne par. Isse "baar baar permission" wali
+    // loop khatam hoti hai (process marne par Android ka niyam
+    // phir bhi dobara permission maangega — wo OS ka niyam hai).
 
     fun openSession(): ScreenCapture.Session? {
         val act = activity
         val data = resultData
         if (act == null || data == null || !granted) return null
-        val existing = liveSession
+        val existing = ScreenCapture.LiveSessionHolder.session
         if (existing != null && existing.isOpen()) return existing
         val fresh = ScreenCapture.startSession(act, resultCode, data)
-        liveSession = fresh
+        ScreenCapture.LiveSessionHolder.session = fresh
         return fresh
     }
 
     /**
-     * Continuous live (v1.4): sirf user ke Chalu dabane par, har 10 sec
-     * ek frame, max 10 frame per session (har frame ek Gemini call =
-     * user key ka kharcha, isliye cap). Roko dabate hi projection band.
-     * Effect cancel hote hi session.stop() chalta hai — chhup kar
-     * chalta rehna possible nahi.
+     * Continuous live (v2.22): sirf user ke Chalu dabane par, har 10 sec
+     * ek frame, ROKO dabane tak — pehle wala "max 10 frame" cap hata
+     * diya gaya hai (user order: jitne frame ho sake, poore milein).
+     * Har frame ek Gemini call hai = user key ka kharcha, isliye
+     * 10 sec ka gap rakha hai. Roko dabate hi loop band, session
+     * zinda rehta hai agle sawaal ke liye.
      */
     LaunchedEffect(continuousRunning) {
         if (!continuousRunning) return@LaunchedEffect
@@ -113,7 +110,7 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
             return@LaunchedEffect
         }
         var count = 0
-        while (count < 10) {
+        while (continuousRunning) {
             val jpeg = session.captureFrame()
             if (jpeg != null) {
                 val reply = vision.askAboutImage(
@@ -126,9 +123,9 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
             }
             count++
             frameCount = count
-            if (count < 10) delay(10_000)
+            delay(10_000)
         }
-        note = "10 frame poore, continuous band. Session zinda hai, sawaal phir poochh sakte ho."
+        note = "Continuous band. Session zinda hai, sawaal phir poochh sakte ho."
         continuousRunning = false
     }
 
@@ -137,8 +134,7 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             // Purana mara hua session hatao, naya agle sawaal par banega.
-            try { liveSession?.stop() } catch (e: Exception) { }
-            liveSession = null
+            ScreenCapture.LiveSessionHolder.clear()
             granted = true
             resultCode = result.resultCode
             resultData = result.data
@@ -168,8 +164,7 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
             if (jpeg == null) {
                 note = "Arre, screen abhi dikh nahi rahi — ek baar phir se permission de do, phir main dekh lungi."
                 voice.speak("Arre, screen abhi dikh nahi rahi — ek baar phir se permission de do, phir main dekh lungi.")
-                try { liveSession?.stop() } catch (e: Exception) { }
-                liveSession = null
+                ScreenCapture.LiveSessionHolder.clear()
                 val mgr = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
                     as MediaProjectionManager
                 launcher.launch(mgr.createScreenCaptureIntent())
@@ -226,11 +221,12 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
         item {
             Text("Live Screen — poochhiye, Flora dekh kar batayegi.")
             Text(
-                "Permission aap system dialog se denge. Frame milte hi " +
-                    "capture band ho jaata hai — chhup kar continuous " +
-                    "screen dekhna kabhi nahi hota. Continuous sirf aapke " +
-                    "Chalu dabane par chalta hai, har 10 sec ek frame, " +
-                    "max 10 frame, phir khud band."
+                "Permission aap system dialog se denge. Session ek baar " +
+                    "khulne ke baad zinda rehta hai — screen badalne par bhi " +
+                    "dobara permission nahi maangega, jab tak app ka process " +
+                    "zinda hai. Continuous sirf aapke Chalu dabane par chalta " +
+                    "hai, har 10 sec ek frame, ROKO dabane tak. Har frame ek " +
+                    "Gemini call hai, isliye gap rakha hai."
             )
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = {
@@ -238,6 +234,13 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
                     as MediaProjectionManager
                 launcher.launch(mgr.createScreenCaptureIntent())
             }) { Text("Screen permission do") }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = {
+                ScreenCapture.LiveSessionHolder.clear()
+                granted = false
+                resultData = null
+                note = "Screen session band kar diya. Dobara dekhne ke liye phir permission do."
+            }) { Text("Screen session band karo") }
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = { ask("Is screen par kya dikh raha hai, sab kuch detail me batao?") }) {
                 Text("Is screen par kya hai?")
@@ -261,12 +264,12 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
             if (continuousRunning) {
                 Button(onClick = { continuousRunning = false }) { Text("Continuous ROKO") }
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Continuous chal raha hai — frame $frameCount / 10.")
+                Text("Continuous chal raha hai — frame $frameCount.")
             } else {
                 Button(onClick = {
                     frameCount = 0
                     continuousRunning = true
-                }) { Text("Continuous CHALU karo (10 frame tak)") }
+                }) { Text("Continuous CHALU karo (ROKO dabane tak)") }
             }
             if (lastSummary.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
