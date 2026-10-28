@@ -1,16 +1,25 @@
 package com.flora.app.automation
 
 import android.content.pm.PackageManager
+import android.os.Parcel
 import rikka.shizuku.Shizuku
+import rikka.shizuku.SystemServiceHelper
 
 /**
  * Shizuku bridge (v2.22, G19 "impossible → possible").
  *
  * Android kisi app ko khud apni system-level permissions nahi dene deta.
  * Shizuku ek user-chalayi service hai (Shizuku app + wireless debugging,
- * root NAHI) jiske through `pm grant` chal sakta hai — sirf tab jab user
- * ne Shizuku khud chalaya ho aur Flora ko Shizuku permission di ho.
+ * root NAHI) jiske through permission grant ho sakta hai — sirf tab jab
+ * user ne Shizuku khud chalaya ho aur Flora ko Shizuku permission di ho.
  * Reboot par Shizuku band ho jata hai; user kabhi bhi rok sakta hai.
+ *
+ * Raasta (Shizuku API 13.1.5 ke VERIFIED public methods se — artifact
+ * khud padh kar nikala gaya, kyunki Shizuku.newProcess is version me
+ * private hai): SystemServiceHelper se package service ka binder lo,
+ * grantRuntimePermission ka transaction code + interface-token wala
+ * Parcel lo, args likho, transact karo. Ye wahi kaam hai jo
+ * `adb shell pm grant` karta hai — sirf Shizuku ke through.
  *
  * Har call try/catch me hai: Shizuku app na ho, service band ho, ya
  * permission na mile — to false/status, kabhi crash nahi.
@@ -33,17 +42,33 @@ object ShizukuBridge {
     }
 
     /**
-     * Ek permission `pm grant` se do. Sirf tab jab isReady + hasPermission.
-     * @return true jab pm grant exit code 0 de.
+     * Ek runtime permission grant karo (pm grant ke barabar).
+     * Sirf tab jab isReady + hasPermission. Sirf normal runtime
+     * permissions (Notification/Camera/Mic) ke liye use hota hai.
+     * @return true jab grant transact bina exception ke poora ho.
      */
     fun grantPermission(pkg: String, perm: String): Boolean {
         if (!hasPermission()) return false
         return try {
-            val process = Shizuku.newProcess(
-                arrayOf("pm", "grant", pkg, perm), null, null
+            val binder = SystemServiceHelper.getSystemService("package") ?: return false
+            val code = SystemServiceHelper.getTransactionCode(
+                "package", "android.content.pm.IPackageManager", "grantRuntimePermission"
+            ) ?: return false
+            val data = SystemServiceHelper.obtainParcel(
+                "package", "android.content.pm.IPackageManager", "grantRuntimePermission"
             )
-            process.waitFor()
-            process.exitValue() == 0
+            val reply = Parcel.obtain()
+            try {
+                data.writeString(pkg)
+                data.writeString(perm)
+                data.writeInt(android.os.Process.myUid() / 100000)
+                binder.transact(code, data, reply, 0)
+                reply.readException()
+                true
+            } finally {
+                data.recycle()
+                reply.recycle()
+            }
         } catch (e: Exception) {
             false
         }
