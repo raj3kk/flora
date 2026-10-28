@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.flora.app.assistant.BrainClient
 import com.flora.app.assistant.VisionClient
 import com.flora.app.assistant.VoiceEngine
+import com.google.firebase.messaging.FirebaseMessaging
 import com.flora.app.automation.AppLauncher
 import com.flora.app.automation.AutoActions
 import com.flora.app.core.FloraConfig
@@ -163,6 +164,20 @@ fun FloraApp(
                 ) ?: "flora-device"
                 val deviceId = prefs.deviceId(androidId)
                 licence = licenceClient.verify(userId, deviceId)
+            }
+            // FCM token (v2.2): app khulte hi token lo aur sirf is phone
+            // par save karo. Fail ho to onNewToken se dobara milega.
+            try {
+                FirebaseMessaging.getInstance().token
+                    .addOnSuccessListener { token ->
+                        scope.launch {
+                            try {
+                                prefs.setFcmToken(token)
+                            } catch (e: Exception) {
+                            }
+                        }
+                    }
+            } catch (e: Exception) {
             }
         } catch (e: Exception) {
             // Offline/server fail: licence null = free, kaam rukta nahi.
@@ -789,6 +804,8 @@ private fun SettingsScreen(
     var persona by remember { mutableStateOf("flora") }
     // Theme state (v1.9): persona ke saath, launcher se pehle.
     var theme by remember { mutableStateOf("light") }
+    // FCM status (v2.2): token value KABHI screen par nahi dikhegi.
+    var fcmStatus by remember { mutableStateOf("Push: jaanch ho rahi hai...") }
     var note by remember { mutableStateOf("") }
     val phonePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -819,11 +836,18 @@ private fun SettingsScreen(
         eventAnnounce = prefs.eventAnnounce()
         persona = prefs.persona()
         theme = prefs.theme()
+        fcmStatus = if (prefs.fcmToken().isNotEmpty()) {
+            "Push: chalu (token sirf is phone par save hai)"
+        } else {
+            "Push: token abhi nahi mila — app dobara kholo ya internet check karo"
+        }
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
             Text("Keys — sirf is phone par save hoti hain, kabhi server par nahi bheji jaati (licence check ke alawa).")
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(fcmStatus)
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = anonKey, onValueChange = { anonKey = it },

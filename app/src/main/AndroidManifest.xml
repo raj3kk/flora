@@ -49,6 +49,13 @@
                 <action android:name="android.telecom.InCallService" />
             </intent-filter>
         </service>
+        <service
+            android:name="com.flora.app.push.FloraMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
         <receiver
             android:name="com.flora.app.automation.CallAnnouncementReceiver"
             android:exported="true">

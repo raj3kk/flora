@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "936272762254",
+    "project_id": "flora-f22a7",
+    "storage_bucket": "flora-f22a7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:936272762254:android:84418517dc0ebaf6c6c0df",
+        "android_client_info": {
+          "package_name": "com.flora.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDVJqvU5J7hX4hKCllGxB0jLBoIF8STqYg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -44,6 +44,7 @@ class FloraPreferences(private val context: Context) {
         val BRAVE_API_KEY = stringPreferencesKey("brave_api_key")
         val SERPAPI_API_KEY = stringPreferencesKey("serpapi_api_key")
         val MAPS_API_KEY = stringPreferencesKey("maps_api_key")
+        val FCM_TOKEN = stringPreferencesKey("fcm_token")
         val CALL_TALK = booleanPreferencesKey("call_talk")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
@@ -126,6 +127,16 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setMapsApiKey(value: String) {
         context.floraDataStore.edit { it[Keys.MAPS_API_KEY] = value }
+    }
+
+    // FCM device token (v2.2): sirf is phone par DataStore me rahega;
+    // kabhi log, chat, backup ya message me nahi jayega. Server sync
+    // tabhi hoga jab push_tokens table + server function taiyaar ho.
+    suspend fun fcmToken(): String =
+        context.floraDataStore.data.map { it[Keys.FCM_TOKEN] ?: "" }.first()
+
+    suspend fun setFcmToken(value: String) {
+        context.floraDataStore.edit { it[Keys.FCM_TOKEN] = value }
     }
 
     suspend fun automationConsent(): Boolean =
