@@ -502,7 +502,7 @@ fun FloraApp(
                             // supported nahi (koi PDF parser dependency nahi).
                             // Talk-limit yahan bhi lagu hota hai (free cap).
                             if (attachedUri != null) {
-                                val uri = attachedUri
+                                val uri = attachedUri ?: return@Button
                                 val mime = attachedMime
                                 val fname = attachedName
                                 val q = question
