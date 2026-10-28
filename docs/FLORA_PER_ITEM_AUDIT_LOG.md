@@ -502,3 +502,19 @@ maujood, index bhi 200. Download page ab live hai.
 - CI run 40671342205 completed failure: FloraApp.kt:180:48 Unresolved reference: appContext.
 - Wajah: autoLogStore line appContext ki declaration (line 183) se PEHLE likhi thi — wahi declaration-order trap jo AGENTS.md me darj hai. Fix: autoLogStore ko appContext ke BAAD le jaya gaya + comment bhi sudhara (default OFF → v2.18 default ON).
 - Re-audit: brace/paren balance OK; line order grep se verify (appContext < autoLogStore < helpers).
+
+## v2.16 download page LIVE (2026-10-28 ~15:57 IST)
+- SwissTransfer link: https://www.swisstransfer.com/dl/01a18209-64fe-73a3-b5e9-3f8163382772 (106.6 MB, 15 din, 12 Nov 2026 tak; bina password, bina code, bina account/payment).
+- Download page update commit 0f86c839 → deploy flora-ck70ymb12-webbuilder1.vercel.app READY; /download par live verify: v2.16.0-rebuild, size 111,735,544, SHA dc926db0…, whats-new v2.16 (ChatGPT image + Play Store install).
+
+## v2.18 CI PASS via fix run (2026-10-28 ~16:03 IST)
+- Fix run 40672135141 (commit 62b3e2c5) completed SUCCESS. Artifact 12808204318, zip 59,547,075 bytes (exact match).
+- Real APK: 111,768,312 bytes, sha256 8d536ae5d1e76a1b06a00c495fcd8adc3872dff996830073832f92a42dadb88a, aapt2: com.flora.app, versionCode 40, versionName 2.18.0-rebuild.
+- NOTE: ye tree v2.17-fix + v2.18 content dono rakhta hai (Auto Mode default ON + routine call/SMS auto + romantic persona + Auto Log). v2.18 ka apna run (d3925197) expected FAIL tha — fix run se cover.
+- SwissTransfer upload in progress; link milte hi download page update hoga.
+
+## v2.19 dead-code cleanup audit (2026-10-28 ~16:10 IST, user order: bina kaam ka sab hatao)
+- REMOVE (grep se zero external ref verify karke): deps appcompat, work-runtime-ktx, room-runtime, ui-tooling-preview (koi @Preview, WorkManager, Room, AppCompat use nahi); file PermissionGate.kt (khud ke header me likha hai v2.13 SetupWizard ne replace kar diya, use nahi hoti); permission ACCESS_NETWORK_STATE (koi ConnectivityManager/activeNetwork use nahi); res/drawable/flora_app_icon.webp (APK me tha par manifest me koi android:icon nahi, koi ref nahi — icon pehle se hi default tha, isliye dikhne me koi farq nahi); res/media-generation-* webp+json (repo clutter, APK me the hi nahi, koi ref nahi).
+- KEPT with reason: AutomationGate.kt (call-count zero hai, par ye consent-policy class hai — safety gate ko ref-count par delete nahi kiya; re-wire P-work me flag hai); READ_PHONE_STATE (CallAnnouncementReceiver me TelephonyManager use karta hai); strings.xml (accessibility config use karta hai); saare 19 Screen routes + ExtraScreens (sab use me hain).
+- Purane hosts ka sweep: getmaya/hunterislive/flow99/turso — Flora tree me ZERO (clean-room barkarar).
+- Audit: gradle + manifest edit ke baad balance check CI par hoga; version 41 / 2.19.0-rebuild.
