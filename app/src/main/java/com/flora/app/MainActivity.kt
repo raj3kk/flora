@@ -57,15 +57,23 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val prefs = FloraPreferences(applicationContext)
         voice = VoiceEngine(applicationContext)
+        val licenceClient = LicenceClient(prefs)
         voice.onSpoken = { seconds ->
             talkScope.launch {
                 val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
                     .format(java.util.Date())
                 prefs.addTalkSeconds(today, seconds)
+                // v2.6-prep (push v2.5 PASS ke baad): server count
+                // SIRF yahan se — FloraApp ke 3 check sites se kabhi
+                // nahi (triple-count ho jayega). Fail ho to local
+                // counter hi sach hai, baat-cheet nahi rukti.
+                try {
+                    licenceClient.countUsage(prefs.userId(), seconds)
+                } catch (e: Exception) {
+                }
             }
         }
         val brain = BrainClient(prefs)
-        val licenceClient = LicenceClient(prefs)
         val pinVault = PinVault(applicationContext)
         val guardian = GuardianGate()
         val memoriesStore = MemoriesStore(applicationContext)

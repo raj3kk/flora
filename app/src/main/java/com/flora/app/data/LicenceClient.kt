@@ -27,6 +27,12 @@ data class UsageResult(val counted: Boolean, val detail: String)
  */
 class LicenceClient(private val prefs: FloraPreferences) {
 
+    // verify() se aakhri jaana hua plan (memory me hi). countUsage
+    // isi se decide karta hai ki server count bhejna hai ya nahi:
+    // pro = unlimited, server count ki zaroorat nahi.
+    @Volatile
+    private var lastPlan: String? = null
+
     private fun post(path: String, body: JSONObject, anonKey: String): JSONObject? {
         val conn = (URL(FloraConfig.SUPABASE_URL + path).openConnection() as HttpURLConnection)
         return try {
@@ -60,10 +66,12 @@ class LicenceClient(private val prefs: FloraPreferences) {
             ?: return@withContext LicenceStatus("free", "error", false)
         val plan = res.optString("plan", "free")
         val status = res.optString("status", "active")
+        lastPlan = if (plan == "pro") "pro" else "free"
         LicenceStatus(if (plan == "pro") "pro" else "free", status, true)
     }
 
     suspend fun countUsage(userId: String, seconds: Long): UsageResult = withContext(Dispatchers.IO) {
+        if (lastPlan == "pro") return@withContext UsageResult(false, "pro unlimited")
         val key = prefs.supabaseAnonKey()
         if (key.isEmpty()) return@withContext UsageResult(false, "no anon key configured")
         val body = JSONObject().put("user_id", userId).put("seconds", seconds)
