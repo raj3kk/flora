@@ -759,3 +759,8 @@ maujood, index bhi 200. Download page ab live hai.
 ## v2.22 S2 poora — Avatar catalog (2026-10-28 ~19:30 IST, CI PENDING)
 - AvatarScreen (Menu > Avatar): 5 on-device styles — gulabi (default, pehle wale rang), neela, hara, baingani, sunehra. FloraOrb(busy, avatar) ab rang param leta hai (purani calls default se chalengi); chuna hua rang prefs me + turant Baat orb par lagta hai. Sirf rang badalta hai — awaaz/persona wahi; koi download, koi creator asset nahi.
 - Audit: 4 files brace/paren balance; enum + title + Menu + branch wiring grep-verify.
+
+## v2.22 S3 + brain-proxy step 2 — function code ready (2026-10-28 ~19:35 IST, DEPLOY + KEYS PENDING)
+- brain-proxy step 2 (repo copy): JWT gate lag gaya — anon client se JWT user (401 agar na mile), body user_id JWT se match nahi to 403. Gemini → Groq order, 4000 cap, 503 jab keys na hon — sab barkarar. JWT pattern send-push/admin-list wala hi hai.
+- tts-proxy (nayi function, repo copy): POST {text} + JWT gate → Deepgram TTS audio/mpeg; key unset ho to 503; text cap 1000; text kabhi log nahi.
+- PENDING (jhootha "live" nahi): dashboard editor se deploy + GEMINI/GROQ/DEEPGRAM keys set karna (owner ka kaam) + uske baad app wiring. Aaj app proxy se wired nahi hai aur system TTS par hai — isliye ye code kuch todta nahi.

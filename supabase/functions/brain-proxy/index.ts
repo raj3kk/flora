@@ -1,16 +1,19 @@
-// Flora brain-proxy Edge Function — Phase B step 1 (server-side brain).
-// POST { user_id, device_id, prompt } -> { reply }.
+// Flora brain-proxy Edge Function — Phase B step 2 (server-side brain).
+// POST { user_id, device_id, prompt } + Authorization: Bearer <user JWT>
+//   -> { reply, lane }.
+// Step 2 me JWT gate lag gaya hai: anon client se JWT ka user nikala
+// jaata hai (na mile to 401); body ka user_id JWT user se match nahi
+// kare to 403 — koi doosre user ke naam par key burn nahi kar sakta.
 // Provider keys server-side ONLY (env, never in repo/app):
 //   GEMINI_API_KEY, GROQ_API_KEY (set in Supabase dashboard by owner).
 // Order: Gemini first, Groq fallback, then honest error. Keys never logged.
 // Style: short-casual replies default (same instruction as app BrainClient).
-// HONEST LIMIT (step 1): no JWT auth gate yet — app ke paas abhi Auth
-// session nahi hai, isliye koi bhi user_id+device_id prompt bhej sakta
-// hai. Key-burn risk step 2 me band hoga (app Auth login ke baad JWT
-// gate + per-user quota). Tab tak owner keys tabhi daale jab proxy ka
-// istemal chahiye; keys missing hon to function saaf 503 deta hai.
 // Prompt cap: 4000 chars (lambi prompt reject, cost control).
+// DEPLOY + KEYS PENDING: ye repo copy hai — dashboard editor se deploy
+// karna + keys set karna baaki hai; app wiring uske baad hoga (aaj app
+// proxy se wired nahi hai, isliye ye change kuch todta nahi).
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const STYLE = "Tum Flora ho, ek friendly AI assistant. User se aise baat karo " +
   "jaise dost se casual conversation ho — chhota jawab do, aam taur par " +
@@ -20,15 +23,27 @@ const STYLE = "Tum Flora ho, ek friendly AI assistant. User se aise baat karo " 
 
 serve(async (req) => {
   if (req.method !== "POST") return new Response("POST only", { status: 405 });
-  const { user_id, device_id, prompt } = await req.json().catch(() => ({}));
-  if (!user_id || !device_id || typeof prompt !== "string" || !prompt.trim()) {
-    return new Response(JSON.stringify({ error: "user_id, device_id, prompt required" }), { status: 400 });
-  }
-  if (prompt.length > 4000) {
-    return new Response(JSON.stringify({ error: "prompt too long (max 4000 chars)" }), { status: 400 });
-  }
   const json = (obj, status = 200) =>
     new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
+
+  // JWT gate (step 2): caller ka Supabase Auth JWT chahiye.
+  const url = Deno.env.get("SUPABASE_URL")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const authHeader = req.headers.get("Authorization") || "";
+  if (!authHeader.startsWith("Bearer ")) return json({ error: "unauthorized" }, 401);
+  const anon = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } });
+  const { data: userData, error: userErr } = await anon.auth.getUser();
+  if (userErr || !userData?.user) return json({ error: "unauthorized" }, 401);
+  const jwtUserId = userData.user.id;
+
+  const { user_id, device_id, prompt } = await req.json().catch(() => ({}));
+  if (!user_id || !device_id || typeof prompt !== "string" || !prompt.trim()) {
+    return json({ error: "user_id, device_id, prompt required" }, 400);
+  }
+  if (user_id !== jwtUserId) return json({ error: "user_id does not match token" }, 403);
+  if (prompt.length > 4000) {
+    return json({ error: "prompt too long (max 4000 chars)" }, 400);
+  }
 
   const geminiKey = Deno.env.get("GEMINI_API_KEY") || "";
   if (geminiKey) {
