@@ -133,10 +133,6 @@ class FloraPreferences(private val context: Context) {
     suspend fun modelsManifestUrl(): String =
         context.floraDataStore.data.map { it[Keys.MODELS_MANIFEST_URL] ?: "" }.first()
 
-    suspend fun setModelsManifestUrl(value: String) {
-        context.floraDataStore.edit { it[Keys.MODELS_MANIFEST_URL] = value }
-    }
-
     /** Deepgram key (mega build, user faisla: Deepgram hi rahega).
      *  Khali = system STT fallback; key aate hi sachhi barge-in. */
     suspend fun deepgramApiKey(): String =

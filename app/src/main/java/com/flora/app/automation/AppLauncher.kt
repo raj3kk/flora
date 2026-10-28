@@ -2,7 +2,6 @@ package com.flora.app.automation
 
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 
 data class LaunchableApp(val label: String, val packageName: String)
 

@@ -91,11 +91,6 @@ class BiometricTemplates(private val context: Context) {
 
     fun storeFace(vector: FloatArray): Boolean = storeVector(faceFile, vector)
     fun loadFace(): FloatArray? = loadVector(faceFile)
-    fun hasFace(): Boolean = File(context.filesDir, faceFile).exists()
-
-    fun storeVoice(vector: FloatArray): Boolean = storeVector(voiceFile, vector)
-    fun loadVoice(): FloatArray? = loadVector(voiceFile)
-    fun hasVoice(): Boolean = File(context.filesDir, voiceFile).exists()
 
     fun storeWake(vector: FloatArray): Boolean = storeVector(wakeFile, vector)
     fun loadWake(): FloatArray? = loadVector(wakeFile)

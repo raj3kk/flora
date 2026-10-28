@@ -67,45 +67,4 @@ object ContactLookup {
             }
         }
 
-    suspend fun findNumber(context: Context, name: String): String? =
-        withContext(Dispatchers.IO) {
-            if (ContextCompat.checkSelfPermission(
-                    context, android.Manifest.permission.READ_CONTACTS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                return@withContext null
-            }
-            val clean = name.trim()
-            if (clean.isEmpty()) return@withContext null
-            try {
-                val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
-                val projection = arrayOf(
-                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                    ContactsContract.CommonDataKinds.Phone.NUMBER,
-                )
-                val selection =
-                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " LIKE ?"
-                val args = arrayOf("%$clean%")
-                context.contentResolver.query(uri, projection, selection, args, null)?.use { cursor ->
-                    var firstNumber: String? = null
-                    val nameIndex = cursor.getColumnIndex(
-                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
-                    )
-                    val numberIndex = cursor.getColumnIndex(
-                        ContactsContract.CommonDataKinds.Phone.NUMBER
-                    )
-                    while (cursor.moveToNext()) {
-                        val displayName = if (nameIndex >= 0) cursor.getString(nameIndex) ?: "" else ""
-                        val number = if (numberIndex >= 0) cursor.getString(numberIndex) ?: "" else ""
-                        if (number.isBlank()) continue
-                        if (firstNumber == null) firstNumber = number
-                        // Exact naam match ko pehli pasand do.
-                        if (displayName.equals(clean, ignoreCase = true)) return@withContext number
-                    }
-                    firstNumber
-                }
-            } catch (e: Exception) {
-                null
-            }
-        }
 }
