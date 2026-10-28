@@ -54,6 +54,11 @@
                 <action android:name="android.telecom.InCallService" />
             </intent-filter>
         </service>
+        <activity
+            android:name=".calls.CallActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
         <service
             android:name="com.flora.app.wakeword.WakeWordService"
             android:foregroundServiceType="microphone"

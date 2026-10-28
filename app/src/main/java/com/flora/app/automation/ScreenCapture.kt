@@ -1,6 +1,5 @@
 package com.flora.app.automation
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -53,17 +52,29 @@ object ScreenCapture {
         }
     }
 
-    class Session(activity: Activity, resultCode: Int, data: Intent) {
+    /** Holder me zinda session ho to wahi, warna naye token se
+     *  banao (Chat se "screen dekho" bolne par bhi kaam kare).
+     *  null = permission nahi ya token mar chuka hai. */
+    fun openShared(context: Context, resultCode: Int, data: Intent?): Session? {
+        val existing = LiveSessionHolder.session
+        if (existing != null && existing.isOpen()) return existing
+        if (data == null) return null
+        val fresh = startSession(context, resultCode, data)
+        LiveSessionHolder.session = fresh
+        return fresh
+    }
+
+    class Session(context: Context, resultCode: Int, data: Intent) {
         private val w: Int
         private val h: Int
         private val dpi: Int
         @Volatile private var dead = false
         private val projection: MediaProjection? =
-            (activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+            (context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
                 as MediaProjectionManager).getMediaProjection(resultCode, data)
 
         init {
-            val metrics = activity.resources.displayMetrics
+            val metrics = context.resources.displayMetrics
             w = metrics.widthPixels
             h = metrics.heightPixels
             dpi = metrics.densityDpi
@@ -126,9 +137,9 @@ object ScreenCapture {
     }
 
     /** Session kholo; null = permission/projection nahi mili. */
-    fun startSession(activity: Activity, resultCode: Int, data: Intent): Session? {
+    fun startSession(context: Context, resultCode: Int, data: Intent): Session? {
         return try {
-            val s = Session(activity, resultCode, data)
+            val s = Session(context, resultCode, data)
             if (s.isOpen()) s else null
         } catch (e: Exception) {
             null

@@ -170,7 +170,7 @@ fun ConnectScreen(voice: VoiceEngine, prefs: FloraPreferences) {
                 }
             }) { Text("Share sheet kholo") }
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Call-talk (dialer role) — Flora call utha kar baat karegi, sirf tab jab aap khud ise default dialer banayenge.")
+            Text("Call-talk (dialer role) — call aane par Flora 3 options degi (Flora se baat karao / Khud baat karo / Kaato), sirf tab jab aap khud ise default dialer banayenge.")
             Spacer(modifier = Modifier.height(8.dp))
             Text("Default dialer: " + if (dialerHeld) "Flora hai" else "Flora nahi hai")
             Spacer(modifier = Modifier.height(8.dp))

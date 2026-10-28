@@ -1,7 +1,10 @@
 package com.flora.app.ui
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.media.projection.MediaProjectionManager
 import android.provider.MediaStore
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -31,6 +34,7 @@ import android.provider.Settings
 import com.flora.app.automation.AppAutomation
 import com.flora.app.automation.AutoModeNotifier
 import com.flora.app.automation.FloraAutomationService
+import com.flora.app.automation.ScreenCapture
 import com.flora.app.data.AutoLogStore
 import com.flora.app.tools.ImageTools
 import kotlinx.coroutines.delay
@@ -237,6 +241,26 @@ fun FloraApp(
     var menuOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val vision = remember { VisionClient() }
+    // Screen share state (v2.22, voice-first autonomy): permission +
+    // token FloraApp level par — Chat se bhi "screen dekho" bolne par
+    // kaam kare, LiveScreen par jaane ki zaroorat nahi. Launcher
+    // callback me session ban kar pending kaam aage badhega.
+    var screenGranted by remember { mutableStateOf(false) }
+    var screenResultCode by remember { mutableStateOf(0) }
+    var screenResultData by remember { mutableStateOf<Intent?>(null) }
+    val screenLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            com.flora.app.automation.ScreenCapture.LiveSessionHolder.clear()
+            screenGranted = true
+            screenResultCode = result.resultCode
+            screenResultData = result.data
+            voice.speak("Screen permission mil gayi. Ab 'screen dekho' bolo, main dekh kar bata dungi.")
+        } else {
+            voice.speak("Screen permission ke bina live screen nahi dekh sakti.")
+        }
+    }
     val attachLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
@@ -1898,6 +1922,145 @@ fun FloraApp(
                         }
                         return
                     }
+                    // Screen dekho helper (v2.22 autonomy): session
+                    // dhoondho, na mile to dialog kholo, frame lekar
+                    // vision se jawab bolo. Chat + app-kholo-dekho
+                    // dono isi se chalte hain.
+                    fun lookAtScreen(prompt: String) {
+                        scope.launch {
+                            val session = if (screenGranted) ScreenCapture.openShared(
+                                appContext, screenResultCode, screenResultData
+                            ) else null
+                            if (session == null) {
+                                screenGranted = false
+                                screenResultData = null
+                                val mgr = appContext.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+                                    as MediaProjectionManager
+                                screenLauncher.launch(mgr.createScreenCaptureIntent())
+                                voice.speak("Pehle screen permission chahiye — dialog khol raha hun, Allow dabao, phir dobara bolo.")
+                                return@launch
+                            }
+                            var jpeg: ByteArray? = null
+                            for (attempt in 0 until 3) {
+                                jpeg = session.captureFrame()
+                                if (jpeg != null) break
+                            }
+                            if (jpeg == null) {
+                                ScreenCapture.LiveSessionHolder.clear()
+                                screenGranted = false
+                                screenResultData = null
+                                val mgr = appContext.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+                                    as MediaProjectionManager
+                                screenLauncher.launch(mgr.createScreenCaptureIntent())
+                                voice.speak("Screen abhi dikh nahi rahi — permission dobara de do, phir main dekh lungi.")
+                                return@launch
+                            }
+                            val key = prefs.geminiApiKey()
+                            if (key.isEmpty()) {
+                                voice.speak("Screen dekhne ke liye Settings me apni free Gemini key daaliye.")
+                                return@launch
+                            }
+                            val reply = vision.askAboutImage(prompt, jpeg, key)
+                            if (reply == null) {
+                                voice.speak("Is baar dekh nahi payi — ek baar phir poochho na.")
+                            } else {
+                                messages = messages + ChatMsg(reply, false)
+                                voice.speak(reply.take(500))
+                            }
+                        }
+                    }
+                    // Screen share + screen dekho — BOL KAR (v2.22).
+                    // Permission dialog Flora khud kholegi; Allow ka ek
+                    // tap Android ka niyam hai, uske baad session
+                    // holder me zinda rehta hai, dobara tap nahi.
+                    if (lower == "screen share chalu karo" || lower == "screen chalu karo" ||
+                        lower == "screen share on karo"
+                    ) {
+                        input = ""
+                        if (screenGranted && screenResultData != null &&
+                            ScreenCapture.openShared(appContext, screenResultCode, screenResultData) != null
+                        ) {
+                            voice.speak("Screen share pehle se chalu hai. 'Screen dekho' bolo, main dekh kar bata dungi.")
+                        } else {
+                            screenGranted = false
+                            screenResultData = null
+                            val mgr = appContext.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+                                as MediaProjectionManager
+                            screenLauncher.launch(mgr.createScreenCaptureIntent())
+                            voice.speak("Screen permission ka dialog khol raha hun — Allow dabao, phir 'screen dekho' bolna.")
+                        }
+                        return
+                    }
+                    if (lower == "screen share band karo" || lower == "screen band karo" ||
+                        lower == "screen share off karo"
+                    ) {
+                        input = ""
+                        ScreenCapture.LiveSessionHolder.clear()
+                        screenGranted = false
+                        screenResultData = null
+                        voice.speak("Screen share band kar diya.")
+                        return
+                    }
+                    if (lower == "screen dekho" || lower == "is screen par kya hai" ||
+                        lower == "screen par kya hai" || lower == "screen par kya dikh raha hai"
+                    ) {
+                        input = ""
+                        lookAtScreen("Is screen par kya dikh raha hai, sab kuch detail me batao?")
+                        return
+                    }
+                    // App kholo aur dekho — BOL KAR (v2.22). Compound
+                    // block se PEHLE (warna "kholo aur dekho" compound
+                    // me galat app nikalta).
+                    if (lower.startsWith("app kholo aur dekho ") || lower.endsWith(" kholo aur dekho")) {
+                        val name = if (lower.startsWith("app kholo aur dekho ")) {
+                            lower.substringAfter("dekho", "").trim()
+                        } else {
+                            lower.substringBefore(" kholo aur dekho").trim()
+                        }
+                        input = ""
+                        if (name.isEmpty()) {
+                            voice.speak("Kaun si app khol kar dekhun? Naam boliye, jaise 'WhatsApp kholo aur dekho'.")
+                        } else {
+                            val matches = AppLauncher.findByName(appContext, name)
+                            if (matches.isEmpty()) {
+                                voice.speak("'$name' naam ki app nahi mili, naam dobara boliye.")
+                            } else if (matches.size > 1) {
+                                val names = matches.take(3).joinToString(", ") { it.label }
+                                voice.speak("Ek se zyada app mili: $names. Poora naam boliye.")
+                            } else {
+                                val app = matches[0]
+                                if (AppLauncher.launch(appContext, app.packageName)) {
+                                    voice.speak("${app.label} khol diya, screen dekh rahi hun.")
+                                    scope.launch {
+                                        delay(3000)
+                                        lookAtScreen("Is screen par kya dikh raha hai, sab kuch detail me batao?")
+                                    }
+                                } else {
+                                    voice.speak("${app.label} nahi khul paya.")
+                                }
+                            }
+                        }
+                        return
+                    }
+                    // Continuous mic — BOL KAR (v2.22).
+                    if (lower == "continuous mic chalu karo" || lower == "mic chalu karo" ||
+                        lower == "sunna chalu karo"
+                    ) {
+                        input = ""
+                        continuousOn = true
+                        onContinuousStart()
+                        voice.speak("Sunna chalu ho gaya hai — ab jo bologe, main sunungi.")
+                        return
+                    }
+                    if (lower == "continuous mic band karo" || lower == "mic band karo" ||
+                        lower == "sunna band karo" || lower == "mute karo"
+                    ) {
+                        input = ""
+                        continuousOn = false
+                        onContinuousStop()
+                        voice.speak("Sunna band kar diya hai.")
+                        return
+                    }
                     // Compound voice (v2.22): "X kholo aur <kaam>" /
                     // "kholo X aur <kaam>" / "... phir <kaam>" — pehla
                     // hissa app kholega, doosra hissa usi sendChat se
@@ -2369,7 +2532,23 @@ fun FloraApp(
                     routineQueue = routine.commands
                 }
             } else if (screen == Screen.LIVE) {
-                LiveScreen(voice, prefs)
+                LiveScreen(
+                    voice, prefs,
+                    screenGranted = screenGranted,
+                    screenResultCode = screenResultCode,
+                    screenResultData = screenResultData,
+                    onScreenResult = { code, data ->
+                        com.flora.app.automation.ScreenCapture.LiveSessionHolder.clear()
+                        screenGranted = true
+                        screenResultCode = code
+                        screenResultData = data
+                    },
+                    onScreenReset = {
+                        screenGranted = false
+                        screenResultData = null
+                    },
+                    screenLauncher = screenLauncher,
+                )
             } else if (screen == Screen.DRIVING) {
                 DrivingScreen(voice, prefs, onMicRequest)
             } else if (screen == Screen.JOURNAL) {

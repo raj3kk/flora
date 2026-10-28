@@ -4,16 +4,16 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
+import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,23 +33,25 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Live screen (v2.22): user poochhe to Flora screen ka frame dekh
- * kar jawab deti hai — sirf text nahi, poori tasveer (icon, button,
- * colour, layout). Permission system dialog se milti hai.
- * Session app-level holder me zinda rehta hai — screen badalne par
- * bhi nahi marta, band sirf "session band karo" par ya projection
- * ke marne par hota hai. Continuous sirf user ke Chalu dabane par
- * chalta hai, har 10 sec ek frame, ROKO dabane tak (har frame ek
- * Gemini call = user key ka kharcha, isliye gap rakha hai).
+ * Live screen (v2.22, voice-first): user poochhe to Flora screen ka
+ * frame dekh kar jawab deti hai — sirf text nahi, poori tasveer.
+ * Permission + token FloraApp level par hain (Chat se bhi "screen
+ * dekho" bolne par kaam kare). App ka naam TYPE nahi — mic button
+ * se BOLO, Flora khud khol kar dekh legi.
  */
 @Composable
-fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
+fun LiveScreen(
+    voice: VoiceEngine,
+    prefs: FloraPreferences,
+    screenGranted: Boolean,
+    screenResultCode: Int,
+    screenResultData: Intent?,
+    onScreenResult: (Int, Intent?) -> Unit,
+    onScreenReset: () -> Unit,
+    screenLauncher: ActivityResultLauncher<Intent>,
+) {
     val context = LocalContext.current
-    val activity = context as? Activity
     val scope = rememberCoroutineScope()
-    var granted by remember { mutableStateOf(false) }
-    var resultCode by remember { mutableStateOf(0) }
-    var resultData by remember { mutableStateOf<Intent?>(null) }
     var answer by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var continuousRunning by remember { mutableStateOf(false) }
@@ -57,6 +59,11 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
     var lastSummary by remember { mutableStateOf("") }
     var appName by remember { mutableStateOf("") }
     val vision = remember { VisionClient() }
+    // FloraApp se permission mile to note dikhao (launcher callback
+    // FloraApp me hai, isliye yahan effect se note update).
+    LaunchedEffect(screenGranted) {
+        if (screenGranted) note = "Screen permission mil gayi. Ab sawaal poochhiye."
+    }
     // v2.22 fix — session ab composable ke `remember` me nahi,
     // ScreenCapture.LiveSessionHolder me rehta hai: screen
     // chhodne par bhi zinda, band sirf user ke kehne par ya
@@ -65,14 +72,8 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
     // phir bhi dobara permission maangega — wo OS ka niyam hai).
 
     fun openSession(): ScreenCapture.Session? {
-        val act = activity
-        val data = resultData
-        if (act == null || data == null || !granted) return null
-        val existing = ScreenCapture.LiveSessionHolder.session
-        if (existing != null && existing.isOpen()) return existing
-        val fresh = ScreenCapture.startSession(act, resultCode, data)
-        ScreenCapture.LiveSessionHolder.session = fresh
-        return fresh
+        if (!screenGranted) return null
+        return ScreenCapture.openShared(context, screenResultCode, screenResultData)
     }
 
     /**
@@ -85,9 +86,7 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
      */
     LaunchedEffect(continuousRunning) {
         if (!continuousRunning) return@LaunchedEffect
-        val act = activity
-        val data = resultData
-        if (act == null || data == null || !granted) {
+        if (!screenGranted || screenResultData == null) {
             note = "Pehle screen permission dijiye."
             voice.speak("Pehle screen permission dijiye.")
             continuousRunning = false
@@ -129,23 +128,10 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
         continuousRunning = false
     }
 
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            // Purana mara hua session hatao, naya agle sawaal par banega.
-            ScreenCapture.LiveSessionHolder.clear()
-            granted = true
-            resultCode = result.resultCode
-            resultData = result.data
-            note = "Screen permission mil gayi. Ab sawaal poochhiye."
-        } else {
-            note = "Screen permission ke bina live screen nahi dekh sakti."
-        }
-    }
+    val launcher = screenLauncher
 
     fun ask(question: String) {
-        if (!granted || resultData == null) {
+        if (!screenGranted || screenResultData == null) {
             note = "Pehle screen permission dijiye."
             voice.speak("Pehle screen permission dijiye.")
             return
@@ -165,6 +151,7 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
                 note = "Arre, screen abhi dikh nahi rahi — ek baar phir se permission de do, phir main dekh lungi."
                 voice.speak("Arre, screen abhi dikh nahi rahi — ek baar phir se permission de do, phir main dekh lungi.")
                 ScreenCapture.LiveSessionHolder.clear()
+                onScreenReset()
                 val mgr = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
                     as MediaProjectionManager
                 launcher.launch(mgr.createScreenCaptureIntent())
@@ -194,11 +181,11 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
     fun openAppAndLook() {
         val name = appName.trim()
         if (name.isEmpty()) {
-            note = "Pehle app ka naam likho, jaise WhatsApp."
-            voice.speak("Pehle app ka naam likho.")
+            note = "Pehle app ka naam bolo — mic dabao aur naam boliye, jaise WhatsApp."
+            voice.speak("Pehle app ka naam bolo.")
             return
         }
-        if (!granted || resultData == null) {
+        if (!screenGranted || screenResultData == null) {
             note = "Pehle screen permission dijiye."
             voice.speak("Pehle screen permission dijiye.")
             return
@@ -214,6 +201,23 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
             voice.speak("${match.label} khol diya, ab screen dekh rahi hun.")
             delay(3_000)
             ask("Is screen par kya dikh raha hai, sab kuch detail me batao?")
+        }
+    }
+
+    // App ka naam BOL kar (v2.22 voice-first): mic se suno, naam
+    // mile to khud khol kar dekho — type karne ki zaroorat nahi.
+    // openAppAndLook ke BAAD (order trap — pehle hota to CI fail).
+    val micLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+            if (!spoken.isNullOrBlank()) {
+                appName = spoken
+                openAppAndLook()
+            }
         }
     }
 
@@ -237,8 +241,7 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = {
                 ScreenCapture.LiveSessionHolder.clear()
-                granted = false
-                resultData = null
+                onScreenReset()
                 note = "Screen session band kar diya. Dobara dekhne ke liye phir permission do."
             }) { Text("Screen session band karo") }
             Spacer(modifier = Modifier.height(8.dp))
@@ -250,12 +253,21 @@ fun LiveScreen(voice: VoiceEngine, prefs: FloraPreferences) {
                 Text("Is screen par kya likha hai, kaun se button hain?")
             }
             Spacer(modifier = Modifier.height(8.dp))
-            TextField(
-                value = appName,
-                onValueChange = { appName = it },
-                label = { Text("App ka naam (jaise WhatsApp)") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            Button(onClick = {
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+                }
+                try {
+                    micLauncher.launch(intent)
+                } catch (e: Exception) {
+                    note = "Voice input nahi mila — Chat me bol kar bhi kar sakte ho."
+                }
+            }) { Text("🎤 Bolo app ka naam") }
+            if (appName.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("App: $appName")
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = { openAppAndLook() }) {
                 Text("App kholo aur dekho")
