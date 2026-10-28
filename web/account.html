@@ -92,7 +92,6 @@ async function loadPayments() {
   const { data: { session } } = await client.auth.getSession();
   if (!session) {
     document.getElementById('login-card').style.display = "block";
-    document.getElementById('steps-card').style.display = "none";
     st.textContent = "Pehle login karo.";
     el.innerHTML = "";
     return;
