@@ -708,3 +708,7 @@ maujood, index bhi 200. Download page ab live hai.
 - "website banao X" / "website starter X" → SearchTools.websiteStarter (pehle se ToolsScreen me tha). Chat me poora starter, bolkar sirf summary — HTML sunana bekaar hota.
 - Imaandari barkarar: starter local template hai, poori website/file-save nahi — Flora bolkar bhi wahi kehti hai. Prefix lengths verify (banao 14, starter 16); brace/paren balance.
 - P3 survey note: F16 whiteboard ka code abhi ZERO hai (naya screen banega — bada item, baad me); F14 docs screen + email intent maujood hain, voice routing survey baaki; F13 image voice maujood hai, post step ka survey baaki.
+
+## v2.22 P3-F14 poora — docs + email voice (2026-10-28 ~18:45 IST, CI PENDING)
+- "note save karo X" → DocsStore.add (title = pehle 30 chars, body = poora text; sirf phone par); "documents dikhao" → aakhri 5 titles bolkar; "email bhejo <address>" / "email kholo" → mail app kholta hai (mailto chooser) — Flora kabhi chhupke email nahi bhejti, subject/message/bhejna user khud karta hai.
+- Audit: prefix lengths verify (note 15, email 12); first() import pehle se maujood; brace/paren balance.

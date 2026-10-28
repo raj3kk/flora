@@ -1264,6 +1264,99 @@ fun FloraApp(
                         voice.speak("Website starter taiyaar hai — chat me dekh lo. Ye sirf shuruati HTML hai, poori website banani ho to detail bata dena.")
                         return
                     }
+                    // Docs + email voice (v2.22, P3-F14): Docs
+                    // screen pehle se thi, awaaz se nahi chalti thi.
+                    // Docs sirf phone par save hote hain; email
+                    // kabhi chhupke nahi bheja jaata — mail app
+                    // khulta hai, bhejna user khud karta hai.
+                    if (lower.startsWith("note save karo ") ||
+                        lower == "documents dikhao" ||
+                        lower == "mere documents dikhao" ||
+                        lower.startsWith("email bhejo ") ||
+                        lower == "email kholo"
+                    ) {
+                        input = ""
+                        when {
+                            lower.startsWith("note save karo ") -> {
+                                val text = question.substring(15).trim()
+                                if (text.isEmpty()) {
+                                    val msg = "Kya save karun? Aise boliye: 'note save karo kal subah 9 baje meeting hai'."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else {
+                                    scope.launch {
+                                        try {
+                                            docsStore.add(text.take(30), text)
+                                            val msg = "Note save ho gaya."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        } catch (e: Exception) {
+                                            val msg = "Note save nahi ho paya."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                    }
+                                }
+                            }
+                            lower == "documents dikhao" || lower == "mere documents dikhao" -> {
+                                scope.launch {
+                                    try {
+                                        val docs = docsStore.docs.first()
+                                        if (docs.isEmpty()) {
+                                            val msg = "Koi document save nahi hai."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        } else {
+                                            val titles = docs.take(5).map { it.title }
+                                            val msg = "Tumhare documents: " + titles.joinToString(" • ")
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                    } catch (e: Exception) {
+                                        val msg = "Documents nahi padh payi."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    }
+                                }
+                            }
+                            lower.startsWith("email bhejo ") -> {
+                                val addr = question.substring(12).trim()
+                                if (!addr.contains("@")) {
+                                    val msg = "Email address samajh nahi aaya. Aise boliye: 'email bhejo kisi@example.com'."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                            data = android.net.Uri.parse("mailto:$addr")
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        appContext.startActivity(intent)
+                                        val msg = "Mail app khol diya hai — subject aur message likh kar tum khud bhej dena."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    } catch (e: Exception) {
+                                        val msg = "Mail app nahi khul paya."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    }
+                                }
+                            }
+                            else -> {
+                                try {
+                                    val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                        data = android.net.Uri.parse("mailto:")
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    appContext.startActivity(intent)
+                                    voice.speak("Mail app khol diya hai.")
+                                } catch (e: Exception) {
+                                    voice.speak("Mail app nahi khul paya.")
+                                }
+                            }
+                        }
+                        return
+                    }
                     // General tap/type/swipe voice commands (v2.22,
                     // P2-F4 poora): primitives FloraAutomationService
                     // me pehle se the, ab awaaz se bhi chalte hain.
