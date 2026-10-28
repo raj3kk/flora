@@ -30,6 +30,9 @@ class BiometricTemplates(private val context: Context) {
     private val alias = "flora_bio_key"
     private val faceFile = "face_template.enc"
     private val voiceFile = "voice_template.enc"
+    // Wake-word template (v2.4): sirf MFCC mean vector (12 numbers),
+    // koi audio sample nahi. Face/voice wali hi key + pattern.
+    private val wakeFile = "wake_template.enc"
 
     private fun key(): SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -94,8 +97,13 @@ class BiometricTemplates(private val context: Context) {
     fun loadVoice(): FloatArray? = loadVector(voiceFile)
     fun hasVoice(): Boolean = File(context.filesDir, voiceFile).exists()
 
+    fun storeWake(vector: FloatArray): Boolean = storeVector(wakeFile, vector)
+    fun loadWake(): FloatArray? = loadVector(wakeFile)
+    fun hasWake(): Boolean = File(context.filesDir, wakeFile).exists()
+
     fun clearAll() {
         File(context.filesDir, faceFile).delete()
         File(context.filesDir, voiceFile).delete()
+        File(context.filesDir, wakeFile).delete()
     }
 }

@@ -46,6 +46,7 @@ class FloraPreferences(private val context: Context) {
         val SERPAPI_API_KEY = stringPreferencesKey("serpapi_api_key")
         val MAPS_API_KEY = stringPreferencesKey("maps_api_key")
         val FCM_TOKEN = stringPreferencesKey("fcm_token")
+        val WAKE_ENABLED = booleanPreferencesKey("wake_enabled")
         val CALL_TALK = booleanPreferencesKey("call_talk")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
@@ -143,6 +144,15 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setFcmToken(value: String) {
         context.floraDataStore.edit { it[Keys.FCM_TOKEN] = value }
+    }
+
+    // Wake Word toggle (v2.4): default OFF. ON = foreground service
+    // mic se sunta hai; OFF karte hi service ruk jati hai.
+    suspend fun wakeEnabled(): Boolean =
+        context.floraDataStore.data.map { it[Keys.WAKE_ENABLED] ?: false }.first()
+
+    suspend fun setWakeEnabled(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.WAKE_ENABLED] = value }
     }
 
     suspend fun automationConsent(): Boolean =

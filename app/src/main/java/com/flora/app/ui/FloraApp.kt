@@ -52,9 +52,17 @@ import com.flora.app.data.MemoriesStore
 import com.flora.app.data.JournalStore
 import com.flora.app.data.SosStore
 import com.flora.app.tools.SearchTools
+import com.flora.app.security.BiometricTemplates
 import com.flora.app.security.GuardianGate
 import com.flora.app.security.PinVault
+import com.flora.app.wakeword.WakeWordMFCC
+import com.flora.app.wakeword.WakeWordRecorder
+import com.flora.app.wakeword.WakeWordService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 
 private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL }
 
@@ -806,6 +814,10 @@ private fun SettingsScreen(
     var theme by remember { mutableStateOf("light") }
     // FCM status (v2.2): token value KABHI screen par nahi dikhegi.
     var fcmStatus by remember { mutableStateOf("Push: jaanch ho rahi hai...") }
+    // Wake Word state (v2.4): launcher se PEHLE declare (order trap).
+    var wakeEnabled by remember { mutableStateOf(false) }
+    var wakeEnrolled by remember { mutableStateOf(false) }
+    var wakeStatus by remember { mutableStateOf("Wake Word: band hai") }
     var note by remember { mutableStateOf("") }
     val phonePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -815,6 +827,21 @@ private fun SettingsScreen(
             scope.launch { prefs.setCallAnnounce(true) }
         } else {
             note = "Phone permission ke bina call announce nahi chalega."
+        }
+    }
+    // Mic permission launcher (v2.4): wake states upar declare hain.
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            scope.launch {
+                wakeEnabled = true
+                prefs.setWakeEnabled(true)
+                context.startForegroundService(Intent(context, WakeWordService::class.java))
+                wakeStatus = "Wake Word ON ho gaya — sun raha hun."
+            }
+        } else {
+            wakeStatus = "Mic permission ke bina Wake Word nahi chalega."
         }
     }
 
@@ -841,6 +868,9 @@ private fun SettingsScreen(
         } else {
             "Push: token abhi nahi mila — app dobara kholo ya internet check karo"
         }
+        wakeEnabled = prefs.wakeEnabled()
+        wakeEnrolled = BiometricTemplates(context).hasWake()
+        wakeStatus = if (wakeEnabled) "Wake Word ON hai — sun raha hun." else "Wake Word: band hai"
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -848,6 +878,58 @@ private fun SettingsScreen(
             Text("Keys — sirf is phone par save hoti hain, kabhi server par nahi bheji jaati (licence check ke alawa).")
             Spacer(modifier = Modifier.height(8.dp))
             Text(fcmStatus)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Wake Word — Hey Flora (default OFF; ON par foreground service + notification hamesha dikhegi; audio kabhi save/server par nahi jata)")
+            Row {
+                Text("Wake Word")
+                Spacer(modifier = Modifier.padding(4.dp))
+                Switch(checked = wakeEnabled, onCheckedChange = { value ->
+                    scope.launch {
+                        if (value) {
+                            if (!BiometricTemplates(context).hasWake()) {
+                                wakeStatus = "Pehle enrol karo — neeche wale button se 3 baar 'Hey Flora' bolo."
+                            } else if (ContextCompat.checkSelfPermission(
+                                    context, Manifest.permission.RECORD_AUDIO
+                                ) == PackageManager.PERMISSION_GRANTED
+                            ) {
+                                wakeEnabled = true
+                                prefs.setWakeEnabled(true)
+                                context.startForegroundService(Intent(context, WakeWordService::class.java))
+                                wakeStatus = "Wake Word ON ho gaya — sun raha hun."
+                            } else {
+                                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        } else {
+                            wakeEnabled = false
+                            prefs.setWakeEnabled(false)
+                            context.stopService(Intent(context, WakeWordService::class.java))
+                            wakeStatus = "Wake Word: band hai"
+                        }
+                    }
+                })
+            }
+            Text(wakeStatus)
+            Spacer(modifier = Modifier.height(4.dp))
+            Button(onClick = {
+                scope.launch {
+                    wakeStatus = "Enrol ho raha hai: mic ke paas 'Hey Flora' bolo (sample 1/3)..."
+                    val means = mutableListOf<DoubleArray>()
+                    for (i in 1..3) {
+                        val audio = withContext(Dispatchers.Default) { WakeWordRecorder.recordMillis(2500) }
+                        val mean = audio?.let { WakeWordMFCC.mfccMean(it) }
+                        if (mean == null) {
+                            wakeStatus = "Enrol fail — mic check karo aur dobara karo."
+                            return@launch
+                        }
+                        means.add(mean)
+                        if (i < 3) wakeStatus = "Sample ${i + 1}/3 ke liye 'Hey Flora' bolo..."
+                    }
+                    val avg = DoubleArray(12) { idx -> means.sumOf { it[idx] } / means.size }
+                    val stored = BiometricTemplates(context).storeWake(FloatArray(12) { avg[it].toFloat() })
+                    wakeEnrolled = stored
+                    wakeStatus = if (stored) "Enrol ho gaya — ab Wake Word ON kar sakte ho." else "Enrol save fail — dobara karo."
+                }
+            }) { Text("Enrol: 3 baar 'Hey Flora' bolo") }
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = anonKey, onValueChange = { anonKey = it },

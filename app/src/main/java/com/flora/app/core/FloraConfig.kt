@@ -35,7 +35,8 @@ object FloraConfig {
     const val USAGE_FUNCTION_PATH = "/functions/v1/usage-count"
 
     // Wake phrase DECIDED hai: "Hey Flora" (user decision 2026-10-28).
-    // Model/training abhi baaki hai (recordings 6/50) — isliye app
-    // me abhi koi wake-word model nahi hai. Nothing is recorded silently.
+    // v2.4 se v0 model hai: MFCC mean template (user ke 6 clips se
+    // prototype, phone par 3-sample enrolment). Neural model abhi
+    // baaki hai. Default OFF hai; chhupke recording kabhi nahi.
     const val WAKE_WORD_DECISION_PENDING = false
 }

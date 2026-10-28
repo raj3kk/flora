@@ -105,3 +105,15 @@
 - Test entry: docs/FLORA_V221_TEST_ENTRY.md (Terms wording
   check; koi naya feature nahi, isliye koi naya behaviour
   check nahi).
+
+## v2.3 — PASS (2026-10-28)
+- Commit a38c69ee, versionCode 25 / 2.3.0-rebuild, CI run
+  40629941547: completed / success, artifact flora-debug-apk
+  59,388,952 bytes, expired false.
+- Scope: face-match (photo enrolment) + Supabase anon default.
+  Voice-match v2.4 me gaya (scope change push plan me darj).
+- Code audit: declaration order, brace/paren, permissions,
+  privacy (templates on-device encrypted, token kabhi log nahi),
+  no copy/old-key — PASS (continuous audit doc me darj).
+- Phone test baaki: docs/FLORA_FACE_TEST_ENTRY.md (7 steps).
+  Face-match akela PIN unlock nahi karta — ye test me hai.
