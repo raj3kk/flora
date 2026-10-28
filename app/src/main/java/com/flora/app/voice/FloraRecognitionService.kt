@@ -32,7 +32,7 @@ import kotlinx.coroutines.launch
  *   intent me koi aur language aaye to bhi Hindi hi pehchana
  *   jayega.
  * - One-shot: pehla FINAL transcript milte hi session khatam
- *   (onResults) — lagatar dictation nahi; interim results
+ *   (results) — lagatar dictation nahi; interim results
  *   deliver nahi hote.
  * - Key chahiye: user ki apni Deepgram key na ho to
  *   ERROR_CLIENT (bina key ke chupchaap system STT par nahi
@@ -58,13 +58,13 @@ class FloraRecognitionService : RecognitionService() {
     override fun onStartListening(intent: Intent?, callback: Callback?) {
         val cb = callback ?: return
         if (activeCallback != null) {
-            cb.onError(SpeechRecognizer.ERROR_RECOGNIZER_BUSY)
+            cb.error(SpeechRecognizer.ERROR_RECOGNIZER_BUSY)
             return
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            cb.onError(SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS)
+            cb.error(SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS)
             return
         }
         sessionId++
@@ -123,7 +123,7 @@ class FloraRecognitionService : RecognitionService() {
                 return@launch
             }
             stream = client
-            mainHandler.post { activeCallback?.onReadyForSpeech(Bundle()) }
+            mainHandler.post { activeCallback?.readyForSpeech(Bundle()) }
             try {
                 rec.startRecording()
             } catch (e: Exception) {
@@ -136,7 +136,7 @@ class FloraRecognitionService : RecognitionService() {
                 failOnMain(SpeechRecognizer.ERROR_AUDIO)
                 return@launch
             }
-            mainHandler.post { activeCallback?.onBeginningOfSpeech() }
+            mainHandler.post { activeCallback?.beginningOfSpeech() }
             readJob = scope.launch {
                 val buf = ShortArray(2048)
                 while (true) {
@@ -165,7 +165,7 @@ class FloraRecognitionService : RecognitionService() {
             val active = activeCallback ?: return@post
             if (delivered) return@post
             delivered = true
-            active.onError(SpeechRecognizer.ERROR_NO_MATCH)
+            active.error(SpeechRecognizer.ERROR_NO_MATCH)
             stopSession()
         }
     }
@@ -192,7 +192,7 @@ class FloraRecognitionService : RecognitionService() {
                     arrayListOf(text)
                 )
             }
-            cb.onResults(results)
+            cb.results(results)
             stopSession()
         }
     }
@@ -202,7 +202,7 @@ class FloraRecognitionService : RecognitionService() {
             val cb = activeCallback ?: return@post
             if (delivered) return@post
             delivered = true
-            cb.onError(code)
+            cb.error(code)
             stopSession()
         }
     }
