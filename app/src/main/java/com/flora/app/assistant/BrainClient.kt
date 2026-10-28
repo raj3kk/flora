@@ -86,12 +86,30 @@ class BrainClient(private val prefs: FloraPreferences) {
      * models-list GET, isliye koi token kharch nahi hota). Key ki
      * value kabhi result me nahi aati, sirf saved/valid status.
      */
+    /** Saved keys check (Settings > "Keys check karo"): prefs se
+     *  padh kar probe karta hai. Deepgram bhi shaamil hai. */
     suspend fun checkKeys(): List<LaneCheck> = withContext(Dispatchers.IO) {
+        checkKeysFor(
+            prefs.geminiApiKey().trim(),
+            prefs.geminiApiKey2().trim(),
+            prefs.groqApiKey().trim(),
+            prefs.groqApiKey2().trim(),
+            prefs.deepgramApiKey().trim(),
+        )
+    }
+
+    /** Bhare hue (abhi save na hue) keys check (Settings >
+     *  "Bhare hue keys check karo"): field values ko probe karta
+     *  hai — save user ke haath me rehta hai, sahi ho ya galat.
+     *  Key values kabhi log nahi hoti, sirf HTTP code dekha jata hai. */
+    suspend fun checkKeysFor(
+        gemini: String,
+        gemini2: String,
+        groq: String,
+        groq2: String,
+        deepgram: String,
+    ): List<LaneCheck> = withContext(Dispatchers.IO) {
         val checks = mutableListOf<LaneCheck>()
-        val gemini = prefs.geminiApiKey().trim()
-        val gemini2 = prefs.geminiApiKey2().trim()
-        val groq = prefs.groqApiKey().trim()
-        val groq2 = prefs.groqApiKey2().trim()
         checks += checkOne("Gemini 1", gemini) { key ->
             getCode(
                 "https://generativelanguage.googleapis.com/v1beta/models?key=$key",
@@ -109,6 +127,9 @@ class BrainClient(private val prefs: FloraPreferences) {
         }
         checks += checkOne("Groq 2", groq2) { key ->
             getCode("https://api.groq.com/openai/v1/models", "Bearer $key")
+        }
+        checks += checkOne("Deepgram", deepgram) { key ->
+            getCode("https://api.deepgram.com/v1/projects", "Token $key")
         }
         checks
     }

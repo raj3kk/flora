@@ -140,3 +140,22 @@ tumhari haan ke bina aage nahi badhega.
 - **Auto-reply apps (G6):** read-only hi recommended hai;
   auto-reply sirf un apps me jinke naam tum doge, per-app
   opt-in + visible log ke saath.
+
+---
+
+## CEO actions — 2026-10-28 raat (user order: 1-9 par sahi faisla implement karo)
+
+1. **Recordings:** user ke haath ka kaam hai — koi alternative nahi. Enrol UI pehle se hai; clips aate hi training hogi.
+2. **Keys:** Settings me har key ke neeche redirect link (AI Studio / Groq console / Deepgram console) + Deepgram check + bhare hue keys ka bina-save check + sahi/galat dono surat me Save user ke haath me. Proxy keys + S3 deploy abhi bhi dashboard ka kaam hai.
+3. **Roles:** Settings me "Default assistant banao" + "Default dialer banao" buttons (system settings kholte hain, ek tap user ka). Full VoiceInteractionService agla chunk hai.
+4. **App link + phone setup:** user ke haath ka kaam — SetupWizard me keys hint jod diya gaya hai.
+5. **Gemini/Groq keys:** validation + links isi chunk me ho gaye.
+6. **Grievance officer:** naam/email user se chahiye — nakli naam kabhi nahi likha jayega.
+7. **Approve fix (ii):** code taiyaar hai — admin-approve website-path (NULL-device licence) + licence-verify NULL-claim. Deploy dashboard editor se hoga; schema note (device_id NOT NULL ho to ek SQL) direct-download doc me hai.
+8. **Hosting / auto-execute / overlay:** hosting ka CI + bucket doc taiyaar (pehli upload ke saath page flip hoga); auto-execute rule RAKHA gaya hai (Auto Mode hi switch hai); overlay mic button agla chunk hai (SYSTEM_ALERT_WINDOW service).
+9. **Optionals:** lock screens / Termux / PC / OAuth / auto-reply — user ke naam lene par hi banenge, tab tak OFF.
+
+## Per-user key rule (standing)
+
+- App me har user ki apni key sirf uske phone par save hoti hai aur usi user ke liye istemal hoti hai — koi shared/global key mixing nahi.
+- Server proxies (brain-proxy step 2 / tts-proxy) ke liye bhi yahi niyam rahega: app apni key header me bhejegi, proxy usi key se kaam karega — server ki ek global key sab users par nahi chalegi. Wiring S3 deploy ke saath hogi.

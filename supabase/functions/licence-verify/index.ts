@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
   // Is device par koi licence row nahi: kya user ki pro licence kisi
   // doosre device par active hai? (latest activated_at wali pehle.)
   const { data: others, error: othersError } = await supabase.from("licences")
-    .select("id,plan_id,status,expires_at,activated_at")
+    .select("id,device_id,plan_id,status,expires_at,activated_at")
     .eq("user_id", user_id).order("activated_at", { ascending: false });
   if (othersError) return json({ error: othersError.message }, 500);
   const now = new Date();
@@ -46,6 +46,18 @@ Deno.serve(async (req) => {
     r.plan_id === "pro" && r.status === "active" &&
     (!r.expires_at || new Date(r.expires_at) >= now));
   if (!pro) return json({ plan: "free", status: "free" });
+
+  // Website-path claim (option ii, 2026-10-28): admin-approve ne
+  // device_id NULL wali pro row banayi thi (website payer, app
+  // link se pehle). Wo row kisi phone par kabhi chali hi nahi,
+  // isliye is par 15-din ka wait NAHI lagta — pehli baar phone
+  // verify kare to row isi device par claim ho jaati hai.
+  if (pro.device_id === null) {
+    const { error: claimError } = await supabase.from("licences")
+      .update({ device_id, activated_at: now.toISOString() }).eq("id", pro.id);
+    if (claimError) return json({ error: claimError.message }, 500);
+    return json({ plan: "pro", status: "active", device_claimed: true });
+  }
 
   const activatedAt = new Date(pro.activated_at);
   const availableAt = new Date(activatedAt.getTime() + FIFTEEN_DAYS_MS);

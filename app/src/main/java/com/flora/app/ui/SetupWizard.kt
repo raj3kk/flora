@@ -354,6 +354,8 @@ fun SetupWizard(onDone: () -> Unit) {
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Koi bhi step chhoda ja sakta hai — Ho gaya dabate hi Flora khul jayegi.")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Shuru me hi keys: Settings > Keys me apni Gemini key (AI Studio se free) aur Deepgram key (Deepgram console se) daalo — har key ke neeche link se key banao, phir 'Bhare hue keys check karo' se sahi/galat dekho, phir Save dabao. Keys sirf is phone par rehti hain.")
             }
         }
     }

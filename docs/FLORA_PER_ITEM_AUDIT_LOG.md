@@ -863,3 +863,15 @@ maujood, index bhi 200. Download page ab live hai.
 - FloraPreferences VOICE_SAMPLE key + voiceSample()/setVoiceSample() (default "lily", persona pattern par).
 - FloraApp LaunchedEffect me voiceSample load; SettingsScreen me state (persona ke saath, launcher se pehle) + load + 3-sample selector row.
 - Prepush checks: braces/parens balanced teeno files; declaration order — state launcher se pehle, load persona ke saath, voice/scope params upar; nullable nahi hai is change me; local gradlew absent, CI hi build gate.
+
+## Keys UI + links + Deepgram check + live update + approve (ii) + direct APK (2026-10-28 ~21:35 IST, CI PENDING)
+- BrainClient: checkKeys() ab Deepgram bhi check karta hai (Token auth, /v1/projects); naya checkKeysFor() bhare hue (bina-save) keys ko probe karta hai — Save user ke haath me, sahi ho ya galat.
+- Settings: Gemini ke neeche AI Studio link, Groq ke neeche console link, Deepgram ke neeche console link; "Bhare hue keys check karo (bina save)" button; note me per-user key rule (har user ki apni key, usi ke liye).
+- SetupWizard step 3 me keys hint (Settings > Keys, link se banao, check karo, phir Save).
+- Settings me Roles buttons: Default assistant (VOICE_INPUT_SETTINGS) + Default dialer (MANAGE_DEFAULT_APPS_SETTINGS) — dono system settings kholte hain, tap user ka.
+- Live update voice branch: "live update batao / taaza khabar batao / realtime update batao" -> Open-Meteo weather + DuckDuckGo search, free APIs, bol kar jawab.
+- admin-approve option (ii): users row/device_id na ho to payment approve + NULL-device pro licence (website-path); licence-verify NULL-device row ko pehli phone-verify par claim karta hai (15-din wait nahi). Order: pehle licence, tabhi payment approved. Deploy dashboard editor se hoga (GitHub push se nahi).
+- Direct APK: CI me Supabase Storage upload step (continue-on-error, build gate kabhi fail nahi); bucket SQL + secrets + page-flip doc FLORA_APK_DIRECT_DOWNLOAD.md; download.html par "aa raha hai" note (SwissTransfer abhi primary, pehli upload ke saath flip).
+- Neural voice: plan doc FLORA_NEURAL_VOICE_PLAN_20261028.md (Kokoro primary Apache-2.0, Piper fallback MIT, Sherpa-ONNX glue, bucket-download, system-TTS removal sirf sample approve + phone test ke baad). System TTS is push me NAHI hataya gaya — pehle hatana Flora ko goonga kar dega.
+- G19 examples doc + G21 CEO actions appendix likhe gaye.
+- Prepush checks: braces/parens balanced (5 files); declaration order — Settings context/scope/key states UI se upar, live branch scope/appContext/searchTools branch se upar; TS me expires/userRow single-def, licErr block-scoped; local gradlew absent, CI hi build gate.

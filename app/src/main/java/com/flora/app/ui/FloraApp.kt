@@ -408,6 +408,24 @@ fun FloraApp(
                 screen = Screen.CAMERA_LOOK
                 voice.speak("Camera khol raha hun — 'Camera me kya dikh raha hai?' dabate hi dekh kar bata dungi.")
             }
+            lower == "live update batao" || lower == "taaza khabar batao" ||
+                lower == "realtime update batao" || lower == "aaj ki khabar batao" -> {
+                voice.speak("Live update nikal rahi hun — mausam aur taaza khabar dekh rahi hun.")
+                scope.launch {
+                    try {
+                        val weather = try { searchTools.weatherHere(appContext) } catch (e: Exception) { "" }
+                        val news = try { searchTools.search("taaza khabar India today") } catch (e: Exception) { "" }
+                        val msg = listOf(weather, news).filter { it.isNotBlank() }.joinToString(" • ")
+                        if (msg.isBlank()) {
+                            voice.speak("Is waqt live update nahi nikal payi, internet check kar ke dobara bolo.")
+                        } else {
+                            voice.speak(msg.take(600))
+                        }
+                    } catch (e: Exception) {
+                        voice.speak("Live update me dikkat aayi, dobara koshish karo.")
+                    }
+                }
+            }
             lower == "sos" || lower == "sos bhejo" || lower == "madad" -> {
                 screen = Screen.SOS
                 voice.speak("SOS screen khol raha hun.")
@@ -2879,6 +2897,12 @@ private fun SettingsScreen(
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth()
             )
+            TextButton(onClick = {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    data = android.net.Uri.parse("https://aistudio.google.com/apikey")
+                }
+                context.startActivity(intent)
+            }) { Text("Gemini key kahan se milegi? — AI Studio kholo (free)") }
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = groqKey, onValueChange = { groqKey = it },
@@ -2886,6 +2910,12 @@ private fun SettingsScreen(
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth()
             )
+            TextButton(onClick = {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    data = android.net.Uri.parse("https://console.groq.com/keys")
+                }
+                context.startActivity(intent)
+            }) { Text("Groq key kahan se milegi? — Groq console kholo (free)") }
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = geminiKey2, onValueChange = { geminiKey2 = it },
@@ -2907,6 +2937,12 @@ private fun SettingsScreen(
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth()
             )
+            TextButton(onClick = {
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    data = android.net.Uri.parse("https://console.deepgram.com/")
+                }
+                context.startActivity(intent)
+            }) { Text("Deepgram key kahan se milegi? — Deepgram console kholo (signup ke baad API Keys page)") }
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = tavilyKey, onValueChange = { tavilyKey = it },
@@ -2975,7 +3011,27 @@ private fun SettingsScreen(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(keyCheckNote)
             }
-            Text("Save dabaye bina key kaam nahi karegi — pehle Save, phir Check. Check sirf key ki validity batata hai, key ki value kabhi screen par nahi aati.")
+            Row {
+                Button(onClick = {
+                    scope.launch {
+                        keyCheckNote = "Bhare hue keys check ho rahi hain..."
+                        val results = try {
+                            brain.checkKeysFor(
+                                geminiKey.trim(), geminiKey2.trim(),
+                                groqKey.trim(), groqKey2.trim(), deepgramKey.trim(),
+                            )
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                        keyCheckNote = if (results.isEmpty()) {
+                            "Check nahi ho paya — internet dekh kar dobara karo."
+                        } else {
+                            results.joinToString(" • ") { "${it.name}: ${it.note}" }
+                        }
+                    }
+                }) { Text("Bhare hue keys check karo (bina save)") }
+            }
+            Text("Save tumhare haath me hai — sahi ho ya galat, Save dabane par wahi save hogi. 'Keys check karo' saved keys ko check karta hai; 'Bhare hue keys check karo' bina save ke field wali keys ko check karta hai. Check sirf validity batata hai, key ki value kabhi screen par nahi aati. Keys sirf is phone par save hoti hain — har user ki apni key, usi user ke liye istemal hoti hai (koi shared key nahi).")
             Spacer(modifier = Modifier.height(12.dp))
             Text("Background aur notifications — app band hone par bhi chale")
             Text(
@@ -3195,6 +3251,24 @@ private fun SettingsScreen(
                 }
             }
             Text("Ye setting Flora ki har awaaz par lagti hai — chat, background, Auto Mode, sab jagah — kyunki sab ek hi VoiceEngine se bolte hain. System TTS par ye pitch/rate profile lagti hai; Deepgram aane par isi style ki voice dhoondhi jayegi.")
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Roles — ek baar tumhare tap se (koi app ye khud nahi kar sakti)")
+            Row {
+                Button(onClick = {
+                    val intent = Intent(Settings.ACTION_VOICE_INPUT_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                }) { Text("Default assistant banao") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = {
+                    val intent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                }) { Text("Default dialer banao") }
+            }
+            Text("Default assistant: system settings me Flora chuno — phir Flora har jagah se bulayi ja sakegi. Default dialer: default apps me Flora chuno — phir call UI Flora ka chalega.")
             Spacer(modifier = Modifier.height(12.dp))
             Text("Auto mode — bina har baar poochhe kaam (default ON, user order)")
             Row {
