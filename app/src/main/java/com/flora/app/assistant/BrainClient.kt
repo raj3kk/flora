@@ -37,7 +37,7 @@ class BrainClient(private val prefs: FloraPreferences) {
 
     private data class PostResult(val code: Int, val body: String?)
 
-    suspend fun ask(prompt: String): String = withContext(Dispatchers.IO) {
+    suspend fun ask(prompt: String, memoryContext: String = ""): String = withContext(Dispatchers.IO) {
         val keys = listOf(
             prefs.geminiApiKey().trim(),
             prefs.geminiApiKey2().trim(),
@@ -62,10 +62,10 @@ class BrainClient(private val prefs: FloraPreferences) {
         // "network error" bata raha tha. Ab naye model names +
         // har lane ka asli code report hota hai.
         val laneCodes = mutableListOf<Pair<String, Int>>()
-        val reply = geminiAsk(prompt, keys[0], laneCodes)
-            ?: geminiAsk(prompt, keys[1], laneCodes)
-            ?: groqAsk(prompt, keys[2], laneCodes)
-            ?: groqAsk(prompt, keys[3], laneCodes)
+        val reply = geminiAsk(prompt, keys[0], laneCodes, memoryContext)
+            ?: geminiAsk(prompt, keys[1], laneCodes, memoryContext)
+            ?: groqAsk(prompt, keys[2], laneCodes, memoryContext)
+            ?: groqAsk(prompt, keys[3], laneCodes, memoryContext)
         if (reply != null) return@withContext reply
         // v2.20 user order: brain fail ho to chat me technical
         // error KABHI nahi — na code, na model naam, na "key
@@ -172,6 +172,7 @@ class BrainClient(private val prefs: FloraPreferences) {
         prompt: String,
         key: String,
         laneCodes: MutableList<Pair<String, Int>>,
+        memoryContext: String = "",
     ): String? {
         if (key.isEmpty()) return null
         // v2.20 auto-discovery: hardcoded naam phir kabhi sade
@@ -193,7 +194,11 @@ class BrainClient(private val prefs: FloraPreferences) {
                                 "hi apnao. Chhota jawab do, aam taur par 1-2 line me, lamba " +
                                 "ya formal mat bano. Hindi/English mix me, user jis language " +
                                 "me bole usi me jawab do. Kaam ki baat pehle; extra detail " +
-                                "sirf poochhe par. Sawal: $prompt"
+                                "sirf poochhe par." +
+                                (if (memoryContext.isNotEmpty()) " User ke baare me tumhe ye yaad hai " +
+                                    "(sirf tab istemal karo jab sawaal se juda ho, kabhi seedha " +
+                                    "repeat mat karo): $memoryContext." else "") +
+                                " Sawal: $prompt"
                         )
                     ))
                 ))
@@ -278,6 +283,7 @@ class BrainClient(private val prefs: FloraPreferences) {
         prompt: String,
         key: String,
         laneCodes: MutableList<Pair<String, Int>>,
+        memoryContext: String = "",
     ): String? {
         if (key.isEmpty()) return null
         // v2.15: llama-3.1-8b-instant 16 Aug 2026 ko free/dev se
@@ -296,7 +302,10 @@ class BrainClient(private val prefs: FloraPreferences) {
                             "hi apnao. Chhota jawab do, aam taur par 1-2 line me, lamba " +
                             "ya formal mat bano. Hindi/English mix me, user jis language " +
                             "me bole usi me jawab do. Kaam ki baat pehle; extra detail " +
-                            "sirf poochhe par."
+                            "sirf poochhe par." +
+                            (if (memoryContext.isNotEmpty()) " User ke baare me yaad " +
+                                "(sirf zaroorat par istemal karo, kabhi seedha repeat mat karo): " +
+                                "$memoryContext." else "")
                     ))
                     .put(JSONObject().put("role", "user").put("content", prompt))
                 )

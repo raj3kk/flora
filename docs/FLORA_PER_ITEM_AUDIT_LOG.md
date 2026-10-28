@@ -630,3 +630,10 @@ maujood, index bhi 200. Download page ab live hai.
 - Wajah (job logs se, guess nahi): VoiceMatcher.kt me `import java.io.File` missing tha — chunk 1b me downloaded-encoder branch aane par `File?` return type unresolved hua, aur usi se lines 85-87 ke overload/length errors cascade hue (ek hi jad, teen errors).
 - Fix: sirf ek line — `import java.io.File` (FileInputStream/FileChannel pehle se the). Brace/paren balance verify.
 - Is fix ke baad chunk 4 ka run (a89072f8) bhi isi code par chalega — uska result aane par dobara check hoga; fail ho to wahi job-log route.
+
+## v2.22 chunk 5 — Brain-context memories (2026-10-28 ~17:15 IST, CI PENDING)
+- BrainClient.ask(prompt, memoryContext = "") — Gemini + Groq dono lanes me memory line judti hai (sirf tab istemal, kabhi seedha repeat nahi). Default "" se purane callers (routine steps) pehle jaise hi.
+- FloraApp chat path: brain.ask se pehle MemoriesStore se aakhri 20 facts padhe jate hain (phone par hi, server par save nahi hote); khali hon to kuch nahi judta.
+- Privacy: facts sirf is phone par hain; brain ko sirf us waqt ke jawab ke liye context milta hai (prompt me), koi alag sync nahi.
+- Audit: 2 files brace/paren balance; brain.ask callers grep-verify (chat path memory ke saath, routine paths default).
+- Baaki P1: wake tune, Deepgram streaming barge-in; phir P2–P5, S2/S3, R3, EK final deploy.

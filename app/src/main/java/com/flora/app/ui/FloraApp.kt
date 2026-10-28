@@ -33,6 +33,7 @@ import com.flora.app.automation.FloraAutomationService
 import com.flora.app.data.AutoLogStore
 import com.flora.app.tools.ImageTools
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -1481,7 +1482,18 @@ fun FloraApp(
                             busy = false
                             return@launch
                         }
-                        val reply = brain.ask(personaPrefix(prefs.persona()) + question)
+                        // Brain-context memories (v2.22, chunk 5):
+                        // user ne jo bataya tha, wo brain ko context
+                        // ke roop me milega (phone par hi padha jata
+                        // hai, server par save nahi hota). Khali ho to
+                        // kuch nahi judta — prompt pehle jaisa hi.
+                        val mems = try {
+                            memoriesStore.items.first().takeLast(20)
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                        val memCtx = if (mems.isEmpty()) "" else mems.joinToString("; ")
+                        val reply = brain.ask(personaPrefix(prefs.persona()) + question, memCtx)
                         messages = messages + ChatMsg(reply, false)
                         voice.speak(reply)
                         busy = false
