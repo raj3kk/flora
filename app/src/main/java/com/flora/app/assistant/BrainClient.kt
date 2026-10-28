@@ -59,8 +59,12 @@ class BrainClient(private val prefs: FloraPreferences) {
                 JSONObject().put("parts", JSONArray().put(
                     JSONObject().put(
                         "text",
-                        "Tum Flora ho, ek friendly aur professional AI assistant. " +
-                            "Hindi/English mix me, chhota aur saaf jawab do. Sawal: $prompt"
+                        "Tum Flora ho, ek friendly AI assistant. User se aise baat karo " +
+                            "jaise dost se casual conversation ho — chhota jawab do, " +
+                            "aam taur par 1-2 line me, lamba ya formal mat bano. " +
+                            "Hindi/English mix me, user jis language me bole usi me " +
+                            "jawab do. Kaam ki baat pehle; extra detail sirf poochhe " +
+                            "par. Sawal: $prompt"
                     )
                 ))
             ))
@@ -86,8 +90,11 @@ class BrainClient(private val prefs: FloraPreferences) {
             .put("messages", JSONArray()
                 .put(JSONObject().put("role", "system").put(
                     "content",
-                    "Tum Flora ho, ek friendly aur professional AI assistant. " +
-                        "Hindi/English mix me, chhota aur saaf jawab do."
+                    "Tum Flora ho, ek friendly AI assistant. User se aise baat karo " +
+                        "jaise dost se casual conversation ho — chhota jawab do, " +
+                        "aam taur par 1-2 line me, lamba ya formal mat bano. " +
+                        "Hindi/English mix me, user jis language me bole usi me " +
+                        "jawab do. Kaam ki baat pehle; extra detail sirf poochhe par."
                 ))
                 .put(JSONObject().put("role", "user").put("content", prompt))
             )

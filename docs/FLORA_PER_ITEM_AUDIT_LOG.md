@@ -248,3 +248,32 @@
 - Round 1 items 3-4 CLOSED section ab repo doc me hai
   (pehle sirf local file me tha — sudhaar).
 - Build test: CI run — result push ke baad verify hoga.
+
+## v2.10 honest text — CI PASS + LIVE VERIFIED (2026-10-28 ~11:21 IST)
+- Run 40639602390 completed success, artifact flora-debug-apk
+  59,412,864 bytes, expired false. v2.10 = latest PASS.
+- Live: naye deploy flora-fxx247dqz-webbuilder1.vercel.app
+  READY; pricing clean URL 200 aur naya wording "maujood
+  saare tools" live confirm hua (purane host par purana text
+  dikhna sirf stale deploy tha, outage nahi).
+
+## Test-row cleanup — DONE + VERIFIED (2026-10-28 ~11:30 IST)
+- Dashboard SQL se sirf meri test rows delete ki gayi:
+  push_tokens (device test-device-v25) aur users (test UUID).
+  Dono DELETE bina error ke chale (Supabase "0 rows" dikhata
+  hai kyunki DELETE koi row wapas nahi karta — ye normal hai).
+- Counts pehle: users 1, push_tokens 1. Counts baad me:
+  users 0, push_tokens 0. Baaki tables (payment_submissions,
+  admin_audit, licences, usage, plans, settings) chhooi nahi
+  gayi. Database ab test data se saaf hai — asli user ka
+  pehla data ab signup/phone se hi aayega.
+
+## v2.11 short-casual replies default — PUSHED (user order 2026-10-28 ~12:14 IST)
+- BrainClient dono lanes (Gemini + Groq) me system instruction
+  badla: pehle "chhota aur saaf" tha, ab "dost se casual
+  conversation jaisa, aam taur par 1-2 line, lamba/formal nahi,
+  user ki language me, kaam ki baat pehle, detail sirf poochhe
+  par". Ye default hai, har chat par lagu hoga.
+- Audit: sirf prompt text badla — koi permission, key, privacy,
+  ya data flow nahi chheda; braces/parens balance 0/0.
+- Build test: CI run — result push ke baad verify hoga.
