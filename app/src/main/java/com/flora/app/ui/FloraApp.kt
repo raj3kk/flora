@@ -59,7 +59,18 @@ private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DO
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
 
-/** Persona style prefix (v1.8, local): sirf tone guide karta hai, user ka sawaal nahi badalta. */
+/** Flora theme colors (v1.9): Flora ke apne 3 themes, sirf colors — koi asset copy nahi. */
+private fun floraColorScheme(theme: String): androidx.compose.material3.ColorScheme = when (theme) {
+    "dark" -> androidx.compose.material3.darkColorScheme()
+    "warm" -> androidx.compose.material3.lightColorScheme(
+        primary = androidx.compose.ui.graphics.Color(0xFF7C4A03),
+        secondary = androidx.compose.ui.graphics.Color(0xFF6B5A2E),
+        tertiary = androidx.compose.ui.graphics.Color(0xFF8D6E00),
+        background = androidx.compose.ui.graphics.Color(0xFFFFF8E7),
+        surface = androidx.compose.ui.graphics.Color(0xFFFFF3D6)
+    )
+    else -> androidx.compose.material3.lightColorScheme()
+}
 private fun personaPrefix(persona: String): String = when (persona) {
     "saathi" -> "Dostana, chhote aur hausla dene wale tone me jawab do. "
     "guru" -> "Step-by-step, to-the-point, padhai/kaam par focus karke jawab do. "
@@ -84,6 +95,8 @@ fun FloraApp(
     onMicRequest: () -> Unit,
 ) {
     var screen by remember { mutableStateOf(Screen.CHAT) }
+    // Theme state (v1.9): states block me, launcher se pehle.
+    var theme by remember { mutableStateOf("light") }
     var messages by remember { mutableStateOf(listOf(ChatMsg("Namaste! Main Flora hun. Kya madad kar sakti hun?", false))) }
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -142,6 +155,7 @@ fun FloraApp(
      */
     LaunchedEffect(Unit) {
         try {
+            theme = prefs.theme()
             if (prefs.supabaseAnonKey().isNotEmpty()) {
                 val userId = prefs.userId()
                 val androidId = Settings.Secure.getString(
@@ -255,6 +269,7 @@ fun FloraApp(
         }
     }
 
+    androidx.compose.material3.MaterialTheme(colorScheme = floraColorScheme(theme)) {
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("Flora") })
@@ -333,6 +348,8 @@ fun FloraApp(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("PIN bhool gaye ho to Settings me naya PIN set kar sakte ho (Chat ke alawa baaki screens khuli hain).")
                 } else {
+                FloraOrb(busy)
+                Spacer(modifier = Modifier.height(8.dp))
                 LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     items(messages) { msg ->
                         Text((if (msg.fromUser) "Aap: " else "Flora: ") + msg.text)
@@ -738,6 +755,7 @@ fun FloraApp(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -762,6 +780,8 @@ private fun SettingsScreen(
     var eventAnnounce by remember { mutableStateOf(false) }
     // Persona state (v1.8, local): launcher se PEHLE declare (order trap).
     var persona by remember { mutableStateOf("flora") }
+    // Theme state (v1.9): persona ke saath, launcher se pehle.
+    var theme by remember { mutableStateOf("light") }
     var note by remember { mutableStateOf("") }
     val phonePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -785,6 +805,7 @@ private fun SettingsScreen(
         callAnnounce = prefs.callAnnounce()
         eventAnnounce = prefs.eventAnnounce()
         persona = prefs.persona()
+        theme = prefs.theme()
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -866,6 +887,18 @@ private fun SettingsScreen(
                 }
             }
             Text("Flora: friendly + professional. Saathi: dostana, chhote jawab. Guru: step-by-step, to-the-point.")
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Theme — Flora ka rang (sirf colors, koi asset nahi)")
+            Row {
+                listOf("light" to "Light", "dark" to "Dark", "warm" to "Warm").forEach { (id, label) ->
+                    Button(onClick = {
+                        theme = id
+                        scope.launch { prefs.setTheme(id) }
+                    }) { Text(if (theme == id) "✓ $label" else label) }
+                    Spacer(modifier = Modifier.padding(2.dp))
+                }
+            }
+            Text("Theme badalte hi poora app us rang me dikhega. Default Light hai.")
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedTextField(
                 value = pin, onValueChange = { pin = it },

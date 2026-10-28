@@ -37,6 +37,7 @@ class FloraPreferences(private val context: Context) {
         val EVENT_ANNOUNCE = booleanPreferencesKey("event_announce")
         val DRIVING_MODE = booleanPreferencesKey("driving_mode")
         val PERSONA = stringPreferencesKey("persona")
+        val THEME = stringPreferencesKey("theme")
         val CALL_TALK = booleanPreferencesKey("call_talk")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
@@ -153,6 +154,14 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setPersona(value: String) {
         context.floraDataStore.edit { it[Keys.PERSONA] = value }
+    }
+
+    /** Theme (v1.9): light/dark/warm. Default light. */
+    suspend fun theme(): String =
+        context.floraDataStore.data.map { it[Keys.THEME] ?: "light" }.first()
+
+    suspend fun setTheme(value: String) {
+        context.floraDataStore.edit { it[Keys.THEME] = value }
     }
 
     /** Call-talk (dialer role): default OFF, user khud ON karega. */

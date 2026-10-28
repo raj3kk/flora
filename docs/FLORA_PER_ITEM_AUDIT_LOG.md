@@ -26,3 +26,19 @@
 - Baaki: fix build ka result aana baaki hai; PASS hote hi attachments
   audit poora hoga, phir personas push hoga.
 - Lesson: AGENTS.md me "nullable-state capture trap" darj hai.
+
+## v1.8 Personas (commit 7c0359b7) — AUDIT PASS
+- Code audit: PERSONA key + Settings selector + brain prompt prefix
+  (generic + attachment text dono jagah); persona state launcher se
+  pehle (782 < 786); brace/paren balance 0; koi creator persona copy
+  nahi; default flora.
+- Build test: run 40623043708 completed success, artifact 54,325,468
+  bytes.
+- Test-plan entry: docs/FLORA_PERSONAS_TEST_ENTRY.md (6 steps).
+
+## v1.9 Themes + Orb — push hua, CI result pending
+- Code audit: THEME key + MaterialTheme wrap + warm/dark/light
+  schemes (sirf colors); orb Canvas-only, busy par pulse, idle par
+  static; theme states launcher se pehle (FloraApp 99, Settings 784
+  < launcher 786); brace/paren balance 0.
+- Test-plan entry: docs/FLORA_THEMES_TEST_ENTRY.md (7 steps).
