@@ -889,3 +889,9 @@ maujood, index bhi 200. Download page ab live hai.
 - Root cause verify: Maven Central se api-13.1.5.aar download kar ke classes.jar ka method table khud parse kiya — Shizuku me koi public newProcess nahi hai (sirf pingBinder/checkSelfPermission/requestPermission/transactRemote/getSystemService raaste public hain).
 - Fix: grantPermission ab SystemServiceHelper.getSystemService("package") + getTransactionCode + obtainParcel (interface-token wala Parcel) + binder.transact + reply.readException se grantRuntimePermission chalata hai — wahi kaam jo `adb shell pm grant` karta hai, sirf Shizuku binder ke through. Sab kuch try/catch me; phone test par transact protocol verify hona baaki hai.
 - Prepush: braces/parens balanced (ShizukuBridge); baaki files me koi change nahi.
+
+## 2026-10-28 ~23:05 IST — G19 fix2 (ShizukuBridge, main agent)
+- Pehla error (7426fa10): `newProcess` private hai Shizuku API 13.1.5 me — public tareeka nahi.
+- Doosra error (42565aaf): `getTransactionCode` ko 3 argument diye, function sirf 2 leta hai.
+- Fix2: `getTransactionCode("android.content.pm.IPackageManager", "grantRuntimePermission")` — pehla `"package"` argument hataya. AAR method table se verify: `getTransactionCode(String, String)` public hai; `obtainParcel` 3-arg wahi raha (usme koi change nahi).
+- CI result fix2 push ke baad verify hoga; green hone tak G19 done nahi mana jayega. Baaki 3 items (Settings UI, voice branches, WebsitePublisher) me is error ke alawa koi compile error nahi mila.

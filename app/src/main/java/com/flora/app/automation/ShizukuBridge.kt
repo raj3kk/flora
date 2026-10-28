@@ -52,7 +52,7 @@ object ShizukuBridge {
         return try {
             val binder = SystemServiceHelper.getSystemService("package") ?: return false
             val code = SystemServiceHelper.getTransactionCode(
-                "package", "android.content.pm.IPackageManager", "grantRuntimePermission"
+                "android.content.pm.IPackageManager", "grantRuntimePermission"
             ) ?: return false
             val data = SystemServiceHelper.obtainParcel(
                 "package", "android.content.pm.IPackageManager", "grantRuntimePermission"
