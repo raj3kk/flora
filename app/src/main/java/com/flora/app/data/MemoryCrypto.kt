@@ -79,4 +79,13 @@ object MemoryCrypto {
             null
         }
     }
+
+    /**
+     * Stores ka shared encode/decode (sweep 2026-10-29) — pehle yehi
+     * do one-liner har store me private duplicate the. Ciphertext ko
+     * plain me badlo; fail ho to raw (purana plain). Plain ko
+     * ciphertext me badlo; fail ho to plain (data safe).
+     */
+    fun decodeStored(raw: String): String = decrypt(raw) ?: raw
+    fun encodeStored(json: String): String = encrypt(json) ?: json
 }

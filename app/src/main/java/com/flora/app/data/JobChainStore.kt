@@ -27,14 +27,9 @@ data class JobChain(
 object JobChainStore {
     private val KEY = stringPreferencesKey("chains_json")
 
-    /** Ciphertext ko plain me badlo; fail ho to raw (purana plain). */
-    private fun decode(raw: String): String = MemoryCrypto.decrypt(raw) ?: raw
-
-    /** Plain ko ciphertext me badlo; fail ho to plain (data safe). */
-    private fun encode(json: String): String = MemoryCrypto.encrypt(json) ?: json
 
     suspend fun load(context: Context): List<JobChain> {
-        val raw = decode(context.chainStore.data.map { it[KEY] ?: "[]" }.first())
+        val raw = MemoryCrypto.decodeStored(context.chainStore.data.map { it[KEY] ?: "[]" }.first())
         val out = mutableListOf<JobChain>()
         try {
             val arr = JSONArray(raw)
@@ -60,7 +55,7 @@ object JobChainStore {
             obj.put("routines", nameArr)
             arr.put(obj)
         }
-        context.chainStore.edit { it[KEY] = encode(arr.toString()) }
+        context.chainStore.edit { it[KEY] = MemoryCrypto.encodeStored(arr.toString()) }
     }
 
     suspend fun upsert(context: Context, chain: JobChain) {

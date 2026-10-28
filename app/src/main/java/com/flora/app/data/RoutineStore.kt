@@ -24,14 +24,9 @@ data class Routine(val name: String, val commands: List<String>)
 object RoutineStore {
     private val KEY = stringPreferencesKey("routines_json")
 
-    /** Ciphertext ko plain me badlo; fail ho to raw (purana plain). */
-    private fun decode(raw: String): String = MemoryCrypto.decrypt(raw) ?: raw
-
-    /** Plain ko ciphertext me badlo; fail ho to plain (data safe). */
-    private fun encode(json: String): String = MemoryCrypto.encrypt(json) ?: json
 
     suspend fun load(context: Context): List<Routine> {
-        val raw = decode(context.routineStore.data.map { it[KEY] ?: "[]" }.first())
+        val raw = MemoryCrypto.decodeStored(context.routineStore.data.map { it[KEY] ?: "[]" }.first())
         val out = mutableListOf<Routine>()
         try {
             val arr = JSONArray(raw)
@@ -57,6 +52,6 @@ object RoutineStore {
             obj.put("commands", cmdArr)
             arr.put(obj)
         }
-        context.routineStore.edit { it[KEY] = encode(arr.toString()) }
+        context.routineStore.edit { it[KEY] = MemoryCrypto.encodeStored(arr.toString()) }
     }
 }

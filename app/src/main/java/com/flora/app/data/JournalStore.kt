@@ -24,16 +24,11 @@ class JournalStore(private val context: Context) {
 
     private val key = stringPreferencesKey("journal_json")
 
-    /** Ciphertext ko plain me badlo; fail ho to raw (purana plain). */
-    private fun decode(raw: String): String = MemoryCrypto.decrypt(raw) ?: raw
-
-    /** Plain ko ciphertext me badlo; fail ho to plain (data safe). */
-    private fun encode(json: String): String = MemoryCrypto.encrypt(json) ?: json
 
     val entries: Flow<List<JournalEntry>> = context.journalDataStore.data.map { prefs ->
         val out = mutableListOf<JournalEntry>()
         try {
-            val arr = JSONArray(decode(prefs[key] ?: "[]"))
+            val arr = JSONArray(MemoryCrypto.decodeStored(prefs[key] ?: "[]"))
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
                 out.add(
@@ -54,7 +49,7 @@ class JournalStore(private val context: Context) {
         list.forEach { e ->
             arr.put(JSONObject().put("mood", e.mood).put("text", e.text).put("ts", e.ts))
         }
-        context.journalDataStore.edit { it[key] = encode(arr.toString()) }
+        context.journalDataStore.edit { it[key] = MemoryCrypto.encodeStored(arr.toString()) }
     }
 
     suspend fun add(mood: String, text: String) {

@@ -21,14 +21,9 @@ data class Job(val routineName: String, val hour: Int, val minute: Int, val enab
 object JobStore {
     private val KEY = stringPreferencesKey("jobs_json")
 
-    /** Ciphertext ko plain me badlo; fail ho to raw (purana plain). */
-    private fun decode(raw: String): String = MemoryCrypto.decrypt(raw) ?: raw
-
-    /** Plain ko ciphertext me badlo; fail ho to plain (data safe). */
-    private fun encode(json: String): String = MemoryCrypto.encrypt(json) ?: json
 
     suspend fun load(context: Context): List<Job> {
-        val raw = decode(context.jobStore.data.map { it[KEY] ?: "[]" }.first())
+        val raw = MemoryCrypto.decodeStored(context.jobStore.data.map { it[KEY] ?: "[]" }.first())
         val out = mutableListOf<Job>()
         try {
             val arr = JSONArray(raw)
@@ -59,7 +54,7 @@ object JobStore {
                     .put("enabled", j.enabled)
             )
         }
-        context.jobStore.edit { it[KEY] = encode(arr.toString()) }
+        context.jobStore.edit { it[KEY] = MemoryCrypto.encodeStored(arr.toString()) }
     }
 
     suspend fun upsert(context: Context, job: Job) {
