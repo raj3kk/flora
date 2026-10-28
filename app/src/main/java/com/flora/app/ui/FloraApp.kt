@@ -28,7 +28,9 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import android.provider.Settings
 import com.flora.app.automation.AppAutomation
+import com.flora.app.automation.AutoModeNotifier
 import com.flora.app.automation.FloraAutomationService
+import com.flora.app.data.AutoLogStore
 import com.flora.app.tools.ImageTools
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.Composable
@@ -73,13 +75,14 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.CHAT -> "Chat"
     Screen.PERMISSIONS -> "Permissions"
     Screen.LICENCE -> "Licence"
+    Screen.AUTO_LOG -> "Auto Log"
     Screen.SETTINGS -> "Settings"
     Screen.MEMORIES -> "Yaadein"
     Screen.SCAN -> "Scan"
@@ -114,6 +117,9 @@ private fun floraColorScheme(theme: String): androidx.compose.material3.ColorSch
 private fun personaPrefix(persona: String): String = when (persona) {
     "saathi" -> "Dostana, chhote aur hausla dene wale tone me jawab do. "
     "guru" -> "Step-by-step, to-the-point, padhai/kaam par focus karke jawab do. "
+    // Romantic (v2.17, user order): pyaar bhara, caring saathi ka tone.
+    // Halki flirt theek hai; koi ashleel ya explicit baat nahi.
+    "romantic" -> "Pyaar bhare, romantic aur caring tone me jawab do — jaise koi kareebi saathi baat karta hai. Pyaar bhare shabd theek hain, par koi ashleel ya explicit baat nahi karni. "
     else -> ""
 }
 
@@ -168,6 +174,10 @@ fun FloraApp(
     var voiceCallConfirm by remember { mutableStateOf<String?>(null) }
     var voiceSmsConfirm by remember { mutableStateOf<Pair<String, String>?>(null) }
     var voiceAppConfirm by remember { mutableStateOf<com.flora.app.automation.LaunchableApp?>(null) }
+    // Auto mode (v2.17, user order): default OFF; ON par call/SMS/app
+    // bina har baar poochhe chalenge, har kaam Auto Log me dikhega.
+    var autoMode by remember { mutableStateOf(false) }
+    val autoLogStore = remember { AutoLogStore(appContext) }
     var pendingVoiceCallRequest by remember { mutableStateOf<String?>(null) }
     var pendingVoiceSmsRequest by remember { mutableStateOf<Pair<String, String>?>(null) }
     val appContext = LocalContext.current
@@ -219,6 +229,11 @@ fun FloraApp(
         try {
             theme = prefs.theme()
             try { voiceView = prefs.voiceView() } catch (e: Exception) { }
+            // Auto mode (v2.17): ON tha to notification wapas dikhao.
+            try {
+                autoMode = prefs.autoMode()
+                if (autoMode) AutoModeNotifier.show(appContext)
+            } catch (e: Exception) { }
             if (prefs.supabaseAnonKey().isNotEmpty()) {
                 val userId = prefs.effectiveUserId()
                 val androidId = Settings.Secure.getString(
@@ -235,6 +250,7 @@ fun FloraApp(
                 val cutoff = System.currentTimeMillis() - 30L * 24L * 60L * 60L * 1000L
                 memoriesStore.pruneOlderThan(cutoff)
                 journalStore.pruneOlderThan(cutoff)
+                autoLogStore.pruneOlderThan(cutoff)
             } catch (e: Exception) {
             }
             // FCM token (v2.2 local save, v2.5 server sync): app khulte            // hi token lo, is phone par save karo, aur server ko bhi
@@ -488,6 +504,10 @@ fun FloraApp(
                             onClick = { screen = Screen.LICENCE; menuOpen = false },
                         )
                         DropdownMenuItem(
+                            text = { Text("Auto Log") },
+                            onClick = { screen = Screen.AUTO_LOG; menuOpen = false },
+                        )
+                        DropdownMenuItem(
                             text = { Text("Settings") },
                             onClick = { screen = Screen.SETTINGS; menuOpen = false },
                         )
@@ -714,6 +734,38 @@ fun FloraApp(
                     return null
                 }
 
+                // Auto Mode execute helpers (v2.17): confirm dialog ke
+                // bajay seedha execute + Auto Log me entry + bol kar.
+                fun autoExecuteCall(number: String) {
+                    val ok = AutoActions.placeCall(appContext, number)
+                    val msg = if (ok) "Call laga di gayi: $number" else "Call nahi lagi, permission ya number check kijiye."
+                    messages = messages + ChatMsg("Flora: $msg", false)
+                    voice.speak(msg)
+                    scope.launch {
+                        try { autoLogStore.add("Call (auto): $number -> ${if (ok) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                    }
+                }
+
+                fun autoExecuteSms(number: String, text: String) {
+                    val ok = AutoActions.sendSms(appContext, number, text)
+                    val msg = if (ok) "SMS bhej diya gaya: $number" else "SMS nahi gaya, permission ya number check kijiye."
+                    messages = messages + ChatMsg("Flora: $msg", false)
+                    voice.speak(msg)
+                    scope.launch {
+                        try { autoLogStore.add("SMS (auto): $number -> ${if (ok) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                    }
+                }
+
+                fun autoExecuteOpen(app: com.flora.app.automation.LaunchableApp) {
+                    val ok = AppLauncher.launch(appContext, app.packageName)
+                    val msg = if (ok) "${app.label} khol diya." else "${app.label} nahi khul paya."
+                    messages = messages + ChatMsg("Flora: $msg", false)
+                    voice.speak(msg)
+                    scope.launch {
+                        try { autoLogStore.add("App khola (auto): ${app.label} -> ${if (ok) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                    }
+                }
+
                 // sendChat (v2.14): Bhejo button ka pipeline, ab continuous
                 // mic bhi isi se auto-send karta hai. Holder ke zariye
                 // upar ke LaunchedEffect se call hota hai.
@@ -724,22 +776,75 @@ fun FloraApp(
                     // commentary — no stopping at intermediate steps to ask again.
                     // "call <number>" / "call <naam>" / "sms <number|naam> <message>".
                     val lower = question.lowercase()
+                    // Auto Mode + persona voice commands (v2.17, user order).
+                    if (lower == "auto mode on" || lower == "auto mode chalu" ||
+                        lower == "auto mode chalu karo"
+                    ) {
+                        input = ""
+                        autoMode = true
+                        scope.launch {
+                            try {
+                                prefs.setAutoMode(true)
+                                autoLogStore.add("Auto mode ON")
+                            } catch (e: Exception) { }
+                            AutoModeNotifier.show(appContext)
+                        }
+                        voice.speak("Auto mode ON ho gaya hai. Ab call, SMS aur app kholna bina har baar poochhe hoga, aur har kaam Auto Log me dikhega. Band karne ke liye 'auto mode band' bolo.")
+                        return
+                    }
+                    if (lower == "auto mode band" || lower == "auto mode off" ||
+                        lower == "auto mode band karo"
+                    ) {
+                        input = ""
+                        autoMode = false
+                        scope.launch {
+                            try {
+                                prefs.setAutoMode(false)
+                                autoLogStore.add("Auto mode OFF")
+                            } catch (e: Exception) { }
+                            AutoModeNotifier.cancel(appContext)
+                        }
+                        voice.speak("Auto mode band ho gaya hai. Ab har kaam ke liye phir se confirmation poochhungi.")
+                        return
+                    }
+                    if (lower == "romantic mode" || lower == "romantic persona" ||
+                        lower == "romantic ho jao"
+                    ) {
+                        input = ""
+                        scope.launch {
+                            try { prefs.setPersona("romantic") } catch (e: Exception) { }
+                        }
+                        voice.speak("Romantic mode ON ho gaya hai.")
+                        return
+                    }
+                    if (lower == "normal mode" || lower == "flora mode") {
+                        input = ""
+                        scope.launch {
+                            try { prefs.setPersona("flora") } catch (e: Exception) { }
+                        }
+                        voice.speak("Normal mode wapas aa gaya hai.")
+                        return
+                    }
                     if (lower.startsWith("call ")) {
                         val raw = question.substring(5).trim()
                         val number = raw.filter { it.isDigit() || it == '+' }
                         input = ""
                         if (number.length >= 7) {
-                            messages = messages + ChatMsg(
-                                "Flora: Theek hai, $number par call laga raha hun — ek baar confirm kijiye.", false
-                            )
-                            voice.speak("Theek hai, call laga raha hun, ek baar confirm kijiye.")
-                            if (AutoActions.hasCallPermission(appContext)) {
-                                voiceCallConfirm = number
+                            if (autoMode && AutoActions.hasCallPermission(appContext)) {
+                                autoExecuteCall(number)
                             } else {
-                                pendingVoiceCallRequest = number
-                                voicePermissionLauncher.launch(
-                                    arrayOf(Manifest.permission.CALL_PHONE)
+                                messages = messages + ChatMsg(
+                                    "Flora: Theek hai, $number par call laga raha hun — ek baar confirm kijiye.", false
                                 )
+                                voice.speak("Theek hai, call laga raha hun, ek baar confirm kijiye.")
+                                if (AutoActions.hasCallPermission(appContext)) {
+                                    voiceCallConfirm = number
+                                } else {
+                                    pendingVoiceCallRequest = number
+                                    voicePermissionLauncher.launch(
+                                        arrayOf(Manifest.permission.CALL_PHONE)
+                                    )
+                                }
                             }
                         } else if (raw.isNotEmpty()) {
                             // Naam se number (v2.13): Contacts me dhoondho,
@@ -753,17 +858,21 @@ fun FloraApp(
                                     messages = messages + ChatMsg("Flora: $msg", false)
                                     voice.speak(msg)
                                 } else {
-                                    messages = messages + ChatMsg(
-                                        "Flora: Theek hai, $raw ($foundDigits) par call laga raha hun — ek baar confirm kijiye.", false
-                                    )
-                                    voice.speak("Theek hai, call laga raha hun, ek baar confirm kijiye.")
-                                    if (AutoActions.hasCallPermission(appContext)) {
-                                        voiceCallConfirm = foundDigits
+                                    if (autoMode && AutoActions.hasCallPermission(appContext)) {
+                                        autoExecuteCall(foundDigits)
                                     } else {
-                                        pendingVoiceCallRequest = foundDigits
-                                        voicePermissionLauncher.launch(
-                                            arrayOf(Manifest.permission.CALL_PHONE)
+                                        messages = messages + ChatMsg(
+                                            "Flora: Theek hai, $raw ($foundDigits) par call laga raha hun — ek baar confirm kijiye.", false
                                         )
+                                        voice.speak("Theek hai, call laga raha hun, ek baar confirm kijiye.")
+                                        if (AutoActions.hasCallPermission(appContext)) {
+                                            voiceCallConfirm = foundDigits
+                                        } else {
+                                            pendingVoiceCallRequest = foundDigits
+                                            voicePermissionLauncher.launch(
+                                                arrayOf(Manifest.permission.CALL_PHONE)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -786,17 +895,21 @@ fun FloraApp(
                             val firstDigits = parts[0].filter { it.isDigit() || it == '+' }
                             val text = parts[1]
                             if (firstDigits.length >= 7) {
-                                messages = messages + ChatMsg(
-                                    "Flora: Theek hai, $firstDigits par SMS bhej raha hun — ek baar confirm kijiye.", false
-                                )
-                                voice.speak("Theek hai, SMS bhej raha hun, ek baar confirm kijiye.")
-                                if (AutoActions.hasSmsPermission(appContext)) {
-                                    voiceSmsConfirm = firstDigits to text
+                                if (autoMode && AutoActions.hasSmsPermission(appContext)) {
+                                    autoExecuteSms(firstDigits, text)
                                 } else {
-                                    pendingVoiceSmsRequest = firstDigits to text
-                                    voicePermissionLauncher.launch(
-                                        arrayOf(Manifest.permission.SEND_SMS)
+                                    messages = messages + ChatMsg(
+                                        "Flora: Theek hai, $firstDigits par SMS bhej raha hun — ek baar confirm kijiye.", false
                                     )
+                                    voice.speak("Theek hai, SMS bhej raha hun, ek baar confirm kijiye.")
+                                    if (AutoActions.hasSmsPermission(appContext)) {
+                                        voiceSmsConfirm = firstDigits to text
+                                    } else {
+                                        pendingVoiceSmsRequest = firstDigits to text
+                                        voicePermissionLauncher.launch(
+                                            arrayOf(Manifest.permission.SEND_SMS)
+                                        )
+                                    }
                                 }
                             } else {
                                 scope.launch {
@@ -808,17 +921,21 @@ fun FloraApp(
                                         messages = messages + ChatMsg("Flora: $msg", false)
                                         voice.speak(msg)
                                     } else {
-                                        messages = messages + ChatMsg(
-                                            "Flora: Theek hai, ${parts[0]} ($foundDigits) par SMS bhej raha hun — ek baar confirm kijiye.", false
-                                        )
-                                        voice.speak("Theek hai, SMS bhej raha hun, ek baar confirm kijiye.")
-                                        if (AutoActions.hasSmsPermission(appContext)) {
-                                            voiceSmsConfirm = foundDigits to text
+                                        if (autoMode && AutoActions.hasSmsPermission(appContext)) {
+                                            autoExecuteSms(foundDigits, text)
                                         } else {
-                                            pendingVoiceSmsRequest = foundDigits to text
-                                            voicePermissionLauncher.launch(
-                                                arrayOf(Manifest.permission.SEND_SMS)
+                                            messages = messages + ChatMsg(
+                                                "Flora: Theek hai, ${parts[0]} ($foundDigits) par SMS bhej raha hun — ek baar confirm kijiye.", false
                                             )
+                                            voice.speak("Theek hai, SMS bhej raha hun, ek baar confirm kijiye.")
+                                            if (AutoActions.hasSmsPermission(appContext)) {
+                                                voiceSmsConfirm = foundDigits to text
+                                            } else {
+                                                pendingVoiceSmsRequest = foundDigits to text
+                                                voicePermissionLauncher.launch(
+                                                    arrayOf(Manifest.permission.SEND_SMS)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -839,11 +956,15 @@ fun FloraApp(
                             }
                             matches.size == 1 -> {
                                 val app = matches[0]
-                                messages = messages + ChatMsg(
-                                    "Flora: Theek hai, ${app.label} khol raha hun — ek baar confirm kijiye.", false
-                                )
-                                voice.speak("Theek hai, ${app.label} khol raha hun, ek baar confirm kijiye.")
-                                voiceAppConfirm = app
+                                if (autoMode) {
+                                    autoExecuteOpen(app)
+                                } else {
+                                    messages = messages + ChatMsg(
+                                        "Flora: Theek hai, ${app.label} khol raha hun — ek baar confirm kijiye.", false
+                                    )
+                                    voice.speak("Theek hai, ${app.label} khol raha hun, ek baar confirm kijiye.")
+                                    voiceAppConfirm = app
+                                }
                             }
                             else -> {
                                 val names = matches.take(3).joinToString(", ") { it.label }
@@ -1169,15 +1290,26 @@ fun FloraApp(
                 }
                 }
             } else if (screen == Screen.SETTINGS) {
-                SettingsScreen(prefs, licenceClient, pinVault, guardian, brain, { showGate = true }) { status ->
+                SettingsScreen(prefs, licenceClient, pinVault, guardian, brain, { showGate = true }, { status ->
                     licence = status
-                }
+                }, autoMode, { value ->
+                    autoMode = value
+                    scope.launch {
+                        try {
+                            prefs.setAutoMode(value)
+                            autoLogStore.add(if (value) "Auto mode ON" else "Auto mode OFF")
+                        } catch (e: Exception) { }
+                        if (value) AutoModeNotifier.show(appContext) else AutoModeNotifier.cancel(appContext)
+                    }
+                }, { screen = Screen.AUTO_LOG })
             } else if (screen == Screen.PERMISSIONS) {
                 PermissionsScreen(onShowWizard = { showGate = true })
             } else if (screen == Screen.LICENCE) {
                 LicenceScreen(prefs, licenceClient, licence, { status ->
                     licence = status
                 }, onGoSettings = { screen = Screen.SETTINGS })
+            } else if (screen == Screen.AUTO_LOG) {
+                AutoLogScreen(autoLogStore)
             } else if (screen == Screen.MEMORIES) {
                 MemoriesScreen(memoriesStore)
             } else if (screen == Screen.SCAN) {
@@ -1288,6 +1420,9 @@ private fun SettingsScreen(
     brain: BrainClient,
     onShowPermissions: () -> Unit,
     onLicence: (LicenceStatus) -> Unit,
+    autoMode: Boolean,
+    onAutoModeChange: (Boolean) -> Unit,
+    onShowAutoLog: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -1762,7 +1897,7 @@ private fun SettingsScreen(
             Spacer(modifier = Modifier.height(12.dp))
             Text("Persona — Flora ka tone (sirf tone badlega, awaaz nahi)")
             Row {
-                listOf("flora" to "Flora", "saathi" to "Saathi", "guru" to "Guru").forEach { (id, label) ->
+                listOf("flora" to "Flora", "saathi" to "Saathi", "guru" to "Guru", "romantic" to "Romantic").forEach { (id, label) ->
                     Button(onClick = {
                         persona = id
                         scope.launch { prefs.setPersona(id) }
@@ -1770,7 +1905,16 @@ private fun SettingsScreen(
                     Spacer(modifier = Modifier.padding(2.dp))
                 }
             }
-            Text("Flora: friendly + professional. Saathi: dostana, chhote jawab. Guru: step-by-step, to-the-point.")
+            Text("Flora: friendly + professional. Saathi: dostana, chhote jawab. Guru: step-by-step, to-the-point. Romantic: pyaar bhara, caring tone (user ke kehne par ON hua hai).")
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Auto mode — bina har baar poochhe kaam (user order, default OFF)")
+            Row {
+                Text("Auto mode")
+                Spacer(modifier = Modifier.padding(4.dp))
+                Switch(checked = autoMode, onCheckedChange = { value -> onAutoModeChange(value) })
+            }
+            Text("ON hone par Flora call, SMS aur app-kholo bina har baar poochhe karegi. Har kaam Auto Log me dikhega aur notification me 'Auto mode ON' dikhega. 'Auto mode band' bolte hi band. Payment kabhi auto nahi hogi.")
+            Button(onClick = { onShowAutoLog() }) { Text("Auto Log dekho") }
             Spacer(modifier = Modifier.height(12.dp))
             Text("Theme — Flora ka rang (sirf colors, koi asset nahi)")
             Row {

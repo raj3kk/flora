@@ -475,3 +475,14 @@ maujood, index bhi 200. Download page ab live hai.
 - Background: image/install commands ab command-bus se activity me aate hain (foreground me execute, confirmation rule barkarar).
 - Audit: 4 kt files brace/paren 0/0; helpers sendChat se pehle declare (594 < 720); imports verify (AppAutomation, FloraAutomationService, delay).
 - Test entry: docs/FLORA_V216_TEST_ENTRY.md.
+
+## v2.15 download page LIVE (2026-10-28 ~15:47 IST)
+- SwissTransfer link: https://www.swisstransfer.com/dl/01a181ff-71d3-70fa-a0dd-e6b601d9d0bf (106.6 MB, 15 din, 12 Nov 2026 tak; bina password, bina code, bina account/payment).
+- Download page update commit 81754db6 → deploy flora-3ktz70dti-webbuilder1.vercel.app READY; /download par live verify: v2.15.0-rebuild, size 111,735,544, SHA e53590ed…, whats-new v2.15. (Pehli fetch purane deploy par lagi thi — commit se match karke sahi deploy verify kiya.)
+
+## v2.17 CODE DONE / CI PENDING (2026-10-28 ~15:50 IST, user order: pehle "kabhi nahi" wale banao)
+- Romantic persona: personaPrefix me "romantic" (pyaar bhara, caring tone; explicit/ashleel nahi) + Settings list + voice switch ("romantic mode" / "normal mode").
+- Auto Mode (default OFF, user ka switch): ON par call/SMS/app-kholo bina confirm dialog ke seedha execute + AutoLogStore me entry + ongoing notification (id 2003) + "auto mode band" par band. AutoLogScreen (Menu > Auto Log) + 30-din prune. Payment isse kabhi auto nahi (money rule barkarar).
+- Nahi khola (saaf wajah ke saath): payment auto-confirm (paisa bina poochhe kat sakta hai) + creator code/UI/assets copy (kanoon + ownership proof nahi) + hard lock jo user khud na khol sake (phone band ho jayega — PIN wala lock aage aayega) + purani keys (hain hi nahi, nayi hi banengi).
+- Audit: 6 files brace/paren 0/0; autoMode state (179) + autoLogStore (180) helpers (739) se pehle; Settings call-site args signature order se mile; AutoLogScreen Column fillMaxSize (MemoriesScreen pattern).
+- Test entry: docs/FLORA_V217_TEST_ENTRY.md.

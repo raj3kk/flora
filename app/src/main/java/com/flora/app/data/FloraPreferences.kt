@@ -29,6 +29,7 @@ class FloraPreferences(private val context: Context) {
         val GEMINI_API_KEY = stringPreferencesKey("gemini_api_key")
         val GROQ_API_KEY = stringPreferencesKey("groq_api_key")
         val AUTOMATION_CONSENT = booleanPreferencesKey("automation_consent")
+        val AUTO_MODE = booleanPreferencesKey("auto_mode")
         val PIN_ENABLED = booleanPreferencesKey("pin_enabled")
         val GUARDIAN_MODE = booleanPreferencesKey("guardian_mode")
         val FACE_LOCK = booleanPreferencesKey("face_lock")
@@ -195,6 +196,20 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun automationConsent(): Boolean =
         context.floraDataStore.data.map { it[Keys.AUTOMATION_CONSENT] ?: false }.first()
+
+    /**
+     * Auto mode (v2.17, user order 2026-10-28): user ka apna switch,
+     * default OFF. ON hone par Flora call/SMS/app-kholo bina har baar
+     * poochhe karegi — har kaam Auto Log me dikhega, notification me
+     * "Auto mode ON" dikhega, aur "auto mode band" bolte hi band.
+     * Payment isse kabhi auto nahi hogi (money rule hamesha alag).
+     */
+    suspend fun autoMode(): Boolean =
+        context.floraDataStore.data.map { it[Keys.AUTO_MODE] ?: false }.first()
+
+    suspend fun setAutoMode(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.AUTO_MODE] = value }
+    }
 
     suspend fun setAutomationConsent(value: Boolean) {
         context.floraDataStore.edit { it[Keys.AUTOMATION_CONSENT] = value }

@@ -516,3 +516,13 @@ se dobara khul sakta hai, is plan se nahi.
 - Original ke daam: Flora par lagu nahi (₹199/month FINAL).
 - Har feature par: frontend + backend + database + workflow +
   gates — paanchon hain ya "kuch nahi" saaf likha hai.
+
+## v2.17 amendment (user order 2026-10-28 ~15:46 IST)
+- "Kabhi nahi banega" list se KHULA: romantic persona (F6, v2.17 me
+  DONE — tone only, explicit nahi) aur "silent" wale (Auto Mode me
+  badle: default OFF, visible notification + Auto Log + ek shabd
+  par band; call/SMS/app v2.17 me, auto-reply/auto-post/
+  call-record/screen-auto engines P3/P4 me isi rule par).
+- ABHI BHI BAND: payment auto-confirm (money rule) + creator
+  copy (kanoon + ownership proof nahi) + hard lock (PIN wala
+  lock aayega) + purani keys (hain hi nahi).
