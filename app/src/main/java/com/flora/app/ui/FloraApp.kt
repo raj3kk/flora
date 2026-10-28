@@ -200,6 +200,9 @@ fun FloraApp(
     var pendingVoiceCallRequest by remember { mutableStateOf<String?>(null) }
     var pendingVoiceSmsRequest by remember { mutableStateOf<Pair<String, String>?>(null) }
     var pendingContact by remember { mutableStateOf<PendingContact?>(null) }
+    // Teach-by-doing state (v2.22, P4-F20): naam + darj steps.
+    var teachingRoutine by remember { mutableStateOf<String?>(null) }
+    var teachingSteps by remember { mutableStateOf<List<String>>(emptyList()) }
     val appContext = LocalContext.current
     // Barge-in controller (v2.22, chunk 7): appContext ke BAAD hi
     // (order trap — pehle likhne par CI ne Unresolved reference
@@ -1030,6 +1033,74 @@ fun FloraApp(
                 fun sendChat(questionRaw: String) {
                     val question = questionRaw.trim()
                     if (question.isEmpty() || busy) return
+                    // Teach-by-doing (v2.22, P4-F20): "routine
+                    // sikhao <naam>" ke baad user jo commands bolta
+                    // hai, wo execute NAHI hote — steps ke roop me
+                    // darj hote hain. "routine khatam" par Routine
+                    // save ho jaati hai (Routines screen wali).
+                    val teachLower = question.lowercase()
+                    if (teachingRoutine != null) {
+                        input = ""
+                        if (teachLower == "routine khatam") {
+                            val tName = teachingRoutine!!
+                            val tSteps = teachingSteps
+                            teachingRoutine = null
+                            teachingSteps = emptyList()
+                            if (tSteps.isEmpty()) {
+                                val msg = "Koi step darj nahi hua, routine save nahi ki."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            } else {
+                                scope.launch {
+                                    try {
+                                        val existing = com.flora.app.data.RoutineStore.load(appContext)
+                                        val updated = existing.filter { it.name != tName } +
+                                            com.flora.app.data.Routine(tName, tSteps)
+                                        com.flora.app.data.RoutineStore.save(appContext, updated)
+                                        val msg = "Routine '$tName' seekh li — ${tSteps.size} steps. Routines screen se chala sakte ho."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    } catch (e: Exception) {
+                                        val msg = "Routine save nahi ho payi."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    }
+                                }
+                            }
+                        } else if (teachLower == "routine chhodo" || teachLower == "routine cancel") {
+                            teachingRoutine = null
+                            teachingSteps = emptyList()
+                            val msg = "Theek hai, sikhana chhod diya — kuch save nahi hua."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else if (teachLower.startsWith("routine sikhao ")) {
+                            val msg = "Pehle wali routine khatam karo ('routine khatam' bolo), phir nayi sikha dunga."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else {
+                            teachingSteps = teachingSteps + question
+                            val msg = "Step darj: $question"
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        }
+                        return
+                    }
+                    if (teachLower.startsWith("routine sikhao ")) {
+                        val tName = question.substring(15).trim()
+                        input = ""
+                        if (tName.isEmpty()) {
+                            val msg = "Kis naam se routine sikhaun? Aise boliye: 'routine sikhao subah'."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else {
+                            teachingRoutine = tName
+                            teachingSteps = emptyList()
+                            val msg = "Theek hai, '$tName' sikha raha hun — jo kaam karwana hai wo ek-ek karke bolo, khatam ho to 'routine khatam' bolo."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        }
+                        return
+                    }
                     // Clarification ka jawab (v2.22): naam ambiguous tha
                     // ya mila nahi tha — user ka jawab hi action hai.
                     // Naya command (call/sms/auto mode/romantic) aaye to
