@@ -21,14 +21,10 @@ import androidx.compose.ui.unit.dp
  * kar diya hai (3 steps, per-item tap, settings fallback). Ye file
  * ab use nahi hoti; push helper me delete support nahi hai, isliye
  * file repo me padi hai — dobara use mat karo.
- */
- * Permission gate (v2.12): app pehli baar khulte hi sab zaroori
+ * (Purana note: v2.12 me app pehli baar khulte hi sab zaroori
  * permissions ek saath, ek screen par, kaaran ke saath maange
- * jaate hain — phir hi aage badha jata hai. Deny ki hui
- * permission sirf uska feature band karti hai, poora app nahi.
- * Accessibility, dialer role aur battery setting is gate me
- * nahi hain — wo hamesha user ki marzi se, Settings me, alag
- * se milenge (kabhi chhupke ya zabardasti nahi).
+ * jaate the — phir hi aage badha jata tha. Deny ki hui permission
+ * sirf uska feature band karti thi, poora app nahi.)
  */
 data class GatePermission(val permission: String, val label: String, val why: String)
 

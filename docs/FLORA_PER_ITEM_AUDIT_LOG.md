@@ -432,3 +432,9 @@ maujood, index bhi 200. Download page ab live hai.
 - Root cause (log line 250): SearchTools.kt:135:22 "Unresolved reference: PackageManager" — v2.13 me weatherHere() me PackageManager.PERMISSION_GRANTED use hua par import nahi daala tha (sirf ContextCompat daala tha). Meri galti, ek line ki kami.
 - Fix: SearchTools.kt me "import android.content.pm.PackageManager" add kiya. Uske baad poore tree me check kiya — PackageManager use karne wali har file me import maujood hai (MainActivity, AutoActions, ContactLookup, SearchTools, FaceScreen, FloraApp, ScanScreen, SetupWizard, ContinuousListener, WakeWordService — sab OK).
 - Ye fix v2.14 ke upar gaya hai (v2.14 me wahi bug tha, isliye uska CI bhi fail hona tay tha) — fix commit ka CI hi ab asli gate hai.
+
+## v2.14-fix CI FAIL #2 — root cause + fix (2026-10-28 ~13:37 IST)
+- CI run 40654054803 (fix commit 8da15004) bhi completed failure; job 122700709387 step 4 fail.
+- Root cause: PermissionGate.kt lines 30-32 "Expecting a top level declaration" — v2.13 me deprecation note daalte waqt purane doc comment ka opening "/**" replace ho gaya tha, par uski body lines khuli reh gayi thi (bare text). Watcher tick ne isko "orphan comment block" keh kar pehle hi pakda tha, aur maine use cosmetic samajh kar chhod diya tha — ye galti meri hai, doosri baar wahi file.
+- Fix: poora header ek hi saaf comment block me merge kar diya (deprecation note + purana note ek block me). Brace/paren balance verify kiya.
+- Seekh: watcher ki flag ko "cosmetic" keh kar kabhi mat chhodo — pehle file khol kar dekho, phir faisla karo.
