@@ -69,28 +69,42 @@ Bacha hai: poori layer audit round 2 (audit → fix → audit jab tak 0 na ho): 
 Exit gate: audit log me 0 open issues. Iske bina final deploy nahi hoga.
 Owner: builder (+ watcher har 5 min par check karega).
 
-## Phase 7 — Single final deploy — 0% hua
-Bacha hai (sab ek saath, ek hi baar):
-- v2.22.0-rebuild (versionCode 44) APK: CI build se final APK.
-- DELIVERABLE CHANGE (parent brief update, verified 2026-10-28 ~23:47 IST):
+## Phase 7 — Single final deploy — DONE 2026-10-29 ~01:30 IST
+- v2.22.0-rebuild (versionCode 44) APK: CI run 40752222457 se final APK
+  (112,590,325 bytes, sha256 6987e62590b09396b5474ea2256ce9d8a0d27dbe5c73150d5ebaa788729a5e09,
+  package com.flora.app) — artifact se download + aapt2 badging se verify.
+- DELIVERABLE CHANGE (verified 2026-10-28 ~23:47 IST):
   flora-apk Supabase bucket route DEAD hai — free plan par file-size limit
   50MB fixed hai (per-bucket aur global dono raise karne ki koshish fail;
-  Pro bina user approval ke nahi liya jayega) aur APK ~111MB hai, isliye
-  bucket me flora-latest.apk kabhi upload nahi hoga. Isliye Phase 7 par
-  download page ko bucket URL par flip MAT karna.
-- Uske bajay Phase 7 ka direct link GitHub Release asset hoga: main agent
-  Phase 7 ke waqt workflow me release-upload step web UI se add karega
-  (builder workflow files ko chhu nahi sakta — ye builder ka kaam nahi hai)
-  aur ek final release publish hogi; builder ka Phase 7 kaam download page
-  ko us release asset ke link par le jana + live verify karna hoga.
-- Download page flip: release asset link primary (SwissTransfer v2.20 tab tak fallback).
-- Live verify: /, /api/app/version, /login, download URL (release asset) — sab 200; APK download + install check.
-Exit gate: live routes 200 + download page par latest version. Beech ka koi version release nahi (single-deploy order).
-Owner: builder (koi user kaam nahi).
-NOTE: download page ka maujooda "Direct download (aa raha hai)" note abhi bhi
-Supabase Storage auto-upload ka zikr karta hai — wo raasta dead hai, isliye
-ye note Phase 7 ke waqt release-asset wale sach ke saath badla jayega
-(Phase 7 se pehle page v2.20 par hi rahega).
+  Pro bina user approval ke nahi liya jayega) aur APK ~112MB hai, isliye
+  bucket me flora-latest.apk kabhi upload nahi hoga. Download page ko
+  bucket URL par flip MAT karna.
+- ROUTE CHANGE (user decision 2026-10-29 ~01:14 IST): GitHub Release asset
+  ka raasta bhi DROP — repo raj3kk/flora PRIVATE hai, isliye uska release
+  asset public download nahi hoga. User ne SwissTransfer chuna; repo
+  private hi rahega, Supabase Pro is raaste ke liye nahi liya jayega.
+- Final link (SwissTransfer, user-approved sender email flipify.com@gmail.com,
+  email-verification code se confirm, koi account nahi, kuch pay nahi):
+  https://www.swisstransfer.com/dl/01a18414-976d-71f9-b762-b18a70bbbd5b
+  (flora-v2.22.0.apk, 107.4 MB, 250 max downloads, no password).
+  Link 13 Nov 2026 tak active hai (15 din); uske baad sender email par
+  extension invite aayega (+15 din). Download page isi link par flip ho
+  gaya hai (commit 11cd3ac0); purana "Direct download (aa raha hai)" note
+  hata diya gaya (wo Supabase auto-upload raasta dead hai).
+- REFRESH PLAN (har release + har expiry par): SwissTransfer link permanent
+  nahi hai. Har naye PASS build par naya upload + page update hoga; kisi
+  release ke bina bhi expiry (13 Nov 2026, phir extension ke baad) se
+  pehle extension confirm karni hai, warna dobara upload + page update.
+  Owner: main agent (user ko expiry se pehle batana hai).
+- Live verify (2026-10-29 ~01:30 IST): / 200, /login 200, /download 200
+  (v2.22 + naya link dikhta hai), SwissTransfer link 200. APK download +
+  install check Phase 8 phone phase me hoga.
+Exit gate: live routes 200 + download page par latest version. Beech ka koi
+version release nahi hua (single-deploy order barkarar).
+Owner: main agent (user ka kaam: sirf sender email approval + verification code).
+NOTE (baaki): android.yml me dead flora-apk upload step (har build par 413,
+continue-on-error se chupchaap fail) abhi bhi maujood hai — use web UI se
+hatana baaki hai (API se workflow file edit nahi hoti).
 
 ## Phase 8 — Final phone phase (user) — 0% hua
 Bacha hai (sab kuch banne ke BAAD, user ke phone par — pehle nahi):
