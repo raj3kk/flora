@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Default assistant (v2.22, Phase 1, G3): session service ka
-     naam. recognitionService jaanboojh kar nahi diya — Flora
-     system speech recognizer hi use karti hai, alag recognition
-     service nahi banayi gayi. -->
+<!-- Default assistant (v2.22, Phase 1, G3) + system recognizer
+     (v2.23, Phase 5): session service ka naam + Flora ki apni
+     Deepgram-backed recognition service. System STT lanes
+     (ContinuousListener/barge-in) chhede nahi — ye sirf tab
+     istemal hota hai jab user system me Flora ko recognizer chune.
+     (Pehle recognitionService jaanboojh kar nahi diya tha — ab
+     Flora ki apni lane ban gayi hai, isliye joda gaya.) -->
 <voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:sessionService="com.flora.app.voice.FloraVoiceInteractionSessionService" />
+    android:sessionService="com.flora.app.voice.FloraVoiceInteractionSessionService"
+    android:recognitionService="com.flora.app.voice.FloraRecognitionService" />

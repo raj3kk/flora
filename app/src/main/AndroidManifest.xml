@@ -46,6 +46,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Assist activity (v2.23, Phase 5): default-assistant trio ka
+             teesra hissa — assist trigger par Flora kholo, khud khatam. -->
+        <activity
+            android:name=".voice.FloraAssistActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <service
             android:name="com.flora.app.automation.FloraAutomationService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
@@ -146,6 +156,16 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.service.voice.VoiceInteractionSessionService" />
+            </intent-filter>
+        </service>
+        <!-- System speech recognizer (v2.23, Phase 5): Flora ki apni
+             Deepgram lane se pehchanti hai; system STT lanes chhede nahi. -->
+        <service
+            android:name="com.flora.app.voice.FloraRecognitionService"
+            android:permission="android.permission.BIND_RECOGNITION_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
             </intent-filter>
         </service>
         <!-- Live wallpaper (v2.22, Phase 5, G9): sirf drawing. -->

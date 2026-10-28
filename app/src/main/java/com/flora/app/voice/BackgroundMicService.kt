@@ -333,6 +333,22 @@ class BackgroundMicService : Service() {
         voice?.speak(reply)
     }
 
+    // Task swipe ke baad restart ki koshish (v2.23, Phase 5): user ne
+    // background mic chaha tha (wanted) to service wapas lane ki
+    // koshish karo. Android 12+ / Vivo par ye block ho sakta hai
+    // (OS niyam) — try/catch hai, fail ho to crash nahi; tab
+    // battery-unrestricted + auto-start hi bachaav hai (guidance
+    // Settings/Permissions screen par hai).
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        if (wanted) {
+            try {
+                startForegroundService(Intent(this, BackgroundMicService::class.java))
+            } catch (e: Exception) {
+            }
+        }
+    }
+
     override fun onDestroy() {
         wanted = false
         active = false

@@ -41,6 +41,7 @@ import com.flora.app.tools.ImageTools
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -50,6 +51,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.flora.app.assistant.BrainClient
@@ -3963,6 +3967,28 @@ private fun SettingsScreen(
     var bgNote by remember { mutableStateOf("") }
     var notifGranted by remember { mutableStateOf(false) }
     var batteryIgnored by remember { mutableStateOf(false) }
+    // Resume par status auto-refresh (v2.23, Phase 5): settings se
+    // wapas aate hi battery/notification status khud update ho —
+    // manual "Status refresh karo" dabana zaroori nahi (button phir
+    // bhi hai). Ye effect states ke BAAD hai (order trap se bacha).
+    val settingsLifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(settingsLifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                notifGranted = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+                batteryIgnored = try {
+                    context.getSystemService(PowerManager::class.java)
+                        ?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+                } catch (e: Exception) {
+                    false
+                }
+            }
+        }
+        settingsLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { settingsLifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val phonePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->

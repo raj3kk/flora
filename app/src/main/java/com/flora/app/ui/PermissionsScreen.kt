@@ -21,12 +21,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 
@@ -48,6 +52,19 @@ fun PermissionsScreen(onShowWizard: () -> Unit) {
     val context = LocalContext.current
     var note by remember { mutableStateOf("") }
     var refreshTick by remember { mutableStateOf(0) }
+    // Resume par status auto-refresh (v2.23, Phase 5): settings se
+    // wapas aate hi refreshTick badhega, jisse battery/accessibility
+    // status dobara compute hoga (tick padhne ka pattern upar hai).
+    val permLifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(permLifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshTick++
+            }
+        }
+        permLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { permLifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     var pendingPerm by remember { mutableStateOf<String?>(null) }
 
     val singlePermLauncher = rememberLauncherForActivityResult(

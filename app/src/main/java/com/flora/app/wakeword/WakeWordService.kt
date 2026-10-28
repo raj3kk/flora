@@ -162,6 +162,21 @@ class WakeWordService : Service() {
         }
     }
 
+    // Task swipe ke baad restart ki koshish (v2.23, Phase 5): service
+    // chal rahi hai to Wake Word user ne ON kiya hua hai (BootReceiver
+    // sirf ON par start karta hai, Settings OFF par stop karta hai) —
+    // isliye wapas lane ki koshish karo. Android 12+ / Vivo par ye
+    // block ho sakta hai (OS niyam) — try/catch hai, fail ho to
+    // crash nahi; tab battery-unrestricted + auto-start hi bachaav
+    // hai (guidance Settings/Permissions screen par hai).
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        try {
+            startForegroundService(Intent(this, WakeWordService::class.java))
+        } catch (e: Exception) {
+        }
+    }
+
     override fun onDestroy() {
         listenJob?.cancel()
         scope.cancel()
