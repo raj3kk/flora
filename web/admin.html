@@ -3,104 +3,128 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Flora Admin — Phase A</title>
+<title>Flora Admin</title>
 <!--
-  Flora Admin Panel Phase A — payments approvals LIVE via
-  admin-approve Edge Function (deployed 2026-10-28).
-  Tables live hain (payment_submissions, admin_audit,
-  users.is_admin). Owner ko dashboard/SQL se apne account
-  par is_admin=true set karna hoga, tabhi approve/reject
-  chalega — non-admin ko function 403 dega.
+  Flora Admin Panel — payments approvals admin-approve Edge Function
+  se hote hain (server-side admin check + licence activation +
+  audit insert, sab function ke andar). Client kabhi licence ya
+  payment status seedha update nahi karta.
   Is page me koi secret value NAHI hai aur kabhi nahi hogi:
-  SUPABASE_URL / ANON_KEY sirf publishable client config hai
-  (RLS data ki raksha karta hai). Service role key yahan kabhi
-  nahi aayegi. Secrets ki status sirf present/missing dikhegi.
-  Money flow: website signup -> UPI pay -> UTR submit ->
-  admin approval -> licence active. Koi payment gateway,
-  koi auto-charge nahi.
-  Sections Users/Usage admin-list function se wired hain
-  (function DEPLOYED + auth gate live-verified 2026-10-28;
-  asli list admin user banne ke baad dikhegi); Secrets
-  section by-design sirf note hai (values kabhi page par nahi
-  aayengi — status dashboard se hi dekha jayega).
+  SUPABASE_URL / ANON_KEY sirf publishable client config hai.
+  Service role key yahan kabhi nahi aayegi.
+  Approve tabhi chalega jab login karne wale ki users row par
+  is_admin=true ho — non-admin ko function 403 dega. Admin row
+  app link ke baad banti hai (device_id zaroori hai).
 -->
 <style>
-body { font-family: system-ui, sans-serif; margin: 24px; line-height: 1.5; }
-h1 { font-size: 22px; }
-section { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 16px 0; }
-label { display: block; margin: 8px 0 4px; }
-input, button { padding: 8px; font-size: 15px; }
-.note { color: #555; font-size: 14px; }
+body{font-family:system-ui,sans-serif;margin:0;background:#fff7ed;color:#1f2937;line-height:1.5}
+header,main,footer{max-width:900px;margin:0 auto;padding:24px}
+nav{background:#fff;border-bottom:1px solid #fed7aa;padding:12px 24px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+nav a{color:#ea580c;text-decoration:none;font-weight:600}
+nav .brand{font-size:1.2em;font-weight:800;color:#1f2937;margin-right:auto}
+h1{font-size:1.8em;margin:8px 0}
+h2{font-size:1.2em;margin:0 0 8px}
+.card{background:#fff;border:1px solid #fed7aa;border-radius:16px;padding:20px;margin:16px 0}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+button{padding:9px 16px;font-size:15px;border-radius:10px;border:1px solid #ea580c;background:#ea580c;color:#fff;cursor:pointer}
+button.ghost{background:#fff;color:#ea580c}
+button.danger{background:#fff;color:#b91c1c;border-color:#fca5a5}
+input{padding:9px;font-size:15px;border-radius:10px;border:1px solid #fed7aa;width:100%;max-width:320px}
+label{display:block;margin:8px 0 4px;font-weight:600}
+.note{color:#555;font-size:14px}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;font-weight:700}
+.badge.green{background:#dcfce7;color:#166534}
+.badge.orange{background:#ffedd5;color:#9a3412}
+.badge.red{background:#fee2e2;color:#991b1b}
+.badge.grey{background:#f3f4f6;color:#4b5563}
+.item{border:1px solid #f3f4f6;border-radius:12px;padding:12px;margin:10px 0}
+.item .meta{color:#555;font-size:13px}
+#admin-banner{display:none}
+#admin-banner.show{display:block}
+#login-section.hide{display:none}
 </style>
 </head>
 <body>
-<h1>Flora Admin (Phase A)</h1>
-<p class="note">Login ke baad sections me data aayega. Admin check server-side
-function/RLS se hota hai — is page ka JavaScript kisi ko admin nahi banata.</p>
+<nav>
+<span class="brand">Flora</span>
+<a href="index.html">Home</a>
+<a href="pricing.html">Pricing</a>
+<a href="pay.html">Pay / UTR</a>
+<a href="account.html">Mera account</a>
+<a href="admin.html">Admin</a>
+<a href="download.html">App download</a>
+</nav>
+<header>
+<h1>Flora Admin</h1>
+<p class="note" id="who-line">Login ke baad yahan tumhara email aur admin status dikhega.</p>
+<div class="row">
+<button id="refresh-btn" type="button" class="ghost">Refresh sab</button>
+<button id="logout-btn" type="button" class="ghost">Logout</button>
+</div>
+</header>
+<main>
+<div class="card" id="admin-banner">
+<p><strong>Admin nahi ho.</strong> Isliye approve/reject nahi chal raha — server tumhe 403 dega.
+Admin banne ke liye: (1) app me Settings → “Website account link” me isi email se link karo (isse tumhari users row banegi), (2) phir admin flag lagaya jayega, (3) uske baad ye panel poora chalega.</p>
+</div>
 
-<section id="login-section">
-  <h2>Login</h2>
-  <label>Email <input id="admin-email" type="email" placeholder="owner email"></label>
-  <label>Password <input id="admin-password" type="password"></label>
-  <button id="login-btn" type="button">Login</button>
-  <p class="note" id="login-status">Abhi login nahi hua hai.</p>
+<section class="card" id="login-section">
+<h2>Login</h2>
+<label>Email <input id="admin-email" type="email" placeholder="owner email"></label>
+<label>Password <input id="admin-password" type="password"></label>
+<div class="row"><button id="login-btn" type="button">Login</button></div>
+<p class="note" id="login-status">Abhi login nahi hua hai.</p>
 </section>
 
-<section id="users-section">
-  <h2>Users &amp; Licences</h2>
-  <p class="note">List, plan, status, device. Licence activate/revoke is
-  page se nahi hota — licence sirf payment approval (admin-approve
-  function) se active hoti hai. Har approval admin_audit me darj hoga.</p>
-  <div id="users-list">Login ke baad list yahan aayegi.</div>
+<section class="card">
+<h2>Payments / UTR approvals <span class="badge orange" id="pending-count"></span></h2>
+<p class="note">Pending list: amount + note + UTR match karke approve (licence active) ya reject (reason zaroori) karo. Har approval admin_audit me darj hoga.</p>
+<p class="note" id="action-status"></p>
+<div id="payments-list">Login ke baad list yahan aayegi.</div>
 </section>
 
-<section id="payments-section">
-  <h2>Payments / UTR approvals</h2>
-  <p class="note">Pending list: amount + note + UTR match karke
-  approve (licence active) ya reject (reason zaroori) karo.</p>
-  <div id="payments-list">Login ke baad list yahan aayegi.</div>
+<section class="card">
+<h2>Users &amp; Licences</h2>
+<p class="note">List, plan, status, device. Licence is page se activate/revoke nahi hoti — licence sirf payment approval se active hoti hai.</p>
+<div id="users-list">Login ke baad list yahan aayegi.</div>
 </section>
 
-<section id="usage-section">
-  <h2>Usage</h2>
-  <p class="note">Har user ka daily talk seconds vs 600 sec free limit.</p>
-  <div id="usage-list">Login ke baad list yahan aayegi.</div>
+<section class="card">
+<h2>Usage</h2>
+<p class="note">Har user ka daily talk seconds vs 600 sec free limit.</p>
+<div id="usage-list">Login ke baad list yahan aayegi.</div>
 </section>
 
-<section id="plans-section">
-  <h2>Plans</h2>
-  <p class="note">Sirf view. Price change owner-gated hai — admin
-  propose karega, owner confirm karega.</p>
-  <div>Free: 600 talk sec/day, basic tools. Pro: ₹199/mahina,
-  unlimited talk, sab tools, FCM push. (Live wallpaper aur conversation mode abhi available nahi hain — baad me aayenge.)</div>
+<section class="card">
+<h2>Audit log</h2>
+<p class="note">Append-only: kaun admin, kya action, kis user par. Admin hi dekh sakta hai (RLS).</p>
+<div id="audit-list">Login ke baad log yahan aayega.</div>
 </section>
 
-<section id="secrets-section">
-  <h2>Secrets status</h2>
-  <p class="note">Sirf present/missing dikhega — koi value yahan
-  kabhi nahi dikhegi, edit bhi nahi hogi. Rotation Supabase
-  dashboard (owner-only) se hi hogi.</p>
-  <div id="secrets-list">Login ke baad status yahan aayega.</div>
+<section class="card">
+<h2>Plans</h2>
+<p class="note">Sirf view. Price change owner-gated hai — admin propose karega, owner confirm karega.</p>
+<p>Free: 600 talk sec/day, basic tools. Pro: ₹199/mahina, unlimited talk, sab tools, FCM push. (Live wallpaper aur conversation mode abhi available nahi hain — baad me aayenge.)</p>
 </section>
 
-<section id="audit-section">
-  <h2>Audit log</h2>
-  <p class="note">Append-only: kaun admin, kya action, kis user par,
-  pehle/baad me kya tha. Admin hi dekh sakta hai (RLS).</p>
-  <div id="audit-list">Login ke baad log yahan aayega.</div>
+<section class="card">
+<h2>Secrets status</h2>
+<p class="note">By design: secrets ki values is page par kabhi nahi aayengi, edit bhi nahi hogi. Status sirf Supabase dashboard (owner-only) se dekha ja sakta hai.</p>
 </section>
-
+</main>
+<footer>
+<p class="note">Support: <a href="mailto:flipify.com@gmail.com">flipify.com@gmail.com</a></p>
+</footer>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-// Phase A wiring — approve/reject admin-approve Edge Function
-// se hota hai (server-side admin check + licence activation +
-// audit insert, sab function ke andar). Client kabhi licence
-// ya payment status seedha update nahi karta — pehle wala
-// client-side draft isi wajah se badla gaya hai.
 const SUPABASE_URL = "https://keomyweghrmhqglaxmyv.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_qMjX-cw11dB_Y9nT8IlVzw_nPup-Yxe";
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let adminSession = null;
+let isAdmin = false;
+
+function shortId(id) { return (id || "").slice(0, 8) + "…"; }
+function setAction(msg) { document.getElementById('action-status').textContent = msg || ""; }
 
 async function callApprove(paymentId, action, rejectReason) {
   const res = await fetch(SUPABASE_URL + "/functions/v1/admin-approve", {
@@ -122,36 +146,45 @@ async function loadPayments() {
     .select("id,user_id,amount_paisa,utr,note,status,created_at")
     .eq("status", "pending").order("created_at", { ascending: true });
   const el = document.getElementById('payments-list');
+  const badge = document.getElementById('pending-count');
   if (error) {
     el.textContent = "Load fail: " + error.message +
-      " (Agar ye RLS/policy error hai to admin ke users row par is_admin=true hona chahiye — dashboard/SQL se check karo.)";
+      " (Non-admin ho to yehi dikhega — upar wala banner padho.)";
+    badge.textContent = "";
     return;
   }
+  badge.textContent = data.length ? data.length + " pending" : "0 pending";
   if (!data.length) { el.textContent = "Koi pending payment nahi hai."; return; }
   el.innerHTML = "";
   data.forEach(row => {
     const div = document.createElement('div');
-    div.textContent = row.user_id + " | ₹" + (row.amount_paisa / 100) +
-      " | UTR " + row.utr + " | " + row.note + " ";
+    div.className = "item";
+    div.innerHTML = "<strong>₹" + (row.amount_paisa / 100) + "</strong> | UTR " + row.utr +
+      " | " + (row.note || "") + "<div class='meta'>user " + shortId(row.user_id) +
+      " | " + row.created_at + "</div>";
     const ok = document.createElement('button');
     ok.textContent = "Approve";
     ok.onclick = async () => {
       try {
-        const data = await callApprove(row.id, "approve");
-        alert("Approved. Licence active, expires: " + (data.expires_at || "?"));
-      } catch (e) { alert("Approve fail: " + e.message); return; }
-      loadPayments();
+        const r = await callApprove(row.id, "approve");
+        setAction("Approved. Licence active, expires: " + (r.expires_at || "?"));
+      } catch (e) { setAction("Approve fail: " + e.message); return; }
+      loadPayments(); loadAudit();
     };
     const no = document.createElement('button');
     no.textContent = "Reject";
+    no.className = "danger";
     no.onclick = async () => {
       const reason = prompt("Reject reason (zaroori):");
       if (!reason) return;
-      try { await callApprove(row.id, "reject", reason); }
-      catch (e) { alert("Reject fail: " + e.message); return; }
-      loadPayments();
+      try { await callApprove(row.id, "reject", reason); setAction("Rejected."); }
+      catch (e) { setAction("Reject fail: " + e.message); return; }
+      loadPayments(); loadAudit();
     };
-    div.appendChild(ok); div.appendChild(no); el.appendChild(div);
+    const btnRow = document.createElement('div');
+    btnRow.className = "row";
+    btnRow.appendChild(ok); btnRow.appendChild(no);
+    div.appendChild(btnRow); el.appendChild(div);
   });
 }
 
@@ -168,10 +201,15 @@ async function loadAdminList() {
   const uEl = document.getElementById('users-list');
   const gEl = document.getElementById('usage-list');
   if (!res.ok) {
-    uEl.textContent = "Load fail: " + (data.error || ("HTTP " + res.status));
+    uEl.textContent = "Load fail: " + (data.error || ("HTTP " + res.status)) +
+      " (Non-admin ho to yehi dikhega — upar wala banner padho.)";
     gEl.textContent = "Load fail: " + (data.error || ("HTTP " + res.status));
     return;
   }
+  isAdmin = true;
+  document.getElementById('admin-banner').classList.remove('show');
+  document.getElementById('who-line').textContent =
+    "Login hai: " + adminSession.user.email + " — ADMIN";
   const licByUser = {};
   (data.licences || []).forEach(l => { licByUser[l.user_id] = l; });
   if (!(data.users || []).length) { uEl.textContent = "Koi user nahi hai."; }
@@ -179,11 +217,12 @@ async function loadAdminList() {
     uEl.innerHTML = "";
     data.users.forEach(u => {
       const div = document.createElement('div');
+      div.className = "item";
       const lic = licByUser[u.id];
-      div.textContent = u.id + " | device " + (u.device_id || "?") +
-        (u.is_admin ? " | ADMIN" : "") +
-        (lic ? " | " + lic.plan_id + "/" + lic.status +
-          (lic.expires_at ? " (exp " + lic.expires_at + ")" : "") : " | no licence");
+      div.innerHTML = "user " + shortId(u.id) + " | device " + (u.device_id ? shortId(u.device_id) : "?") +
+        (u.is_admin ? " <span class='badge green'>ADMIN</span>" : "") +
+        (lic ? " <span class='badge orange'>" + lic.plan_id + "/" + lic.status + "</span>" +
+          (lic.expires_at ? " <span class='meta'>(exp " + lic.expires_at + ")</span>" : "") : " <span class='badge grey'>no licence</span>");
       uEl.appendChild(div);
     });
   }
@@ -192,31 +231,44 @@ async function loadAdminList() {
     gEl.innerHTML = "";
     data.usage.forEach(r => {
       const div = document.createElement('div');
-      div.textContent = r.day + " | user " + r.user_id +
+      div.className = "item";
+      div.textContent = r.day + " | user " + shortId(r.user_id) +
         " | " + r.talk_seconds + "s | " + r.tool_calls + " tools";
       gEl.appendChild(div);
     });
   }
 }
 
-async function loadAudit() {  const { data, error } = await client
+async function loadAudit() {
+  const { data, error } = await client
     .from("admin_audit")
     .select("id,admin_user_id,action,target_user_id,created_at")
     .order("created_at", { ascending: false }).limit(50);
   const el = document.getElementById('audit-list');
   if (error) {
     el.textContent = "Load fail: " + error.message +
-      " (Agar ye RLS/policy error hai to admin ke users row par is_admin=true hona chahiye — dashboard/SQL se check karo.)";
+      " (Non-admin ho to yehi dikhega — upar wala banner padho.)";
     return;
   }
   if (!data.length) { el.textContent = "Koi audit entry nahi hai."; return; }
   el.innerHTML = "";
   data.forEach(row => {
     const div = document.createElement('div');
+    div.className = "item";
     div.textContent = row.created_at + " | " + row.action +
-      " | admin " + row.admin_user_id + " | user " + row.target_user_id;
+      " | admin " + shortId(row.admin_user_id) + " | user " + shortId(row.target_user_id);
     el.appendChild(div);
   });
+}
+
+function loadAll() { loadPayments(); loadAudit(); loadAdminList(); }
+
+async function afterLogin(session, user) {
+  adminSession = session;
+  document.getElementById('login-section').classList.add('hide');
+  document.getElementById('who-line').textContent = "Login hai: " + user.email + " — admin check ho raha hai…";
+  document.getElementById('admin-banner').classList.add('show');
+  loadAll();
 }
 
 document.getElementById('login-btn').addEventListener('click', async () => {
@@ -225,15 +277,22 @@ document.getElementById('login-btn').addEventListener('click', async () => {
   const { data, error } = await client.auth.signInWithPassword({ email, password });
   const st = document.getElementById('login-status');
   if (error) { st.textContent = "Login fail: " + error.message; return; }
-  adminSession = data.session;
-  st.textContent = "Login ho gaya: " + data.user.email +
-    " (admin check server-side function me hoga — non-admin ko approve/reject par 403 milega).";
-  document.getElementById('secrets-list').textContent =
-    "By design: secrets ki values is page par kabhi nahi aayengi. Status sirf Supabase dashboard (owner-only) se dekha ja sakta hai.";
-  loadPayments();
-  loadAudit();
-  loadAdminList();
+  await afterLogin(data.session, data.user);
 });
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  await client.auth.signOut();
+  window.location.reload();
+});
+document.getElementById('refresh-btn').addEventListener('click', () => {
+  if (!adminSession) { document.getElementById('login-status').textContent = "Pehle login karo."; return; }
+  setAction("Refresh ho raha hai…");
+  loadAll();
+  setAction("");
+});
+(async () => {
+  const { data: { session } } = await client.auth.getSession();
+  if (session) await afterLogin(session, session.user);
+})();
 </script>
 </body>
 </html>

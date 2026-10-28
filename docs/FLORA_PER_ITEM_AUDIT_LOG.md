@@ -779,3 +779,31 @@ maujood, index bhi 200. Download page ab live hai.
 - Point 7 galat tha ("koi romantic persona nahi") — v2.18 se romantic tone hai. Ab sahi hai: romantic mode sirf tone hai, explicit content nahi.
 - OPEN (owner faisla, jhootha naam nahi likha): IT Rules ke hisaab se grievance officer chahiye — Flora me abhi sirf support email hai (flipify.com@gmail.com). Flow99 me bhi yehi PARKED hai; Flora ke liye bhi owner ka faisla chahiye.
 - NOTE (proxy wiring ke baad badalna hoga): Privacy point 1/3 aaj sahi hain (app proxy se wired nahi hai) — jab brain/TTS proxy wiring hogi, tab prompts/text server jaane ka zikr jodna hoga.
+
+## Supabase dashboard audit + Site URL fix (2026-10-28 ~17:41 IST)
+- Dashboard audit (read-only): Email provider ON, signup ON, Confirm email ON (signup ke baad email link zaroori), 7 functions live, payment_submissions + admin_audit policies maujood, users 3 rows, 0 admin.
+- Site URL fix DONE (dashboard): purana flora-2318h9ew5-webbuilder1.vercel.app -> naya stable https://flora-henna-alpha.vercel.app (save + reload se verify). Stable domain live site dikhata hai (text-fetch verify).
+- BAAKI: Redirect URLs me abhi bhi sirf purana deploy URL hai — confirm default Site URL par jaata hai, isliye flow nahi tootega; purani entry ki safai agle dashboard task ke saath hogi.
+- Admin abhi bhi 0 — owner signup + confirm + app link ke baad hi is_admin set hoga.
+
+## v2.22 mega-build CI — FULLY GREEN (2026-10-28 ~17:42 IST, API-verified)
+- Aakhri run c22dee2e (R3 law fix) bhi SUCCESS. P1–P5, S2, S3, R3-law-fix — sab code runs green; koi fail/in-progress nahi bacha.
+- Baaki sab user/dashboard/phone-gated hai (admin, phone tests, S3 deploy+keys, grievance faisla, stale redirect safai) — code-side kuch pending nahi.
+
+## Admin flag — INSERT FAIL (2026-10-28 ~18:15 IST, dashboard SQL)
+- Owner auth user maujood hai (17:02 signup, email unconfirmed), par public.users row nahi hai.
+- INSERT (id, is_admin) FAIL: users.device_id NOT NULL constraint (23502) — khaali device_id wali row ban hi nahi sakti. Koi fake device_id nahi dala gaya.
+- Sahi raasta: email confirm -> app link (asli device_id ke saath row banegi, push-token-sync upsert se) -> phir UPDATE is_admin=true (tab chalega, kyunki device_id non-null hoga).
+- Yehi constraint website-only approve ki problem ki jad bhi hai: bina device ke users row ban hi nahi sakti — permanent fix (i)/(ii) ka faisla abhi bhi pending hai.
+
+## Admin flag — email confirm VERIFIED, row abhi bhi nahi (2026-10-28 ~18:17 IST)
+- Email confirmed YES (28 Oct 18:15), website sign-in bhi ho gaya (18:16) — login ka raasta khul gaya.
+- public.users row abhi bhi NAHI hai (3 doosri rows hain) — isliye UPDATE skip hua, koi flag nahi laga, koi fake device nahi dala.
+- Aakhri step sirf app link hai: usse asli device_id wali row banegi, phir UPDATE is_admin=true turant chalega.
+
+## Website redesign — admin + user panel (2026-10-28 ~18:25 IST, CI PENDING)
+- Wajah (user sahi tha): admin me na nav, na logout, na refresh, na admin-status — approve fail hone par bhi pata nahi chalta tha kyun. User panel me sirf 2 button, payments auto-load nahi.
+- admin.html FULL REWRITE (site style: cream/orange cards): nav header, Logout + Refresh sab, auto session load, NOT-ADMIN banner (approve kyun nahi chal raha + app link raasta), pending count badge, payment cards + inline result (alert ki jagah), users/usage/audit cards, ADMIN badge.
+- account.html FULL REWRITE: nav header, auto-load, login card (bina login), Pro steps checklist (signup/confirm/pay status badges), payments auto-load + status badges (pending/approved/rejected), Refresh + Logout.
+- Baaki 6 pages (index/login/signup/pricing/pay/download) par wahi nav header joda — har page se har panel ek click par.
+- Logic change NAHI: wahi functions, wahi RLS notes, koi secret nahi. Sirf design + UX states.
