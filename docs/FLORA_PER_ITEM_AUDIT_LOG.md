@@ -712,3 +712,8 @@ maujood, index bhi 200. Download page ab live hai.
 ## v2.22 P3-F14 poora — docs + email voice (2026-10-28 ~18:45 IST, CI PENDING)
 - "note save karo X" → DocsStore.add (title = pehle 30 chars, body = poora text; sirf phone par); "documents dikhao" → aakhri 5 titles bolkar; "email bhejo <address>" / "email kholo" → mail app kholta hai (mailto chooser) — Flora kabhi chhupke email nahi bhejti, subject/message/bhejna user khud karta hai.
 - Audit: prefix lengths verify (note 15, email 12); first() import pehle se maujood; brace/paren balance.
+
+## v2.22 P3-F15 poora — market overview voice (2026-10-28 ~18:50 IST, CI PENDING)
+- "market kaisa hai" / "market dikhao" / "share market kaisa hai" → Nifty 50 (^NSEI), Sensex (^BSESN), Bitcoin (BTC-USD) — wahi stockPrice/Yahoo raasta, har line ka sirf pehla hissa (per-symbol note repeat nahi), aakhir me ek baar live-pushti note.
+- Sirf padhna hai, isliye Auto Mode gate nahi. Audit: brace/paren balance.
+- P3 baaki: F16 whiteboard (code ZERO — naya screen), F13 image post step (image voice maujood hai; auto-post ka raasta abhi koi nahi — IG auto-post bada + risky item, confirm flow ke saath alag se banega, chupke se nahi).

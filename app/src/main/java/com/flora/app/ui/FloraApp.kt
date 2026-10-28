@@ -1357,6 +1357,37 @@ fun FloraApp(
                         }
                         return
                     }
+                    // Market overview voice (v2.22, P3-F15):
+                    // Single stock F12 me tha; market ka haal ek
+                    // saath — Nifty, Sensex, Bitcoin (Yahoo Finance,
+                    // wahi stockPrice raasta; live ki pushti hamesha
+                    // exchange/app se karne ko kaha jaata hai).
+                    if (lower == "market kaisa hai" ||
+                        lower == "market dikhao" ||
+                        lower == "share market kaisa hai"
+                    ) {
+                        input = ""
+                        scope.launch {
+                            try {
+                                val lines = listOf(
+                                    "Nifty 50" to "^NSEI",
+                                    "Sensex" to "^BSESN",
+                                    "Bitcoin" to "BTC-USD"
+                                ).map { (label, sym) ->
+                                    "$label: " + searchTools.stockPrice(sym).substringBefore("\n")
+                                }
+                                val full = lines.joinToString("\n") +
+                                    "\nNote: live price ki pushti exchange/app se karo. Source: Yahoo Finance"
+                                messages = messages + ChatMsg("Flora: $full", false)
+                                voice.speak(lines.joinToString(" • "))
+                            } catch (e: Exception) {
+                                val msg = "Market ka haal nahi mil paya, dobara bol dena."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                        return
+                    }
                     // General tap/type/swipe voice commands (v2.22,
                     // P2-F4 poora): primitives FloraAutomationService
                     // me pehle se the, ab awaaz se bhi chalte hain.
