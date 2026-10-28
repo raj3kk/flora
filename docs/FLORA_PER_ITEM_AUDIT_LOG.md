@@ -606,3 +606,13 @@ maujood, index bhi 200. Download page ab live hai.
 - Crash-evidence: FloraApplication me handler — crash.log phone par (200KB cap), phir default handler (na ho to process kill — tooti haalat me zinda nahi rahegi).
 - Plan update: competitor benchmark (Maya), "Maya me nahi, Flora me hoga" 9 items, production-ready bar, full permanent approval (paisa + irreversible bahar).
 - Baaki (jhooth nahi): WhatsApp automation P4 me baaki hai; enrol UI + Deepgram streaming client agle chunks me; generic "wahan" clarification contacts ke bahar abhi format-ask tak hai.
+
+## v2.22 chunk 3 — Enrol UI + Guardian voice wiring + Deepgram REST + Settings key field (2026-10-28 ~17:00 IST, CI PENDING)
+- VoiceRecorder: 16kHz mono PCM16, N seconds, permission/init fail par null (koi fake sample nahi); audio kabhi save/upload nahi.
+- VoiceEnrolScreen (Menu > Awaaz sikhao): 3 samples x 3 second → VoiceMatcher.enrol → KeyStore me average d-vector; enrolled status + clear bhi.
+- Guardian wiring: Chat lock par PIN sahi hone ke baad, enrolled + matcher available ho to awaaz ka check (3s sample → match → unlock); na ho to pehle jaisa PIN-only. Face akela kabhi unlock nahi karta (pehle se rule).
+- GuardianGate: voiceVerifiedThisSession + markVoiceVerified + canUnlockFull(pin, voiceEnrolled); purana canUnlock barkarar.
+- DeepgramClient (REST step 1): WAV POST /v1/listen (nova-2, hi) → transcript; key khali ho to null. Streaming WS barge-in agle chunk me (is par barge-in ka daava nahi).
+- Settings: Deepgram key field + load + save (baaki keys jaisa hi pattern).
+- Audit: 5 files brace/paren balance; VOICE_ENROL wiring (enum+title+menu+branch) grep-verify.
+- Baaki: Deepgram streaming WS, wake tune, job runner, auto-memory, voice-per-persona, P2–P5, S2/S3, R3.

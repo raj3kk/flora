@@ -76,7 +76,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -100,6 +100,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.DRIVING -> "Gaadi"
     Screen.JOURNAL -> "Journal"
     Screen.MODELS -> "Models"
+    Screen.VOICE_ENROL -> "Awaaz sikhao"
 }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
@@ -183,6 +184,8 @@ fun FloraApp(
     var chatUnlocked by remember { mutableStateOf(false) }
     var pinInput by remember { mutableStateOf("") }
     var lockNote by remember { mutableStateOf("") }
+    var pendingVoiceUnlock by remember { mutableStateOf(false) }
+    var voiceUnlockNote by remember { mutableStateOf("") }
     var voiceCallConfirm by remember { mutableStateOf<String?>(null) }
     var voiceSmsConfirm by remember { mutableStateOf<Pair<String, String>?>(null) }
     var voiceAppConfirm by remember { mutableStateOf<com.flora.app.automation.LaunchableApp?>(null) }
@@ -545,6 +548,10 @@ fun FloraApp(
                             onClick = { screen = Screen.FACE; menuOpen = false },
                         )
                         DropdownMenuItem(
+                            text = { Text("Awaaz sikhao") },
+                            onClick = { screen = Screen.VOICE_ENROL; menuOpen = false },
+                        )
+                        DropdownMenuItem(
                             enabled = false,
                             text = { Text("— Setup —") },
                             onClick = { },
@@ -614,23 +621,73 @@ fun FloraApp(
                 if (faceLockOn && !chatUnlocked) {
                     Text("Chat locked hai (Face Lock ON). PIN daal kar unlock kijiye. Face presence check se unlock nahi hota — sirf PIN se.")
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = pinInput, onValueChange = { pinInput = it },
-                        label = { Text("PIN") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = {
-                        if (pinVault.verify(pinInput)) {
-                            guardian.markPinVerified()
-                            chatUnlocked = true
-                            lockNote = ""
-                        } else {
-                            lockNote = "Galat PIN."
+                    if (pendingVoiceUnlock) {
+                        // PIN sahi ho gaya; ab awaaz ka check (v2.22).
+                        // Enrolled awaaz na ho to ye screen kabhi nahi aati.
+                        Text("PIN sahi hai. Ab apni awaaz sunao (3 second) — awaaz milne par hi chat khulegi.")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(onClick = {
+                            voiceUnlockNote = "Sun raha hun, 3 second bolo..."
+                            scope.launch {
+                                val pcm = com.flora.app.voice.VoiceRecorder.recordSeconds(appContext, 3)
+                                if (pcm == null) {
+                                    voiceUnlockNote = "Recording nahi ho payi — Mic permission Permissions screen se do."
+                                } else {
+                                    val result = com.flora.app.voice.VoiceMatcher.match(appContext, pcm, prefs)
+                                    if (result.matched) {
+                                        guardian.markVoiceVerified()
+                                        pendingVoiceUnlock = false
+                                        chatUnlocked = true
+                                        lockNote = ""
+                                        voiceUnlockNote = ""
+                                        voice.speak("Awaaz mil gayi, chat khol raha hun.")
+                                    } else if (!result.available) {
+                                        voiceUnlockNote = "Voice model abhi taiyaar nahi hai — Models screen se voice-encoder download karo."
+                                    } else if (!result.enrolled) {
+                                        voiceUnlockNote = "Koi awaaz enrolled nahi hai — Menu se 'Awaaz sikhao' me enrol karo."
+                                    } else {
+                                        voiceUnlockNote = "Awaaz nahi mili. Dobara koshish karo."
+                                    }
+                                }
+                            }
+                        }) { Text("Awaaz sunao (3 second)") }
+                        if (voiceUnlockNote.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(voiceUnlockNote)
                         }
-                        pinInput = ""
-                    }) { Text("Unlock karo") }
+                    } else {
+                        OutlinedTextField(
+                            value = pinInput, onValueChange = { pinInput = it },
+                            label = { Text("PIN") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(onClick = {
+                            if (pinVault.verify(pinInput)) {
+                                guardian.markPinVerified()
+                                // Voice enrolled + matcher available ho to
+                                // PIN ke baad awaaz ka check bhi lagega.
+                                val voiceNeeded = try {
+                                    com.flora.app.voice.VoiceVault(appContext).hasEnrolled() &&
+                                        com.flora.app.voice.VoiceMatcher.isAvailable(appContext)
+                                } catch (e: Exception) {
+                                    false
+                                }
+                                if (voiceNeeded) {
+                                    pendingVoiceUnlock = true
+                                    voiceUnlockNote = ""
+                                    lockNote = "PIN sahi hai, ab awaaz se confirm karo."
+                                } else {
+                                    chatUnlocked = true
+                                    lockNote = ""
+                                }
+                            } else {
+                                lockNote = "Galat PIN."
+                            }
+                            pinInput = ""
+                        }) { Text("Unlock karo") }
+                    }
                     if (lockNote.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(lockNote)
@@ -1501,6 +1558,8 @@ fun FloraApp(
                 AutoLogScreen(autoLogStore)
             } else if (screen == Screen.MODELS) {
                 ModelsScreen(voice, prefs)
+            } else if (screen == Screen.VOICE_ENROL) {
+                VoiceEnrolScreen(voice)
             } else if (screen == Screen.MEMORIES) {
                 MemoriesScreen(memoriesStore)
             } else if (screen == Screen.SCAN) {
@@ -1620,6 +1679,7 @@ private fun SettingsScreen(
     var anonKey by remember { mutableStateOf("") }
     var geminiKey by remember { mutableStateOf("") }
     var groqKey by remember { mutableStateOf("") }
+    var deepgramKey by remember { mutableStateOf("") }
     // Optional keys (v2.1, local): rotation ke second keys + optional search keys.
     var geminiKey2 by remember { mutableStateOf("") }
     var groqKey2 by remember { mutableStateOf("") }
@@ -1697,6 +1757,7 @@ private fun SettingsScreen(
         anonKey = prefs.supabaseAnonKey()
         geminiKey = prefs.geminiApiKey()
         groqKey = prefs.groqApiKey()
+        deepgramKey = prefs.deepgramApiKey()
         geminiKey2 = prefs.geminiApiKey2()
         groqKey2 = prefs.groqApiKey2()
         tavilyKey = prefs.tavilyApiKey()
@@ -1826,6 +1887,13 @@ private fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
+                value = deepgramKey, onValueChange = { deepgramKey = it },
+                label = { Text("Deepgram key (optional, sachhi barge-in/STT ke liye)") },
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
                 value = tavilyKey, onValueChange = { tavilyKey = it },
                 label = { Text("Tavily key (optional, search lane)") },
                 visualTransformation = PasswordVisualTransformation(),
@@ -1861,6 +1929,7 @@ private fun SettingsScreen(
                         prefs.setSupabaseAnonKey(anonKey.trim())
                         prefs.setGeminiApiKey(geminiKey.trim())
                         prefs.setGroqApiKey(groqKey.trim())
+                        prefs.setDeepgramApiKey(deepgramKey.trim())
                         prefs.setGeminiApiKey2(geminiKey2.trim())
                         prefs.setGroqApiKey2(groqKey2.trim())
                         prefs.setTavilyApiKey(tavilyKey.trim())
