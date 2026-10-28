@@ -354,6 +354,79 @@ fun FloraApp(
         }
     }
 
+    // Phase 6: macro chalao — step-by-step bol kar + Auto Log.
+    // Sensitive step par runner NeedsConfirm dega to dialog
+    // dikhega (macroNeedsConfirm); Haan par wahi step se
+    // resume hoga. Kabhi silent macro nahi.
+    fun runMacroFrom(macro: com.flora.app.automation.Macro, fromStep: Int) {
+        runGuardedVoice {
+            scope.launch {
+                val service = com.flora.app.automation.FloraAutomationService.instance
+                if (service == null) {
+                    val msg = "Macro chalane ke liye Accessibility service ON karni hogi, Settings me."
+                    messages = messages + ChatMsg("Flora: $msg", false)
+                    voice.speak(msg)
+                    return@launch
+                }
+                val result = com.flora.app.automation.MacroEngine.runMacro(
+                    appContext, service, macro, fromStep
+                ) { stepMsg ->
+                    messages = messages + ChatMsg("Flora: $stepMsg", false)
+                    voice.speak(stepMsg)
+                }
+                when (result) {
+                    is com.flora.app.automation.MacroOutcome.Done -> {
+                        val msg = "Macro '${macro.name}' poora ho gaya."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        macroPending = null
+                        try { autoLogStore.add("Macro: ${macro.name} -> ho gaya") } catch (e: Exception) { }
+                    }
+                    is com.flora.app.automation.MacroOutcome.Failed -> {
+                        val msg = "Macro '${macro.name}' step ${result.stepIndex + 1} par ruk gaya: ${result.reason}"
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        macroPending = null
+                        try { autoLogStore.add("Macro: ${macro.name} -> fail (${result.reason})") } catch (e: Exception) { }
+                    }
+                    is com.flora.app.automation.MacroOutcome.NeedsConfirm -> {
+                        macroPending = macro to result.stepIndex
+                        macroNeedsConfirm = true
+                        val msg = "Macro '${macro.name}' ka agla step sensitive hai (${result.reason}) — confirm karo to aage badhungi, warna ruk jayegi."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                    }
+                }
+            }
+        }
+    }
+
+    // Phase 6: auto-reply draft propose karo — thread (aakhri
+    // 6) + brain draft user ko sunao + chat me likho; bhejna
+    // sirf replyPending dialog me Haan par hoga.
+    fun proposeReply(pkg: String) {
+        scope.launch {
+            when (val d = com.flora.app.automation.ReplyDraft.buildDraft(appContext, pkg, brain)) {
+                is com.flora.app.automation.DraftResult.Empty -> {
+                    voice.speak("Is app ki koi notification nahi mili — pehle Notifications se access ON karo.")
+                }
+                is com.flora.app.automation.DraftResult.Ready -> {
+                    val summary = d.thread.lines.joinToString(" | ")
+                    if (d.draft.isBlank()) {
+                        val msg = "Aakhri baatchit: $summary. Draft nahi bana payi — brain key check karo (Settings me Keys check karo)."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                    } else {
+                        val msg = "Aakhri baatchit: $summary. Mera sujha hua jawab: ${d.draft}"
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak("Mera sujha hua jawab: ${d.draft}. Bheju to dialog me Haan dabao — bina confirm ke kuch nahi jayega.")
+                        replyPending = Triple(pkg, d.thread.senderTitle, d.draft)
+                    }
+                }
+            }
+        }
+    }
+
     // Screen share state (v2.22, voice-first autonomy): permission +
     // token FloraApp level par — Chat se bhi "screen dekho" bolne par
     // kaam kare, LiveScreen par jaane ki zaroorat nahi. Launcher
@@ -1364,79 +1437,6 @@ fun FloraApp(
                     }
                 }
 
-                // Phase 6: macro chalao — step-by-step bol kar + Auto Log.
-                // Sensitive step par runner NeedsConfirm dega to dialog
-                // dikhega (macroNeedsConfirm); Haan par wahi step se
-                // resume hoga. Kabhi silent macro nahi.
-                fun runMacroFrom(macro: com.flora.app.automation.Macro, fromStep: Int) {
-                    runGuardedVoice {
-                        scope.launch {
-                            val service = com.flora.app.automation.FloraAutomationService.instance
-                            if (service == null) {
-                                val msg = "Macro chalane ke liye Accessibility service ON karni hogi, Settings me."
-                                messages = messages + ChatMsg("Flora: $msg", false)
-                                voice.speak(msg)
-                                return@launch
-                            }
-                            val result = com.flora.app.automation.MacroEngine.runMacro(
-                                appContext, service, macro, fromStep
-                            ) { stepMsg ->
-                                messages = messages + ChatMsg("Flora: $stepMsg", false)
-                                voice.speak(stepMsg)
-                            }
-                            when (result) {
-                                is com.flora.app.automation.MacroOutcome.Done -> {
-                                    val msg = "Macro '${macro.name}' poora ho gaya."
-                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                    voice.speak(msg)
-                                    macroPending = null
-                                    try { autoLogStore.add("Macro: ${macro.name} -> ho gaya") } catch (e: Exception) { }
-                                }
-                                is com.flora.app.automation.MacroOutcome.Failed -> {
-                                    val msg = "Macro '${macro.name}' step ${result.stepIndex + 1} par ruk gaya: ${result.reason}"
-                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                    voice.speak(msg)
-                                    macroPending = null
-                                    try { autoLogStore.add("Macro: ${macro.name} -> fail (${result.reason})") } catch (e: Exception) { }
-                                }
-                                is com.flora.app.automation.MacroOutcome.NeedsConfirm -> {
-                                    macroPending = macro to result.stepIndex
-                                    macroNeedsConfirm = true
-                                    val msg = "Macro '${macro.name}' ka agla step sensitive hai (${result.reason}) — confirm karo to aage badhungi, warna ruk jayegi."
-                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                    voice.speak(msg)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Phase 6: auto-reply draft propose karo — thread (aakhri
-                // 6) + brain draft user ko sunao + chat me likho; bhejna
-                // sirf replyPending dialog me Haan par hoga.
-                fun proposeReply(pkg: String) {
-                    scope.launch {
-                        when (val d = com.flora.app.automation.ReplyDraft.buildDraft(appContext, pkg, brain)) {
-                            is com.flora.app.automation.DraftResult.Empty -> {
-                                voice.speak("Is app ki koi notification nahi mili — pehle Notifications se access ON karo.")
-                            }
-                            is com.flora.app.automation.DraftResult.Ready -> {
-                                val summary = d.thread.lines.joinToString(" | ")
-                                if (d.draft.isBlank()) {
-                                    val msg = "Aakhri baatchit: $summary. Draft nahi bana payi — brain key check karo (Settings me Keys check karo)."
-                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                    voice.speak(msg)
-                                } else {
-                                    val msg = "Aakhri baatchit: $summary. Mera sujha hua jawab: ${d.draft}"
-                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                    voice.speak("Mera sujha hua jawab: ${d.draft}. Bheju to dialog me Haan dabao — bina confirm ke kuch nahi jayega.")
-                                    replyPending = Triple(pkg, d.thread.senderTitle, d.draft)
-                                }
-                            }
-                        }
-                    }
-                }
-
                 // Clarification ke baad kaam chalana (v2.22): confirm
                 // ya auto flow — call/sms branches jaisa hi.
                 fun runContactAction(number: String, action: String, text: String) {
@@ -2069,7 +2069,8 @@ fun FloraApp(
                                 voice.speak("Kya search karu?")
                             } else {
                                 scope.launch {
-                                    when (val res = com.flora.app.automation.InAppSearch.searchInApp(fgService, plainSearchQuery)) {
+                                    val svc = fgService ?: return@launch
+                                    when (val res = com.flora.app.automation.InAppSearch.searchInApp(svc, plainSearchQuery)) {
                                         com.flora.app.automation.InAppSearchOutcome.Done -> {
                                             val msg = "Is app me '$plainSearchQuery' search kar diya hai."
                                             messages = messages + ChatMsg("Flora: $msg", false)
@@ -2099,7 +2100,7 @@ fun FloraApp(
                         input = ""
                         scope.launch {
                             try {
-                                val macros = com.flora.app.automation.MacroStore.load(appContext)
+                                val macros = com.flora.app.data.MacroStore.load(appContext)
                                 val msg = if (macros.isEmpty()) {
                                     "Koi macro save nahi hai — Routines screen par Macros me banao."
                                 } else {
@@ -2121,7 +2122,7 @@ fun FloraApp(
                         } else {
                             scope.launch {
                                 try {
-                                    val macros = com.flora.app.automation.MacroStore.load(appContext)
+                                    val macros = com.flora.app.data.MacroStore.load(appContext)
                                     val stored = macros.firstOrNull { it.name.equals(mName, ignoreCase = true) }
                                     if (stored == null) {
                                         val msg = "Macro '$mName' nahi mila — 'macros batao' se list dekh lo."
@@ -4288,7 +4289,9 @@ fun FloraApp(
             } else if (screen == Screen.AUTO) {
                 AutoScreen(voice)
             } else if (screen == Screen.ROUTINES) {
-                RoutinesScreen(voice, onRunMacro = { stored ->
+                RoutinesScreen(
+                    voice,
+                    onRunMacro = { stored ->
                     screen = Screen.CHAT
                     val macro = com.flora.app.automation.MacroJson.parse(stored.json)
                     if (macro == null) {
@@ -4299,7 +4302,8 @@ fun FloraApp(
                         macroPending = macro to 0
                         runMacroFrom(macro, 0)
                     }
-                }) { routine ->
+                },
+                    onRunRoutine = { routine ->
                     screen = Screen.CHAT
                     routineName = routine.name
                     routineRunning = true
@@ -4308,7 +4312,8 @@ fun FloraApp(
                     )
                     voice.speak("Routine ${routine.name} chalu kar raha hun.")
                     routineQueue = routine.commands
-                }
+                    }
+                )
             } else if (screen == Screen.LIVE) {
                 LiveScreen(
                     voice, prefs,
@@ -4408,7 +4413,26 @@ fun FloraApp(
                                 if (pkg == "com.whatsapp") {
                                     when (val res = com.flora.app.automation.ContactResolver.resolve(appContext, prefs, sender)) {
                                         is com.flora.app.automation.ContactResolver.Result.Resolved -> {
-                                            runContactAction(res.number, "whatsapp", draft)
+                                            val digitsOnly = res.number.filter { it.isDigit() }
+                                            val waNumber = if (digitsOnly.length == 10) "91$digitsOnly" else digitsOnly
+                                            if (waNumber.length < 11) {
+                                                voice.speak("WhatsApp ke liye poora number chahiye (10 digit ya country code ke saath).")
+                                            } else {
+                                                try {
+                                                    val uri = android.net.Uri.parse(
+                                                        "https://wa.me/$waNumber?text=" +
+                                                            android.net.Uri.encode(draft)
+                                                    )
+                                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                                        data = uri
+                                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                    }
+                                                    appContext.startActivity(intent)
+                                                    voice.speak("WhatsApp khol diya hai, message likha hua milega — Send dabate hi jayega.")
+                                                } catch (e: Exception) {
+                                                    voice.speak("WhatsApp nahi khul paya — kya WhatsApp installed hai?")
+                                                }
+                                            }
                                         }
                                         is com.flora.app.automation.ContactResolver.Result.Ambiguous -> {
                                             voice.speak("'$sender' ke liye ek se zyada contact mile — naam poora bolo, tabhi bhej paungi.")
