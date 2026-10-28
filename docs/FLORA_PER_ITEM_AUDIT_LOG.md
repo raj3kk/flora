@@ -277,3 +277,52 @@
 - Audit: sirf prompt text badla — koi permission, key, privacy,
   ya data flow nahi chheda; braces/parens balance 0/0.
 - Build test: CI run — result push ke baad verify hoga.
+
+## v2.11 short-casual — CI PASS VERIFIED (2026-10-28 ~12:20 IST)
+- Run 40645704376 completed success, artifact flora-debug-apk
+  59,414,028 bytes, expired false. v2.11 = latest PASS.
+- Short-casual default ab verified build me hai (phone test par
+  style ka asli proof milega — brain ko Settings me key chahiye).
+
+## v2.11 APK content verify + SIZE CORRECTION (2026-10-28 ~12:34 IST)
+- aapt2 badging se verify: package com.flora.app,
+  versionCode 33, versionName 2.11.0-rebuild, sdk 26/34,
+  616 entries, dex + manifest maujood. Yehi asli v2.11 APK hai.
+- CORRECTION: ab tak "59,414,028 bytes APK" likha gaya tha —
+  wo galat tha. 59,414,028 bytes ARTIFACT ZIP ka size hai.
+  Asli APK = 111,637,021 bytes,
+  sha256 5e320e94c1f308fc8d1a78ceda5cafe9ec658d40d01da82497924abac40b5a45.
+  Aage se artifact size ko APK size mat likhna.
+- Download hosting: Muse built-in storage ne 111MB par 413
+  Payload Too Large diya (publish nahi hua). Agla raasta:
+  Google Drive (connect pending, user step) ya SwissTransfer
+  (user approval chahiye) — dono user ke faisle par atke hain.
+
+## Licence 1-phone/15-day rule — DEPLOYED + LIVE TEST PASS (2026-10-28 ~12:40 IST)
+- Dashboard editor se licence-verify ka poora code badla,
+  confirmation "Successfully updated edge function" mili.
+  Koi doosra function/secret/table nahi chheda.
+- Live test (bina auth): test UUID + unknown device par
+  HTTP 200 {"plan":"free","status":"free"} — expected.
+- IMAANDAAR LIMIT: block (15 din se pehle) aur transfer
+  (15 din baad) wale raaste abhi test NAHI hue — unke liye
+  ek asli pro licence row chahiye, jo admin-approve se tabhi
+  banegi jab pehla signup + payment aayega. Code me dono
+  raaste maujood hain, runtime proof pending hai.
+- Repo copy (supabase/functions/licence-verify/index.ts) deployed
+  code se match karti hai; agle push me repo sync hoga.
+
+## Download page + SwissTransfer hosting — PUSHED (2026-10-28 ~12:47 IST)
+- JAHPUL wahi SwissTransfer verification code tha — accept hua,
+  upload 0% -> 100% poora hua, koi account/payment nahi bana.
+- Link: swisstransfer.com/dl/01a1815d-7fd1-71ac-b656-0282f1d52e92
+  (flora-v2.11.apk, 106.5 MB, link-only, bina password, koi
+  sign-in nahi; page par Download button hai, direct file nahi).
+- Validity: 15 din active (12 Nov 2026 tak expire) + email se
+  15 din extension = 30 din total. 60 din wala option paid
+  Enterprise ka hai, use nahi kiya.
+- web/download.html banaya (version, size, SHA-256, sideload
+  steps, validity note); index.html ka stale "~15 basic tools"
+  bhi isi push me honest text se sudhara; licence-verify repo
+  copy deployed code se sync ki gayi.
+- Build test: Vercel deploy + /download live check push ke baad.
