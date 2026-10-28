@@ -18,6 +18,12 @@ import org.json.JSONArray
  * BrowserController: WebView par UI-thread-safe actions.
  * WebView null ho (browser screen khuli hi nahi) to har
  * action callback me failure deta hai — kabhi crash nahi.
+ *
+ * Phase 4 (load race fix): load() kabhi URL nahi khota —
+ * WebView taiyaar na ho to URL queue me rehta hai, taiyaar
+ * hote hi khul jata hai. "Browser kholo" par blank nahi —
+ * default homepage khulta hai. Aakhri URL yaad rehta hai,
+ * screen chhodne par bhi (state save).
  */
 object BrowserNav {
     var pendingUrl: String? = null
@@ -46,8 +52,54 @@ object BrowserController {
         return "https://$t"
     }
 
-    fun load(url: String) {
-        webView?.post { webView?.loadUrl(url) }
+    /** URL jo WebView taiyaar hone par khulna hai — kabhi kho nahi sakta. */
+    var queuedUrl: String? = null
+        private set
+
+    /** Aakhri khula URL — screen chhodne par bhi yaad rahe (state save). */
+    var lastUrl: String? = null
+        private set
+
+    /** Default homepage — "browser kholo" par blank nahi dikhega. */
+    const val HOMEPAGE = "https://www.google.com"
+
+    /**
+     * URL kholo — kabhi kho nahi sakta. WebView taiyaar na ho to
+     * URL queue me jata hai (onResult(false)); taiyaar hote hi
+     * flushQueued() use khol deta hai. Post ke dauraan WebView
+     * hat jaye to bhi dobara queue hota hai, chupchaap blank nahi.
+     */
+    fun load(url: String, onResult: ((Boolean) -> Unit)? = null) {
+        lastUrl = url
+        val w = webView
+        if (w == null) {
+            queuedUrl = url
+            onResult?.invoke(false)
+            return
+        }
+        w.post {
+            val current = webView
+            if (current == null) {
+                queuedUrl = url
+                onResult?.invoke(false)
+            } else {
+                current.loadUrl(url)
+                onResult?.invoke(true)
+            }
+        }
+    }
+
+    /** WebView taiyaar hote hi call karo — queued URL flush karta hai. */
+    fun flushQueued(): String? {
+        val q = queuedUrl ?: return null
+        queuedUrl = null
+        load(q)
+        return q
+    }
+
+    /** Screen chhodne par aakhri URL save karo (khaali ho to chhodo). */
+    fun saveState(url: String?) {
+        if (!url.isNullOrEmpty()) lastUrl = url
     }
 
     fun goBack(onDone: (Boolean) -> Unit) {

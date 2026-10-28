@@ -59,6 +59,10 @@ import kotlinx.coroutines.delay
  *   WebView me password save ka option hi nahi hai; yahan
  *   koi save-password setting on nahi ki gayi).
  * - History sirf is phone par, is session ki list me.
+ * - Phase 4 (load race fix): load() kabhi URL nahi khota
+ *   (queue + flush); "browser kholo" par default homepage;
+ *   aakhri URL screen chhodne par bhi yaad rehta hai;
+ *   load-fail par visible error/notice, chupchaap blank nahi.
  */
 @Composable
 fun BrowserScreen(voice: VoiceEngine) {
@@ -67,6 +71,9 @@ fun BrowserScreen(voice: VoiceEngine) {
     var currentUrl by remember { mutableStateOf("") }
     var progress by remember { mutableStateOf(0) }
     var pageError by remember { mutableStateOf<String?>(null) }
+    // Load queue notice (Phase 4): URL queue me ho to user ko
+    // chupchaap blank nahi — ye line dikhegi.
+    var queuedNotice by remember { mutableStateOf(false) }
     var sslHandler by remember { mutableStateOf<SslErrorHandler?>(null) }
     var sslError by remember { mutableStateOf<SslError?>(null) }
     var pendingDownload by remember { mutableStateOf<Triple<String, String, String>?>(null) }
@@ -85,8 +92,19 @@ fun BrowserScreen(voice: VoiceEngine) {
             urlBar = url
             currentUrl = url
             pageError = null
-            BrowserController.load(url)
+            queuedNotice = false
+            // WebView isi composition me taiyaar hota hai (factory
+            // effect se pehle chalti hai) — ready check se read
+            // galat page par nahi chalega.
+            val webViewReady = BrowserController.webView != null
+            BrowserController.load(url) { ok ->
+                queuedNotice = !ok
+            }
             if (action == "read") {
+                if (!webViewReady) {
+                    voice.speak("Page abhi khul raha hai, khulne ke baad dobara bolo.")
+                    return@LaunchedEffect
+                }
                 // Naya page load hone ka waqt do, phir padho.
                 delay(3000)
                 BrowserController.readText { text ->
@@ -169,6 +187,12 @@ fun BrowserScreen(voice: VoiceEngine) {
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+        if (queuedNotice) {
+            Text(
+                "Page khul raha hai — browser taiyaar hote hi dikh jayega.",
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
+            )
+        }
         if (pageError != null) {
             Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
                 Text("Page nahi khula: $pageError")
@@ -211,8 +235,10 @@ fun BrowserScreen(voice: VoiceEngine) {
                             if (url != null) {
                                 currentUrl = url
                                 urlBar = url
+                                BrowserController.saveState(url)
                             }
                             pageError = null
+                            queuedNotice = false
                         }
 
                         override fun onPageFinished(view: WebView?, url: String?) {
@@ -254,9 +280,23 @@ fun BrowserScreen(voice: VoiceEngine) {
                         pendingDownload = Triple(url, userAgent, contentDisposition)
                     })
                     BrowserController.webView = this
+                    // WebView taiyaar: queued URL ho to kholo; pending
+                    // voice URL ho to effect use kholega (isliye skip);
+                    // warna aakhri page restore karo; warna pehli baar
+                    // homepage — blank kabhi nahi.
+                    val queued = BrowserController.flushQueued()
+                    if (queued == null && BrowserNav.pendingUrl == null) {
+                        val restore = BrowserController.lastUrl
+                        if (restore != null) {
+                            loadUrl(restore)
+                        } else {
+                            loadUrl(BrowserController.HOMEPAGE)
+                        }
+                    }
                 }
             },
             onRelease = {
+                BrowserController.saveState(currentUrl)
                 if (BrowserController.webView == it) BrowserController.webView = null
                 it.destroy()
             },
