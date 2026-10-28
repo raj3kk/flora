@@ -446,3 +446,17 @@ maujood, index bhi 200. Download page ab live hai.
 ## v2.14 SwissTransfer + download page (2026-10-28 ~14:35 IST)
 - SwissTransfer upload complete (browser task): link https://www.swisstransfer.com/dl/01a181c0-d5cc-724f-8b3c-b73d71d08637, 106.5 MB shown, 15 days, expires 12 Nov 2026. Is baar email code nahi manga gaya. No account, no payment.
 - web/download.html v2.14 par update (version, size 111,702,752, SHA 8ab05d7b..., link, what's-new = continuous mic + wizard + contacts + location).
+
+## v2.14 download page deploy VERIFIED (2026-10-28 ~14:36 IST)
+- Deploy flora-7mrth3jbk-webbuilder1.vercel.app READY; /download live: v2.14.0-rebuild, size 111,702,752, SHA 8ab05d7b..., SwissTransfer link 01a181c0-..., what's-new continuous mic + wizard + contacts + location. Deploy-verify pending item CLOSED.
+
+## v2.15 CODE DONE / CI PENDING (2026-10-28 ~15:35 IST, user complaints se)
+- Brain root cause (VERIFIED web se): Gemini gemini-1.5-flash retired + Groq llama-3.1-8b-instant 16 Aug 2026 ko free/dev se hata — isliye key sahi hone par bhi har lane 404 de rahi thi aur app use "network error" bata raha tha. Fix: Gemini 2.5-flash -> 2.5-flash-lite, Groq openai/gpt-oss-20b -> 120b, har lane ka asli code message me. Brain-proxy repo copy bhi wahi model names par update (dashboard redeploy keys set hone par).
+- BackgroundMicService (foreground, mic type, notif 2002): mic ON = service hamesha; foreground STANDBY, back par TAKEOVER (sunna + brain + TTS service me); command background se execute nahi — app aage la kar confirmation (FloraCommandBus). MicOwner se WakeWord loop pause. Boot par wapas chalu karne ki koshish (try/catch).
+- PermissionsScreen (Menu): runtime rows + battery unrestricted live + Vivo auto-start + Accessibility live + dialer role — sab ek jagah.
+- LicenceScreen (Menu): live server status + steps (signup > UPI > UTR > admin approve) + UPI pay + UTR save. Licence koi type karne wala code nahi — account-linked hai.
+- Baat view DEFAULT (voiceView pref, default true): transcript/typing/status-text chhupa, sirf orb + emoji buttons; Chat toggle se transcript wapas.
+- Beep mute: sunne ke dauraan SYSTEM+MUSIC+NOTIFICATION mute, result/error/stop par unmute + 20s failsafe. Device ki apni beep par limit imandari se likhi hai.
+- ImageTools (Pollinations, bina key): "image banao <prompt>" -> Gallery > Flora me save.
+- Audit: 11 kt files brace/paren/bracket 0/0; launcher/state declaration order verify (PermissionsScreen launchers upar, FloraApp voiceView state TopAppBar se pehle).
+- Test entry: docs/FLORA_V215_TEST_ENTRY.md (7 sections).

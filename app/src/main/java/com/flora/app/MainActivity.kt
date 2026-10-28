@@ -18,7 +18,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import com.flora.app.assistant.VoiceEngine
+import com.flora.app.voice.BackgroundMicService
 import com.flora.app.voice.ContinuousListener
+import com.flora.app.voice.FloraCommandBus
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
 import com.flora.app.data.DocsStore
@@ -55,6 +57,37 @@ class MainActivity : ComponentActivity() {
         mainHandler.removeCallbacks(restartRunnable)
         continuousListener?.start()
         listeningState.value = continuousListener?.isListening() == true
+    }
+
+    /**
+     * Background mic service (v2.15): mic ON ho to service hamesha
+     * chalegi — foreground me STANDBY (activity khud sunti hai),
+     * app back hote hi TAKEOVER (service sunti + jawab deti hai).
+     * Start foreground se hota hai (safe), fail ho to try/catch —
+     * foreground sunna tab bhi chalta rahega.
+     */
+    private fun bgService(action: String?) {
+        try {
+            val intent = Intent(this, BackgroundMicService::class.java)
+            if (action != null) intent.action = action
+            androidx.core.content.ContextCompat.startForegroundService(this, intent)
+        } catch (e: Exception) {
+        }
+    }
+
+    private fun stopBgService() {
+        try {
+            stopService(Intent(this, BackgroundMicService::class.java))
+        } catch (e: Exception) {
+        }
+    }
+
+    /** Background se aaya command (call/sms/app) — Chat pipeline
+     * isi se chalega, confirmation app me hi hogi. */
+    private fun drainCommandBus() {
+        val pending = FloraCommandBus.pending ?: return
+        FloraCommandBus.pending = null
+        voiceCommand.value = pending
     }
 
     /**
@@ -162,6 +195,7 @@ class MainActivity : ComponentActivity() {
                     talkScope.launch {
                         try { prefs.setContinuousMic(true) } catch (e: Exception) { }
                     }
+                    bgService(null)
                     startContinuous()
                 },
                 onContinuousStop = {
@@ -169,6 +203,7 @@ class MainActivity : ComponentActivity() {
                     mainHandler.removeCallbacks(restartRunnable)
                     continuousListener?.stop()
                     listeningState.value = false
+                    stopBgService()
                     talkScope.launch {
                         try { prefs.setContinuousMic(false) } catch (e: Exception) { }
                     }
@@ -186,7 +221,7 @@ class MainActivity : ComponentActivity() {
                 val wasOn = prefs.continuousMic()
                 if (wasOn && micOk) {
                     continuousWanted = true
-                    runOnUiThread { startContinuous() }
+                    runOnUiThread { bgService(null); startContinuous() }
                 }
             } catch (e: Exception) {
             }
@@ -199,6 +234,7 @@ class MainActivity : ComponentActivity() {
             continuousWanted = true
             mainHandler.postDelayed({ startContinuous() }, 2000)
         }
+        drainCommandBus()
     }
 
     override fun onNewIntent(newIntent: Intent) {
@@ -207,20 +243,34 @@ class MainActivity : ComponentActivity() {
             continuousWanted = true
             mainHandler.postDelayed({ startContinuous() }, 2000)
         }
+        drainCommandBus()
     }
 
     override fun onResume() {
         super.onResume()
-        // Foreground me wapas aate hi sunna phir shuru (mute na ho to).
-        if (continuousWanted) startContinuous()
+        // Foreground me wapas: activity khud sunegi, service
+        // STANDBY me jayegi (band nahi — agle back par phir
+        // TAKEOVER karegi). Mic OFF ho to service poori band.
+        if (continuousWanted) {
+            bgService(BackgroundMicService.ACTION_STANDBY)
+            startContinuous()
+        } else {
+            stopBgService()
+        }
     }
 
     override fun onPause() {
-        // Background me continuous mic nahi chalta (privacy + Android
-        // limit) — background wake "Hey Flora" service se hota hai.
+        // v2.15: mic ON ho to back hote hi service TAKEOVER karegi
+        // (sunna + jawab background me jaari). Mic OFF ho to
+        // pehle jaisa — sunna band, service bhi band.
         continuousListener?.stop()
         listeningState.value = false
         mainHandler.removeCallbacks(restartRunnable)
+        if (continuousWanted) {
+            bgService(BackgroundMicService.ACTION_TAKEOVER)
+        } else {
+            stopBgService()
+        }
         super.onPause()
     }
 

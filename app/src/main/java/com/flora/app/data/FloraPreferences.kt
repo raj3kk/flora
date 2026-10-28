@@ -55,6 +55,7 @@ class FloraPreferences(private val context: Context) {
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
         val PERMISSIONS_GATE_DONE = booleanPreferencesKey("permissions_gate_done")
         val CONTINUOUS_MIC = booleanPreferencesKey("continuous_mic")
+        val VOICE_VIEW = booleanPreferencesKey("voice_view")
     }
 
     suspend fun userId(): String {
@@ -305,6 +306,16 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setContinuousMic(value: Boolean) {
         context.floraDataStore.edit { it[Keys.CONTINUOUS_MIC] = value }
+    }
+
+    /** Voice-first Baat view (v2.15): default ON — app khulte hi
+     * baat-cheet wali screen (orb + mic), likha hua chat nahi.
+     * Chat sirf tab jab user khud "Chat kholo" dabaye. */
+    suspend fun voiceView(): Boolean =
+        context.floraDataStore.data.map { it[Keys.VOICE_VIEW] ?: true }.first()
+
+    suspend fun setVoiceView(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.VOICE_VIEW] = value }
     }
 
     /** Talk seconds used on [today] (yyyy-MM-dd). Rolls over automatically. */

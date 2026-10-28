@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.flora.app.data.FloraPreferences
+import com.flora.app.voice.BackgroundMicService
 import com.flora.app.wakeword.WakeWordService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -14,6 +15,12 @@ import kotlinx.coroutines.launch
  * aap wapas chalu ho — SIRF tab jab user ne pehle Wake Word ON
  * kiya hua tha. Koi permission, koi setting, koi data is receiver
  * se nahi chheda jata; OFF tha to kuch nahi hota.
+ *
+ * v2.15: continuous mic ON tha to BackgroundMicService bhi wapas
+ * chalu karne ki koshish hoti hai (standby mode me — app khulte
+ * hi activity khud sunegi). Boot se FGS start kuch phones par
+ * block ho sakta hai, isliye try/catch hai; fail ho to agle
+ * app-open par mic ON karte hi service wapas aa jayegi.
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -26,6 +33,14 @@ class BootReceiver : BroadcastReceiver() {
                     context.startForegroundService(
                         Intent(context, WakeWordService::class.java)
                     )
+                }
+                if (prefs.continuousMic()) {
+                    try {
+                        context.startForegroundService(
+                            Intent(context, BackgroundMicService::class.java)
+                        )
+                    } catch (e: Exception) {
+                    }
                 }
             } catch (e: Exception) {
                 // Boot par fail: user ke agle app-open par Wake Word

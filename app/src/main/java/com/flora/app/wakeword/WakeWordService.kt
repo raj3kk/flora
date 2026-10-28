@@ -11,10 +11,12 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.flora.app.MainActivity
 import com.flora.app.security.BiometricTemplates
+import com.flora.app.voice.MicOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -85,6 +87,13 @@ class WakeWordService : Service() {
         val template = DoubleArray(stored.size) { stored[it].toDouble() }
         var lastWakeMs = 0L
         while (scope.isActive) {
+            // Mic-owner rule (v2.15): continuous mic ON ho to mic
+            // BackgroundMicService ka hai — wake loop yahan ruk
+            // kar wait karega, AudioRecord chheenega nahi.
+            if (MicOwner.backgroundActive) {
+                delay(1000)
+                continue
+            }
             if (ContextCompat.checkSelfPermission(
                     this@WakeWordService, android.Manifest.permission.RECORD_AUDIO
                 ) != PackageManager.PERMISSION_GRANTED

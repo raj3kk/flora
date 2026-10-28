@@ -4,6 +4,7 @@
      ek baar bolo + ek confirmation, phir poora execution. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.SEND_SMS" />
@@ -55,6 +56,10 @@
         </service>
         <service
             android:name="com.flora.app.wakeword.WakeWordService"
+            android:foregroundServiceType="microphone"
+            android:exported="false" />
+        <service
+            android:name="com.flora.app.voice.BackgroundMicService"
             android:foregroundServiceType="microphone"
             android:exported="false" />
         <service

@@ -27,6 +27,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import android.provider.Settings
+import com.flora.app.tools.ImageTools
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -69,11 +70,13 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.CHAT -> "Chat"
+    Screen.PERMISSIONS -> "Permissions"
+    Screen.LICENCE -> "Licence"
     Screen.SETTINGS -> "Settings"
     Screen.MEMORIES -> "Yaadein"
     Screen.SCAN -> "Scan"
@@ -139,6 +142,10 @@ fun FloraApp(
     // fun baad me declare hota hai, isliye effect holder se call
     // karta hai — hook order ke liye effect yahan, call holder se).
     var continuousOn by remember { mutableStateOf(false) }
+    // Voice-first Baat view (v2.15): default ON — baat-cheet me
+    // likha hua transcript nahi dikhega, sirf orb + mic. Chat
+    // sirf tab jab user khud "Chat kholo" dabaye.
+    var voiceView by remember { mutableStateOf(true) }
     val sendChatHolder = remember { arrayOfNulls<((String) -> Unit)>(1) }
     // Theme state (v1.9): states block me, launcher se pehle.
     var theme by remember { mutableStateOf("light") }
@@ -208,6 +215,7 @@ fun FloraApp(
         try { showGate = !prefs.permissionsGateDone() } catch (e: Exception) { }
         try {
             theme = prefs.theme()
+            try { voiceView = prefs.voiceView() } catch (e: Exception) { }
             if (prefs.supabaseAnonKey().isNotEmpty()) {
                 val userId = prefs.effectiveUserId()
                 val androidId = Settings.Secure.getString(
@@ -401,7 +409,7 @@ fun FloraApp(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Flora — " + screenTitle(screen)) },
+                title = { Text(if (screen == Screen.CHAT && voiceView) "Flora" else "Flora — " + screenTitle(screen)) },
                 actions = {
                     TextButton(onClick = { menuOpen = true }) { Text("Menu ▾") }
                     DropdownMenu(
@@ -469,6 +477,14 @@ fun FloraApp(
                             onClick = { },
                         )
                         DropdownMenuItem(
+                            text = { Text("Permissions") },
+                            onClick = { screen = Screen.PERMISSIONS; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Licence / Pro") },
+                            onClick = { screen = Screen.LICENCE; menuOpen = false },
+                        )
+                        DropdownMenuItem(
                             text = { Text("Settings") },
                             onClick = { screen = Screen.SETTINGS; menuOpen = false },
                         )
@@ -506,14 +522,16 @@ fun FloraApp(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)
         ) {
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                "Free: 10 min/day, app me maujood saare tools  •  Pro: ${FloraConfig.PRO_PRICE_TEXT}  •  " +
-                    "Support: ${FloraConfig.SUPPORT_EMAIL}"
-            )
-            licence?.let {
-                Text("Licence: ${it.plan} (${it.status})" + if (it.serverChecked) " — server se verified" else " — local mode")
+            if (!(screen == Screen.CHAT && voiceView)) {
+                Text(
+                    "Free: 10 min/day, app me maujood saare tools  •  Pro: ${FloraConfig.PRO_PRICE_TEXT}  •  " +
+                        "Support: ${FloraConfig.SUPPORT_EMAIL}"
+                )
+                licence?.let {
+                    Text("Licence: ${it.plan} (${it.status})" + if (it.serverChecked) " — server se verified" else " — local mode")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
             }
-            Spacer(modifier = Modifier.height(8.dp))
 
             if (screen == Screen.CHAT) {
                 if (faceLockOn && !chatUnlocked) {
@@ -545,12 +563,17 @@ fun FloraApp(
                 } else {
                 FloraOrb(busy)
                 Spacer(modifier = Modifier.height(8.dp))
+                // Baat view (v2.15): transcript nahi dikhega — sirf
+                // orb + mic, taaki baat-cheet lage, chat nahi.
+                if (!voiceView) {
                 LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     items(messages) { msg ->
                         Text((if (msg.fromUser) "Aap: " else "Flora: ") + msg.text)
                         Spacer(modifier = Modifier.height(6.dp))
                     }
                 }
+                }
+                if (!voiceView) {
                 TextField(
                     value = input,
                     onValueChange = { input = it },
@@ -558,6 +581,7 @@ fun FloraApp(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+                }
                 // sendChat (v2.14): Bhejo button ka pipeline, ab continuous
                 // mic bhi isi se auto-send karta hai. Holder ke zariye
                 // upar ke LaunchedEffect se call hota hai.
@@ -855,6 +879,28 @@ fun FloraApp(
                     input = ""
                     busy = true
                     scope.launch {
+                        // Image banao (v2.15, Pollinations bina key):
+                        // "image banao <prompt>" bolte hi image banegi
+                        // aur Gallery > Flora me save hogi.
+                        if (lower.startsWith("image banao ") || lower.startsWith("photo banao ")) {
+                            val prompt = question.substringAfter("banao", "").trim()
+                            if (prompt.isBlank()) {
+                                val msg = "Kaisi image banau? Aise boliye: 'image banao ek billi'."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            } else {
+                                val saved = ImageTools.generateImage(appContext, prompt)
+                                val msg = if (saved != null) {
+                                    "Image ban gayi, Gallery ke Flora folder me save ho gayi."
+                                } else {
+                                    "Image nahi ban payi, internet check karke dobara boliye."
+                                }
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                            busy = false
+                            return@launch
+                        }
                         // Yahan ka mausam (v2.13): bina brain key ke,
                         // phone ki location se seedha Open-Meteo.
                         val weatherHere = lower == "yahan ka mausam" ||
@@ -890,6 +936,7 @@ fun FloraApp(
                 }
                 sendChatHolder[0] = { q -> sendChat(q) }
                 Row {
+                    if (!voiceView) {
                     Button(
                         onClick = {
                             val q = input.trim()
@@ -901,9 +948,11 @@ fun FloraApp(
                     Spacer(modifier = Modifier.padding(4.dp))
                     Button(onClick = onMicRequest) { Text("Mic") }
                     Spacer(modifier = Modifier.padding(4.dp))
+                    }
                     // Continuous mic toggle (v2.14): ON = mute dabane
                     // tak sunta rahe; OFF = mic band. Mic permission
                     // na ho to wizard/settings se pehle deni hogi.
+                    // Baat view me sirf emoji (koi likha hua nahi).
                     Button(onClick = {
                         if (continuousOn) {
                             continuousOn = false
@@ -917,10 +966,12 @@ fun FloraApp(
                                 onContinuousStart()
                             }
                         }
-                    }) { Text(if (continuousOn) "🔇 Mute" else "🎤 Mic ON karo") }
+                    }) { Text(if (voiceView) (if (continuousOn) "🔇" else "🎤") else (if (continuousOn) "🔇 Mute" else "🎤 Mic ON karo")) }
                     Spacer(modifier = Modifier.padding(4.dp))
+                    if (!voiceView) {
                     Button(onClick = { attachLauncher.launch("*/*") }) { Text("Attach") }
                     Spacer(modifier = Modifier.padding(4.dp))
+                    }
                     Button(onClick = {
                         voice.stop()
                         // Interrupt (v2.14): continuous mode me Stop
@@ -932,8 +983,17 @@ fun FloraApp(
                             messages = messages + ChatMsg("Flora: $msg", false)
                             voice.speak(msg)
                         }
-                    }) { Text("Stop") }
+                    }) { Text(if (voiceView) "⏹" else "Stop") }
+                    Spacer(modifier = Modifier.padding(4.dp))
+                    Button(onClick = {
+                        val next = !voiceView
+                        voiceView = next
+                        scope.launch {
+                            try { prefs.setVoiceView(next) } catch (e: Exception) { }
+                        }
+                    }) { Text(if (voiceView) "💬" else "🎤 Baat") }
                 }
+                if (!voiceView) {
                 if (continuousOn && listeningState.value) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text("🎤 Sun raha hun… (Mute dabate hi band ho jayega)")
@@ -961,10 +1021,17 @@ fun FloraApp(
                         "kabhi chupke se record nahi hota. Automation ke liye Settings me consent ON karna hoga."
                 )
                 }
+                }
             } else if (screen == Screen.SETTINGS) {
                 SettingsScreen(prefs, licenceClient, pinVault, guardian, brain, { showGate = true }) { status ->
                     licence = status
                 }
+            } else if (screen == Screen.PERMISSIONS) {
+                PermissionsScreen(onShowWizard = { showGate = true })
+            } else if (screen == Screen.LICENCE) {
+                LicenceScreen(prefs, licenceClient, licence, { status ->
+                    licence = status
+                }, onGoSettings = { screen = Screen.SETTINGS })
             } else if (screen == Screen.MEMORIES) {
                 MemoriesScreen(memoriesStore)
             } else if (screen == Screen.SCAN) {

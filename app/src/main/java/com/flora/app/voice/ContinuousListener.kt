@@ -3,7 +3,10 @@ package com.flora.app.voice
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -33,6 +36,54 @@ class ContinuousListener(
     private var recognizer: SpeechRecognizer? = null
     private var listening = false
 
+    /**
+     * Mic beep mute (v2.15): system SpeechRecognizer kuch phones
+     * par sunna shuru/khatam hote hi "tu-ta" beep bajata hai.
+     * Sunne ke dauraan system/music/notification stream mute
+     * karke beep dabayi jati hai; result/error/stop par turant
+     * unmute, aur 20s ka failsafe bhi hai taaki phone kabhi
+     * mute state me na chhoote. Kuch phones ki beep isse bhi
+     * nahi rukti (device ka apna sound) — wo imandari se
+     * bataya jayega, chhupaya nahi.
+     */
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var muted = false
+    private val unmuteFailsafe = Runnable { unmuteBeeps() }
+
+    private fun muteBeeps() {
+        try {
+            val am = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                ?: return
+            @Suppress("DEPRECATION")
+            am.setStreamMute(AudioManager.STREAM_SYSTEM, true)
+            @Suppress("DEPRECATION")
+            am.setStreamMute(AudioManager.STREAM_MUSIC, true)
+            @Suppress("DEPRECATION")
+            am.setStreamMute(AudioManager.STREAM_NOTIFICATION, true)
+            muted = true
+            mainHandler.removeCallbacks(unmuteFailsafe)
+            mainHandler.postDelayed(unmuteFailsafe, 20_000)
+        } catch (e: Exception) {
+        }
+    }
+
+    private fun unmuteBeeps() {
+        if (!muted) return
+        try {
+            val am = appContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                ?: return
+            @Suppress("DEPRECATION")
+            am.setStreamMute(AudioManager.STREAM_SYSTEM, false)
+            @Suppress("DEPRECATION")
+            am.setStreamMute(AudioManager.STREAM_MUSIC, false)
+            @Suppress("DEPRECATION")
+            am.setStreamMute(AudioManager.STREAM_NOTIFICATION, false)
+        } catch (e: Exception) {
+        }
+        muted = false
+        mainHandler.removeCallbacks(unmuteFailsafe)
+    }
+
     fun isListening(): Boolean = listening
 
     fun start() {
@@ -60,6 +111,7 @@ class ContinuousListener(
 
                 override fun onResults(results: Bundle?) {
                     listening = false
+                    unmuteBeeps()
                     val text = results
                         ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull()
@@ -68,6 +120,7 @@ class ContinuousListener(
 
                 override fun onError(error: Int) {
                     listening = false
+                    unmuteBeeps()
                     onError()
                 }
             })
@@ -81,10 +134,12 @@ class ContinuousListener(
             }
             recognizer = rec
             listening = true
+            muteBeeps()
             rec.startListening(intent)
         } catch (e: Exception) {
             listening = false
             recognizer = null
+            unmuteBeeps()
             onError()
         }
     }
@@ -100,5 +155,6 @@ class ContinuousListener(
         }
         recognizer = null
         listening = false
+        unmuteBeeps()
     }
 }

@@ -49,25 +49,44 @@ class BrainClient(private val prefs: FloraPreferences) {
                 "free Gemini key daalo, 'Keys save karo' dabao, phir " +
                 "'Keys check karo' se verify karo."
         }
-        val codes = mutableListOf<Int>()
-        val reply = geminiAsk(prompt, keys[0], codes)
-            ?: geminiAsk(prompt, keys[1], codes)
-            ?: groqAsk(prompt, keys[2], codes)
-            ?: groqAsk(prompt, keys[3], codes)
+        // v2.15 root-cause fix: purane model names band ho chuke
+        // hain (Gemini 1.5-flash retired, Groq llama-3.1-8b-instant
+        // 16 Aug 2026 ko free/dev tier se hata) — isliye key sahi
+        // hone par bhi har lane 404 de rahi thi, aur app use
+        // "network error" bata raha tha. Ab naye model names +
+        // har lane ka asli code report hota hai.
+        val laneCodes = mutableListOf<Pair<String, Int>>()
+        val reply = geminiAsk(prompt, keys[0], laneCodes)
+            ?: geminiAsk(prompt, keys[1], laneCodes)
+            ?: groqAsk(prompt, keys[2], laneCodes)
+            ?: groqAsk(prompt, keys[3], laneCodes)
         if (reply != null) return@withContext reply
+        val codes = laneCodes.map { it.second }
+        val detail = laneCodes.filter { it.second != 0 }
+            .joinToString(", ") { "${it.first}: ${if (it.second == -1) "network" else "code ${it.second}"}" }
         when {
             codes.any { it == 401 || it == 403 } ->
                 "Key saved hai par kaam nahi kar rahi — key galat ya " +
                     "expired ho sakti hai. Settings me 'Keys check karo' " +
                     "se dekho kaunsi lane fail hai, phir sahi key " +
-                    "dobara daal kar save karo."
+                    "dobara daal kar save karo. ($detail)"
             codes.any { it == 429 } ->
                 "Key sahi lag rahi hai par uska quota khatam ho gaya " +
                     "hai (free tier limit). Thodi der baad ya doosri " +
-                    "key se koshish karo."
+                    "key se koshish karo. ($detail)"
+            codes.any { it == 404 } ->
+                "Server ne mana kiya (model nahi mila, $detail) — " +
+                    "provider ne model ka naam badal diya ho sakta " +
+                    "hai. App update me model list sudhar di gayi " +
+                    "hai; phir bhi ye aaye to 'Keys check karo' se " +
+                    "lane verify karo."
+            codes.all { it == -1 } ->
+                "Phone se internet par baat hi nahi ho payi " +
+                    "(network fail). Internet/Data ON karke dobara " +
+                    "koshish karo."
             else ->
-                "Network ya server se baat nahi ho payi. Internet " +
-                    "check karke dobara koshish karo."
+                "Server se baat hui par jawab nahi mila " +
+                    "($detail). Thodi der baad dobara koshish karo."
         }
     }
 
@@ -155,69 +174,98 @@ class BrainClient(private val prefs: FloraPreferences) {
         }
     }
 
-    private fun geminiAsk(prompt: String, key: String, codes: MutableList<Int>): String? {
+    private fun geminiAsk(
+        prompt: String,
+        key: String,
+        laneCodes: MutableList<Pair<String, Int>>,
+    ): String? {
         if (key.isEmpty()) return null
-        val body = JSONObject()
-            .put("contents", JSONArray().put(
-                JSONObject().put("parts", JSONArray().put(
-                    JSONObject().put(
-                        "text",
+        // v2.15: 1.5-flash RETIRED hai — 2.5-flash pehle, phir
+        // 2.5-flash-lite (free tier). 404 par agla model try karo.
+        val models = listOf("gemini-2.5-flash", "gemini-2.5-flash-lite")
+        for (model in models) {
+            val body = JSONObject()
+                .put("contents", JSONArray().put(
+                    JSONObject().put("parts", JSONArray().put(
+                        JSONObject().put(
+                            "text",
+                            "Tum Flora ho, ek friendly AI assistant. User se aise baat karo " +
+                                "jaise dost se casual conversation ho — chhota jawab do, " +
+                                "aam taur par 1-2 line me, lamba ya formal mat bano. " +
+                                "Hindi/English mix me, user jis language me bole usi me " +
+                                "jawab do. Kaam ki baat pehle; extra detail sirf poochhe " +
+                                "par. Sawal: $prompt"
+                        )
+                    ))
+                ))
+            val result = postJson(
+                "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key",
+                body, null
+            )
+            laneCodes += ("Gemini $model" to result.code)
+            val text = result.body ?: continue
+            if (result.code !in 200..299) {
+                if (result.code == 404) continue
+                return null
+            }
+            val reply = try {
+                JSONObject(text).optJSONArray("candidates")
+                    ?.optJSONObject(0)?.optJSONObject("content")
+                    ?.optJSONArray("parts")?.optJSONObject(0)?.optString("text", "")
+                    .orEmpty()
+            } catch (e: Exception) {
+                ""
+            }
+            if (reply.isNotBlank()) return reply
+            return null
+        }
+        return null
+    }
+
+    private fun groqAsk(
+        prompt: String,
+        key: String,
+        laneCodes: MutableList<Pair<String, Int>>,
+    ): String? {
+        if (key.isEmpty()) return null
+        // v2.15: llama-3.1-8b-instant 16 Aug 2026 ko free/dev se
+        // hata diya gaya — Groq ki sifarish openai/gpt-oss-20b
+        // pehle, phir gpt-oss-120b (dono free tier par hain).
+        val models = listOf("openai/gpt-oss-20b", "openai/gpt-oss-120b")
+        for (model in models) {
+            val body = JSONObject()
+                .put("model", model)
+                .put("messages", JSONArray()
+                    .put(JSONObject().put("role", "system").put(
+                        "content",
                         "Tum Flora ho, ek friendly AI assistant. User se aise baat karo " +
                             "jaise dost se casual conversation ho — chhota jawab do, " +
                             "aam taur par 1-2 line me, lamba ya formal mat bano. " +
                             "Hindi/English mix me, user jis language me bole usi me " +
-                            "jawab do. Kaam ki baat pehle; extra detail sirf poochhe " +
-                            "par. Sawal: $prompt"
-                    )
-                ))
-            ))
-        val result = postJson(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$key",
-            body, null
-        )
-        codes += result.code
-        val text = result.body ?: return null
-        if (result.code !in 200..299) return null
-        return try {
-            val reply = JSONObject(text).optJSONArray("candidates")
-                ?.optJSONObject(0)?.optJSONObject("content")
-                ?.optJSONArray("parts")?.optJSONObject(0)?.optString("text", "")
-                .orEmpty()
-            reply.ifBlank { null }
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private fun groqAsk(prompt: String, key: String, codes: MutableList<Int>): String? {
-        if (key.isEmpty()) return null
-        val body = JSONObject()
-            .put("model", "llama-3.1-8b-instant")
-            .put("messages", JSONArray()
-                .put(JSONObject().put("role", "system").put(
-                    "content",
-                    "Tum Flora ho, ek friendly AI assistant. User se aise baat karo " +
-                        "jaise dost se casual conversation ho — chhota jawab do, " +
-                        "aam taur par 1-2 line me, lamba ya formal mat bano. " +
-                        "Hindi/English mix me, user jis language me bole usi me " +
-                        "jawab do. Kaam ki baat pehle; extra detail sirf poochhe par."
-                ))
-                .put(JSONObject().put("role", "user").put("content", prompt))
+                            "jawab do. Kaam ki baat pehle; extra detail sirf poochhe par."
+                    ))
+                    .put(JSONObject().put("role", "user").put("content", prompt))
+                )
+            val result = postJson(
+                "https://api.groq.com/openai/v1/chat/completions",
+                body, "Bearer $key"
             )
-        val result = postJson(
-            "https://api.groq.com/openai/v1/chat/completions",
-            body, "Bearer $key"
-        )
-        codes += result.code
-        val text = result.body ?: return null
-        if (result.code !in 200..299) return null
-        return try {
-            val reply = JSONObject(text).optJSONArray("choices")
-                ?.optJSONObject(0)?.optJSONObject("message")?.optString("content", "")
-                .orEmpty()
-            reply.ifBlank { null }
-        } catch (e: Exception) {
-            null
+            laneCodes += ("Groq $model" to result.code)
+            val text = result.body ?: continue
+            if (result.code !in 200..299) {
+                if (result.code == 404) continue
+                return null
+            }
+            val reply = try {
+                JSONObject(text).optJSONArray("choices")
+                    ?.optJSONObject(0)?.optJSONObject("message")?.optString("content", "")
+                    .orEmpty()
+            } catch (e: Exception) {
+                ""
+            }
+            if (reply.isNotBlank()) return reply
+            return null
         }
+        return null
     }
 }
