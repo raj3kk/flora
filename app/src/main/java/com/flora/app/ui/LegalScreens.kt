@@ -44,8 +44,9 @@ fun PrivacyScreen() {
             Text(
                 "4. Camera/mic: camera sirf Scan/Face screen par, aapke permission " +
                     "ke baad khulta hai. Scan ki photo sirf aapke phone ki gallery " +
-                    "(Pictures/Flora) me save hoti hai. Face screen koi photo save, " +
-                    "send ya match nahi karti. Mic sirf tab jab aap Mic dabate hain."
+                    "(Pictures/Flora) me save hoti hai. Face screen chehra sirf isi " +
+                    "phone par match karti hai — photo server par kabhi nahi jaati. " +
+                    "Mic sirf tab jab aap Mic dabate hain."
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -64,7 +65,8 @@ fun PrivacyScreen() {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "7. Bachchon ki suraksha: Flora me koi 18+ ya romantic persona nahi hai. " +
+                "7. Bachchon ki suraksha: Flora me koi 18+ ya explicit content nahi hai. " +
+                    "Romantic mode sirf baat karne ka tone hai, explicit baat nahi. " +
                     "Flora caring aur professional tareeke se baat karti hai."
             )
             Spacer(modifier = Modifier.height(8.dp))

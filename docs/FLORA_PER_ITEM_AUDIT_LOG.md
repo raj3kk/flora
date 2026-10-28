@@ -764,3 +764,18 @@ maujood, index bhi 200. Download page ab live hai.
 - brain-proxy step 2 (repo copy): JWT gate lag gaya — anon client se JWT user (401 agar na mile), body user_id JWT se match nahi to 403. Gemini → Groq order, 4000 cap, 503 jab keys na hon — sab barkarar. JWT pattern send-push/admin-list wala hi hai.
 - tts-proxy (nayi function, repo copy): POST {text} + JWT gate → Deepgram TTS audio/mpeg; key unset ho to 503; text cap 1000; text kabhi log nahi.
 - PENDING (jhootha "live" nahi): dashboard editor se deploy + GEMINI/GROQ/DEEPGRAM keys set karna (owner ka kaam) + uske baad app wiring. Aaj app proxy se wired nahi hai aur system TTS par hai — isliye ye code kuch todta nahi.
+
+## R3 prep — security scan (2026-10-28 ~19:40 IST, code-only)
+- App code me koi hardcoded API key nahi mili (BrainClient URLs $key prefs se aate hain). Web pages me sirf Supabase publishable key hai (public by design; service-role kahin nahi).
+- Manifest permissions review: INTERNET, CAMERA, CALL_PHONE, SEND_SMS, RECORD_AUDIO, FOREGROUND_SERVICE(+MIC), READ_PHONE_STATE, READ_CONTACTS, FINE_LOCATION, POST_NOTIFICATIONS, BOOT_COMPLETED, EXACT_ALARM, IGNORE_BATTERY — sab features se justified. DISABLE_KEYGUARD / SYSTEM_ALERT_WINDOW nahi hain (standing exclusions barkarar).
+- CI: 03359326 (WhatsApp) bhi SUCCESS — green chain jaari.
+
+## R3 prep — network/privacy scan (2026-10-28 ~19:45 IST, code-only)
+- App se jaane wale hosts (16): apna Supabase, Gemini/Groq (brain, user key), Deepgram (STT/TTS), DuckDuckGo/Tavily (search), Open-Meteo+geocoding (weather), Frankfurter, DictionaryAPI, Yahoo Finance, Pollinations (image prompt), Play Store/wa.me/YouTube/Google (user-triggered intents, data upload nahi).
+- Koi analytics/crash-reporting third party nahi; screen frame sirf user ke sawaal par uski apni Gemini key se jaata hai (opt-in, continuous stream nahi) — privacy rule barkarar.
+
+## R3 law audit — Privacy text ke 2 stale daave theek kiye (2026-10-28 ~19:50 IST, CI PENDING)
+- Point 4 galat tha ("Face screen match nahi karti") — FaceScreen me FaceMatcher enrol/match hai (on-device). Ab sahi hai: chehra sirf phone par match hota hai, photo server par nahi jaati.
+- Point 7 galat tha ("koi romantic persona nahi") — v2.18 se romantic tone hai. Ab sahi hai: romantic mode sirf tone hai, explicit content nahi.
+- OPEN (owner faisla, jhootha naam nahi likha): IT Rules ke hisaab se grievance officer chahiye — Flora me abhi sirf support email hai (flipify.com@gmail.com). Flow99 me bhi yehi PARKED hai; Flora ke liye bhi owner ka faisla chahiye.
+- NOTE (proxy wiring ke baad badalna hoga): Privacy point 1/3 aaj sahi hain (app proxy se wired nahi hai) — jab brain/TTS proxy wiring hogi, tab prompts/text server jaane ka zikr jodna hoga.
