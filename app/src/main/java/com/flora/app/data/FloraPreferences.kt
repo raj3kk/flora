@@ -60,6 +60,7 @@ class FloraPreferences(private val context: Context) {
         val LINKED_REFRESH_TOKEN = stringPreferencesKey("linked_refresh_token")
         val CALL_TALK = booleanPreferencesKey("call_talk")
         val HOME_BOX_CODE = stringPreferencesKey("home_box_code")
+        val PC_PAIR_CODE = stringPreferencesKey("pc_pair_code")
         val AVATAR = stringPreferencesKey("avatar")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
@@ -149,6 +150,14 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setHomeBoxCode(value: String) {
         context.floraDataStore.edit { it[Keys.HOME_BOX_CODE] = value }
+    }
+
+    /** PC pairing code (v2.22, Phase 5, G13) — sirf is phone par. */
+    suspend fun pcPairCode(): String =
+        context.floraDataStore.data.map { it[Keys.PC_PAIR_CODE] ?: "" }.first()
+
+    suspend fun setPcPairCode(value: String) {
+        context.floraDataStore.edit { it[Keys.PC_PAIR_CODE] = value }
     }
 
     /** Avatar style id (v2.22, S2): gulabi/neela/hara/baingani/

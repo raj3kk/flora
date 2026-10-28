@@ -47,6 +47,11 @@ object FloraConfig {
     const val MODELS_MANIFEST_URL =
         "https://keomyweghrmhqglaxmyv.supabase.co/storage/v1/object/public/flora-models/manifest.json"
 
+    // Google link sign-in (v2.22, Phase 5, G14): Web OAuth
+    // client ID dashboard (Firebase/Supabase) par banana
+    // baaki hai — tab tak khali hai aur Settings button
+    // setup guidance dikhata hai, sign-in shuru nahi karta.
+    const val GOOGLE_WEB_CLIENT_ID = ""
     // Wake phrase DECIDED hai: "Hey Flora" (user decision 2026-10-28).
     // v2.4 se v0 model hai: MFCC mean template (user ke 6 clips se
     // prototype, phone par 3-sample enrolment). Neural model abhi

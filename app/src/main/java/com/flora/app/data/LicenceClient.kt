@@ -50,6 +50,33 @@ class LicenceClient(private val prefs: FloraPreferences) {
             LinkResult(uid, refresh, "")
         }
 
+    // Google id-token link (v2.22, Phase 5, G14): Google
+    // sign-in se mila id_token Supabase ko do -> uid +
+    // refresh token (password wale link jaisa hi result).
+    // Web OAuth client ID dashboard par banana baaki hai
+    // (FloraConfig.GOOGLE_WEB_CLIENT_ID khali hai tab tak
+    // button setup guidance dikhata hai, sign-in nahi).
+    suspend fun linkWithGoogleIdToken(idToken: String): LinkResult =
+        withContext(Dispatchers.IO) {
+            val key = prefs.supabaseAnonKey()
+            if (key.isEmpty() || idToken.isEmpty()) {
+                return@withContext LinkResult("", "", "Anon key ya token nahi mila")
+            }
+            val body = JSONObject()
+                .put("provider", "google")
+                .put("id_token", idToken)
+            val res = post("/auth/v1/token?grant_type=id_token", body, key)
+                ?: return@withContext LinkResult("", "", "Server se jawab nahi mila")
+            val user = res.optJSONObject("user")
+            val uid = user?.optString("id", "") ?: ""
+            val refresh = res.optString("refresh_token", "")
+            if (uid.isEmpty() || refresh.isEmpty()) {
+                val msg = res.optString("msg", res.optString("error_description", "Login fail"))
+                return@withContext LinkResult("", "", msg)
+            }
+            LinkResult(uid, refresh, "")
+        }
+
     // Session renew (v2.22, mega build): saved refresh token se
     // naya refresh token lao (rotation par naya wala save karna
     // caller ka kaam hai). Access token kabhi save nahi hota —

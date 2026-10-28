@@ -19,6 +19,9 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Termux bridge (v2.22, Phase 5, G11): har command se
+         pehle user se consent liya jata hai, kabhi silent nahi. -->
+    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
@@ -26,6 +29,9 @@
         </intent>
         <!-- Shizuku (v2.22, G19): Android 11+ package visibility ke liye. -->
         <package android:name="moe.shizuku.privileged.api" />
+        <!-- Termux (v2.22, Phase 5, G11): command bhejne se pehle
+             package dikhna zaroori hai, warna intent nahi jayega. -->
+        <package android:name="com.termux" />
     </queries>
     <application
         android:name="com.flora.app.FloraApplication"
@@ -141,6 +147,18 @@
             <intent-filter>
                 <action android:name="android.service.voice.VoiceInteractionSessionService" />
             </intent-filter>
+        </service>
+        <!-- Live wallpaper (v2.22, Phase 5, G9): sirf drawing. -->
+        <service
+            android:name="com.flora.app.automation.FloraWallpaperService"
+            android:permission="android.permission.BIND_WALLPAPER"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.wallpaper"
+                android:resource="@xml/wallpaper_service" />
         </service>
     </application>
 </manifest>

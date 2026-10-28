@@ -84,7 +84,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -114,6 +114,9 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.WHITEBOARD -> "Whiteboard"
     Screen.HOME -> "Home"
     Screen.AVATAR -> "Avatar"
+    Screen.BROWSER -> "Browser"
+    Screen.LOCK -> "Lock"
+    Screen.PC_LINK -> "PC Link"
 }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
@@ -203,6 +206,9 @@ fun FloraApp(
     var voiceUnlockNote by remember { mutableStateOf("") }
     var voiceCallConfirm by remember { mutableStateOf<String?>(null) }
     var voiceSmsConfirm by remember { mutableStateOf<Pair<String, String>?>(null) }
+    // Termux consent (v2.22, Phase 5, G11): command tabhi
+    // chalega jab user dialog me "Haan" dabaye — kabhi silent nahi.
+    var termuxConfirm by remember { mutableStateOf<String?>(null) }
     var voiceAppConfirm by remember { mutableStateOf<com.flora.app.automation.LaunchableApp?>(null) }
     // Auto mode (v2.17 switch; v2.18 user order se DEFAULT ON):
     // ON par call/SMS/app bina har baar poochhe chalenge, har kaam
@@ -747,6 +753,14 @@ fun FloraApp(
                             onClick = { screen = Screen.DRIVING; menuOpen = false },
                         )
                         DropdownMenuItem(
+                            text = { Text("Browser") },
+                            onClick = { screen = Screen.BROWSER; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("PC Link") },
+                            onClick = { screen = Screen.PC_LINK; menuOpen = false },
+                        )
+                        DropdownMenuItem(
                             enabled = false,
                             text = { Text("— Meri cheezein —") },
                             onClick = { },
@@ -807,6 +821,10 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Routines") },
                             onClick = { screen = Screen.ROUTINES; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Lock") },
+                            onClick = { screen = Screen.LOCK; menuOpen = false },
                         )
                         DropdownMenuItem(
                             enabled = false,
@@ -2556,6 +2574,358 @@ fun FloraApp(
                         }
                         return
                     }
+                    // In-app browser (v2.22, Phase 5, G7): Flora ke
+                    // andar ka browser. "browser me <site> kholo"
+                    // se site khulti hai; wapas/aage/reload/padho/
+                    // link sab BrowserScreen ke through chalte hain.
+                    if (lower == "browser kholo") {
+                        input = ""
+                        screen = Screen.BROWSER
+                        voice.speak("Browser khol raha hun.")
+                        return
+                    }
+                    if (lower.startsWith("browser me ") && lower.endsWith(" kholo")) {
+                        input = ""
+                        val site = question.substring(11, question.length - 6).trim()
+                        if (site.isEmpty()) {
+                            screen = Screen.BROWSER
+                            voice.speak("Browser khol raha hun.")
+                        } else {
+                            val url = com.flora.app.tools.BrowserController.normalize(site)
+                            com.flora.app.tools.BrowserNav.request(url = url)
+                            screen = Screen.BROWSER
+                            voice.speak("Browser me khol raha hun.")
+                        }
+                        return
+                    }
+                    if (lower == "browser me wapas jao") {
+                        input = ""
+                        com.flora.app.tools.BrowserNav.request(action = "back")
+                        screen = Screen.BROWSER
+                        voice.speak("Browser me wapas ja raha hun.")
+                        return
+                    }
+                    if (lower == "browser me aage jao") {
+                        input = ""
+                        com.flora.app.tools.BrowserNav.request(action = "forward")
+                        screen = Screen.BROWSER
+                        voice.speak("Browser me aage ja raha hun.")
+                        return
+                    }
+                    if (lower == "browser me reload karo") {
+                        input = ""
+                        com.flora.app.tools.BrowserNav.request(action = "reload")
+                        screen = Screen.BROWSER
+                        voice.speak("Browser me page dobara load kar raha hun.")
+                        return
+                    }
+                    if (lower == "ye page padh kar sunao" || lower == "is page par kya hai") {
+                        input = ""
+                        com.flora.app.tools.BrowserNav.request(action = "read")
+                        screen = Screen.BROWSER
+                        voice.speak("Page padh kar sunata hun.")
+                        return
+                    }
+                    if (lower == "links dikhao") {
+                        input = ""
+                        com.flora.app.tools.BrowserNav.request(action = "links")
+                        screen = Screen.BROWSER
+                        voice.speak("Is page ke links nikal raha hun.")
+                        return
+                    }
+                    if (lower.endsWith(" link kholo")) {
+                        val word = lower.removeSuffix(" link kholo").trim()
+                        val idx = when (word) {
+                            "pehla" -> 0
+                            "doosra" -> 1
+                            "teesra" -> 2
+                            "chautha" -> 3
+                            "panchva" -> 4
+                            else -> -1
+                        }
+                        if (idx >= 0) {
+                            input = ""
+                            com.flora.app.tools.BrowserNav.request(action = "link:$idx")
+                            screen = Screen.BROWSER
+                            voice.speak("Link khol raha hun.")
+                            return
+                        }
+                    }
+                    // Generic screen map (v2.22, Phase 5, route
+                    // parity): Flora ki apni screens "<naam>
+                    // kholo" se khulti hain. Ye branch app-kholo
+                    // branch ke baad aati hai (wo sirf "kholo "
+                    // se SHURU hone wale commands pakadti hai),
+                    // aur camera/yaadein/sos jaise pehle wale
+                    // exact branches isse pehle chal chuke hote
+                    // hain — isliye yahan sirf bachi screens hain.
+                    if (lower.endsWith(" kholo")) {
+                        val name = lower.removeSuffix(" kholo").trim()
+                        val target = when (name) {
+                            "chat" -> Screen.CHAT
+                            "settings" -> Screen.SETTINGS
+                            "tools" -> Screen.TOOLS
+                            "docs", "documents" -> Screen.DOCS
+                            "whiteboard" -> Screen.WHITEBOARD
+                            "home" -> Screen.HOME
+                            "avatar" -> Screen.AVATAR
+                            "live screen" -> Screen.LIVE
+                            "journal" -> Screen.JOURNAL
+                            "permissions" -> Screen.PERMISSIONS
+                            "licence", "license" -> Screen.LICENCE
+                            "auto log" -> Screen.AUTO_LOG
+                            "models" -> Screen.MODELS
+                            "awaaz sikhao", "voice enrol" -> Screen.VOICE_ENROL
+                            "notifications" -> Screen.NOTIFICATIONS
+                            "face", "chehra" -> Screen.FACE
+                            "connect" -> Screen.CONNECT
+                            "privacy" -> Screen.PRIVACY
+                            "terms" -> Screen.TERMS
+                            "auto" -> Screen.AUTO
+                            "routines" -> Screen.ROUTINES
+                            "scan" -> Screen.SCAN
+                            "gaadi", "driving" -> Screen.DRIVING
+                            "sos" -> Screen.SOS
+                            "lock", "screen lock" -> Screen.LOCK
+                            "pc link", "pc" -> Screen.PC_LINK
+                            else -> null
+                        }
+                        if (target != null) {
+                            input = ""
+                            screen = target
+                            voice.speak("Khol raha hun.")
+                            return
+                        }
+                    }
+                    // Live wallpaper (v2.22, Phase 5, G9): system
+                    // chooser khulta hai, user khud Flora
+                    // wallpaper chunta hai — chhupke nahi lagta.
+                    if (lower == "live wallpaper lagao") {
+                        input = ""
+                        try {
+                            val intent = android.content.Intent(
+                                android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER
+                            ).apply {
+                                putExtra(
+                                    android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                                    android.content.ComponentName(
+                                        appContext,
+                                        com.flora.app.automation.FloraWallpaperService::class.java
+                                    )
+                                )
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            appContext.startActivity(intent)
+                            voice.speak("Live wallpaper chooser khol raha hun — wahan Flora wallpaper chun lo.")
+                        } catch (e: Exception) {
+                            voice.speak("Live wallpaper chooser nahi khul paya.")
+                        }
+                        return
+                    }
+                    // Job chains (v2.22, Phase 5, G12): ek naam
+                    // ke neeche kai routines. Chalana Auto Mode
+                    // ON par hi bina poochhe hota hai, warna
+                    // Routines screen khulti hai.
+                    if (lower.startsWith("chain banao ")) {
+                        input = ""
+                        val rest = question.substring(12).trim()
+                        val parts = rest.split(":", limit = 2)
+                        if (parts.size < 2 || parts[0].isBlank()) {
+                            val msg = "Aise boliye: 'chain banao subah: photo lo, yaadein kholo'."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else {
+                            val chainName = parts[0].trim()
+                            val routineNames = parts[1].split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                            scope.launch {
+                                try {
+                                    com.flora.app.data.JobChainStore.upsert(
+                                        appContext,
+                                        com.flora.app.data.JobChain(chainName, routineNames)
+                                    )
+                                    val msg = "Chain '$chainName' ban gayi hai (${routineNames.size} routines)."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } catch (e: Exception) {
+                                    val msg = "Chain nahi ban payi, dobara bol dena."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                }
+                            }
+                        }
+                        return
+                    }
+                    if (lower.startsWith("chain chalao ")) {
+                        input = ""
+                        val chainName = question.substring(13).trim()
+                        scope.launch {
+                            try {
+                                val chains = com.flora.app.data.JobChainStore.load(appContext)
+                                val chain = chains.firstOrNull { it.name.equals(chainName, ignoreCase = true) }
+                                if (chain == null) {
+                                    val msg = "Chain '$chainName' nahi mili — pehle 'chain banao' se banao."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else {
+                                    val routines = com.flora.app.data.RoutineStore.load(appContext)
+                                    val cmds = chain.routineNames.flatMap { rn ->
+                                        routines.firstOrNull { it.name.equals(rn, ignoreCase = true) }?.commands ?: emptyList()
+                                    }
+                                    if (cmds.isEmpty()) {
+                                        val msg = "Chain '$chainName' me koi chalne layak routine nahi mili — routine ke naam sahi hain ya nahi, check karo."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    } else if (autoMode) {
+                                        routineQueue = cmds
+                                        voice.speak("Chain '$chainName' chala raha hun.")
+                                    } else {
+                                        screen = Screen.ROUTINES
+                                        val msg = "Chain '$chainName' Routines screen par khol raha hun — Auto Mode ON ho to ye khud chalegi."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                val msg = "Chain nahi chala paya, dobara bol dena."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                        return
+                    }
+                    if (lower == "chain dikhao" || lower == "chains dikhao") {
+                        input = ""
+                        scope.launch {
+                            try {
+                                val chains = com.flora.app.data.JobChainStore.load(appContext)
+                                val msg = if (chains.isEmpty()) {
+                                    "Abhi koi chain nahi bani hai."
+                                } else {
+                                    "Chains: " + chains.joinToString(", ") { it.name + " (" + it.routineNames.size + ")" }
+                                }
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            } catch (e: Exception) {
+                                val msg = "Chains nahi dikha paya."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                        return
+                    }
+                    // G16 voice ops (v2.22, Phase 5): Chrome /
+                    // GitHub / Vercel kholo — app ho to app, warna
+                    // website. Login user khud ek baar karega;
+                    // password kabhi bola/store nahi hota.
+                    if (lower == "chrome kholo" || lower == "github kholo" || lower == "vercel kholo") {
+                        input = ""
+                        val appName = when (lower) {
+                            "chrome kholo" -> "chrome"
+                            "github kholo" -> "github"
+                            else -> "vercel"
+                        }
+                        val fallback = when (lower) {
+                            "chrome kholo" -> "https://www.google.com"
+                            "github kholo" -> "https://github.com"
+                            else -> "https://vercel.com"
+                        }
+                        scope.launch {
+                            try {
+                                val found = AppLauncher.findByName(appContext, appName)
+                                val ok = if (found.isNotEmpty()) {
+                                    AppLauncher.launch(appContext, found.first().packageName)
+                                } else {
+                                    AppLauncher.openWebsite(appContext, fallback)
+                                }
+                                val msg = if (ok) "$appName khol diya." else "$appName nahi khul paya."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            } catch (e: Exception) {
+                                val msg = "$appName nahi khul paya."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                        return
+                    }
+                    // Termux bridge (v2.22, Phase 5, G11): har
+                    // command se pehle consent dialog — kabhi
+                    // silent nahi chalega.
+                    if (lower.startsWith("termux me ") && lower.endsWith(" chalao")) {
+                        input = ""
+                        val cmd = question.substring(9, question.length - 7).trim()
+                        if (cmd.isEmpty()) {
+                            val msg = "Aise boliye: 'termux me ls chalao'."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else {
+                            termuxConfirm = cmd
+                            voice.speak("Termux me ye command chalau? Confirm karne ke liye dialog me Haan dabao.")
+                        }
+                        return
+                    }
+                    // WhatsApp read (v2.22, Phase 5): notification
+                    // list se aakhri WhatsApp messages sunao.
+                    // Bhejna wa.me se hi hota hai (user Send dabata
+                    // hai) — yahan sirf padhna hai.
+                    if (lower == "whatsapp padho") {
+                        input = ""
+                        scope.launch {
+                            try {
+                                val all = com.flora.app.data.NotificationStore.load(appContext)
+                                val wa = all.filter { it.pkg == "com.whatsapp" }.takeLast(3)
+                                if (wa.isEmpty()) {
+                                    val msg = "WhatsApp ki koi notification nahi mili — notification permission ON honi chahiye."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else {
+                                    val text = wa.joinToString(" | ") { it.title + ": " + it.text }
+                                    messages = messages + ChatMsg("Flora: $text", false)
+                                    voice.speak(text.take(600))
+                                }
+                            } catch (e: Exception) {
+                                val msg = "WhatsApp messages nahi padh paya."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                        return
+                    }
+                    // Website publish, chat se (v2.22, Phase 5,
+                    // G15 code loop poora): code-likho + website
+                    // starter + publish — teeno chat se chalte hain.
+                    if (lower == "website publish karo") {
+                        input = ""
+                        voice.speak("Pichhli website ko public link par daal rahi hun.")
+                        scope.launch {
+                            try {
+                                val file = java.io.File(appContext.filesDir, "last-website.html")
+                                if (!file.exists()) {
+                                    voice.speak("Pehle website banao — 'website banao' bol kar ek website banwao, phir main use publish kar dungi.")
+                                    return@launch
+                                }
+                                val html = file.readText()
+                                val anonKey = try { prefs.supabaseAnonKey() } catch (e: Exception) { "" }
+                                val uid = try { prefs.userId() } catch (e: Exception) { "" }
+                                if (anonKey.isBlank() || uid.isBlank()) {
+                                    voice.speak("Publish ke liye app ki setting me website wali key chahiye — Settings me daal kar dobara bolo.")
+                                    return@launch
+                                }
+                                val slug = "site-" + uid.take(8)
+                                val result = WebsitePublisher.publish(html, slug, anonKey)
+                                if (result.isSuccess) {
+                                    val url = result.getOrNull() ?: ""
+                                    messages = messages + ChatMsg("Flora: Website publish ho gayi — $url", false)
+                                    voice.speak("Website publish ho gayi hai, link chat me de diya hai.")
+                                } else {
+                                    voice.speak("Publish nahi ho paya. ${result.exceptionOrNull()?.message ?: "dobara koshish karo."}")
+                                }
+                            } catch (e: Exception) {
+                                voice.speak("Publish me dikkat aayi, dobara koshish karo.")
+                            }
+                        }
+                        return
+                    }
                     messages = messages + ChatMsg(question, true)
                     input = ""
                     busy = true
@@ -2815,6 +3185,12 @@ fun FloraApp(
                 DrivingScreen(voice, prefs, onMicRequest)
             } else if (screen == Screen.JOURNAL) {
                 JournalScreen(journalStore)
+            } else if (screen == Screen.BROWSER) {
+                BrowserScreen(voice)
+            } else if (screen == Screen.LOCK) {
+                LockScreen(pinVault, onUnlock = { screen = Screen.CHAT }, onBack = { screen = Screen.CHAT })
+            } else if (screen == Screen.PC_LINK) {
+                PcLinkScreen(prefs)
             } else {
                 ToolsScreen(searchTools)
             }
@@ -2874,6 +3250,44 @@ fun FloraApp(
                     dismissButton = {
                         TextButton(onClick = { voiceAppConfirm = null }) { Text("Ruko") }
                     }
+                )
+            }
+            termuxConfirm?.let { cmd ->
+                AlertDialog(
+                    onDismissRequest = { termuxConfirm = null },
+                    title = { Text("Termux me chalau?") },
+                    text = {
+                        Text(
+                            "Ye command Termux me chalegi:\n$cmd\n\n" +
+                                "Termux app khuli honi chahiye aur usme Flora ko " +
+                                "permission deni hogi. Galat command phone ko " +
+                                "nuksaan pahuncha sakti hai — sirf wahi chalao jo tum samajhte ho."
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            termuxConfirm = null
+                            try {
+                                val intent = android.content.Intent("com.termux.RUN_COMMAND").apply {
+                                    setClassName("com.termux", "com.termux.app.RunCommandService")
+                                    putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/sh")
+                                    putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-c", cmd))
+                                    putExtra("com.termux.RUN_COMMAND_BACKGROUND", false)
+                                }
+                                appContext.startService(intent)
+                                val msg = "Termux me command bhej di gayi hai."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            } catch (e: Exception) {
+                                val msg = "Termux me command nahi bheji ja saki — Termux app install hai ya nahi, check karo."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }) { Text("Haan, chalao") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { termuxConfirm = null }) { Text("Ruko") }
+                    },
                 )
             }
         }
@@ -2984,6 +3398,40 @@ private fun SettingsScreen(
             "Notification permission mil gaya — ab push dikhega."
         } else {
             "Notification permission nahi mila — tab tak koi notification nahi aayega."
+        }
+    }
+    // Google sign-in launcher (v2.22, Phase 5, G14): sirf
+    // id_token lene ke liye; token Supabase ko jata hai,
+    // password kabhi nahi. Client ID khali ho to button
+    // dikhta hi nahi (neeche gated hai).
+    val googleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            try {
+                val task = com.google.android.gms.auth.api.signin.GoogleSignIn
+                    .getSignedInAccountFromIntent(result.data)
+                val account = task.getResult(
+                    com.google.android.gms.common.api.ApiException::class.java
+                )
+                val idToken = account?.idToken
+                if (idToken.isNullOrEmpty()) {
+                    note = "Google se token nahi mila."
+                } else {
+                    scope.launch {
+                        val res = licenceClient.linkWithGoogleIdToken(idToken)
+                        if (res.error.isNotEmpty()) {
+                            note = "Google link fail: ${res.error}"
+                        } else {
+                            prefs.setLink(res.uid, account?.email ?: "", res.refreshToken)
+                            linkedEmailDisplay = account?.email ?: ""
+                            note = "Google se account link ho gaya."
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                note = "Google sign-in nahi ho paya."
+            }
         }
     }
 
@@ -3420,6 +3868,28 @@ private fun SettingsScreen(
                         }
                     }
                 }) { Text("Website account link karo") }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            // Google link (v2.22, Phase 5, G14): Web OAuth
+            // client ID dashboard par banana baaki hai — tab
+            // tak button nahi, sirf setup guidance dikhegi.
+            if (com.flora.app.core.FloraConfig.GOOGLE_WEB_CLIENT_ID.isEmpty()) {
+                Text("Google se link karna abhi setup me hai — Web OAuth client ID dashboard par banana baaki hai, tab tak email + password wala link use karo.")
+            } else {
+                Button(onClick = {
+                    try {
+                        val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+                            com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
+                        ).requestIdToken(com.flora.app.core.FloraConfig.GOOGLE_WEB_CLIENT_ID)
+                            .requestEmail()
+                            .build()
+                        val client = com.google.android.gms.auth.api.signin.GoogleSignIn
+                            .getClient(context, gso)
+                        googleLauncher.launch(client.signInIntent)
+                    } catch (e: Exception) {
+                        note = "Google sign-in shuru nahi ho paya."
+                    }
+                }) { Text("Google se link karo") }
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row {

@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.flora.app.data.FloraPreferences
+import com.flora.app.tools.HomeSyncClient
 import kotlinx.coroutines.launch
 
 /**
@@ -96,6 +97,27 @@ fun HomeScreen(prefs: FloraPreferences) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(note)
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        // Server sync (v2.22, Phase 5, G10): box code server
+        // tak pahunchana. Function deploy (Phase 4) hone se
+        // pehle ye hamesha fail hoga — jhootha "jud gaya"
+        // kabhi nahi dikhaya jayega.
+        Button(onClick = {
+            scope.launch {
+                val c = saved
+                if (c.isEmpty()) {
+                    note = "Pehle box ka code save karo, phir sync karo."
+                } else {
+                    note = "Server se sync ho raha hai..."
+                    val res = HomeSyncClient.sync(prefs, c)
+                    note = if (res != null) {
+                        "Server ko code mil gaya hai. Relay control tab bhi box ke server hissa banne ke baad hi chalega."
+                    } else {
+                        "Server sync nahi ho paya — function deploy (Phase 4) hone ke baad dobara karo. Code phone par surakshit hai."
+                    }
+                }
+            }
+        }) { Text("Server se sync karo") }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             "Note: ye screen control nahi hai. Asli on/off server sync " +
