@@ -35,10 +35,6 @@ class VoiceEngine(context: Context) {
     @Volatile
     var persona: String = "flora"
 
-    fun setPersona(p: String) {
-        persona = p
-    }
-
     private fun applyPersona() {
         if (persona == "romantic") {
             tts?.setPitch(1.25f)

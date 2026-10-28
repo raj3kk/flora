@@ -252,7 +252,7 @@ fun FloraApp(
         try { showGate = !prefs.permissionsGateDone() } catch (e: Exception) { }
         try {
             theme = prefs.theme()
-            try { voice.setPersona(prefs.persona()) } catch (e: Exception) { }
+            try { voice.persona = prefs.persona() } catch (e: Exception) { }
             try { voiceView = prefs.voiceView() } catch (e: Exception) { }
             // Auto mode (v2.17): ON tha to notification wapas dikhao.
             try {
@@ -1128,7 +1128,7 @@ fun FloraApp(
                         scope.launch {
                             try { prefs.setPersona("romantic") } catch (e: Exception) { }
                         }
-                        voice.setPersona("romantic")
+                        voice.persona = "romantic"
                         voice.speak("Romantic mode ON ho gaya hai.")
                         return
                     }
@@ -1137,7 +1137,7 @@ fun FloraApp(
                         scope.launch {
                             try { prefs.setPersona("flora") } catch (e: Exception) { }
                         }
-                        voice.setPersona("flora")
+                        voice.persona = "flora"
                         voice.speak("Normal mode wapas aa gaya hai.")
                         return
                     }
@@ -2268,7 +2268,7 @@ private fun SettingsScreen(
                 listOf("flora" to "Flora", "saathi" to "Saathi", "guru" to "Guru", "romantic" to "Romantic").forEach { (id, label) ->
                     Button(onClick = {
                         persona = id
-                        voice.setPersona(id)
+                        voice.persona = id
                         scope.launch { prefs.setPersona(id) }
                     }) { Text(if (persona == id) "✓ $label" else label) }
                     Spacer(modifier = Modifier.padding(2.dp))

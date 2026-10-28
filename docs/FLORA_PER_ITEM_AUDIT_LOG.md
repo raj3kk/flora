@@ -669,3 +669,8 @@ maujood, index bhi 200. Download page ab live hai.
 - NotificationsScreen (Menu > Notifications): list (app label + time + title + text), access ON/OFF status, Settings kholne ka button (access user khud dega, Flora khud ON nahi kar sakti), Refresh, ek tap par list saaf.
 - Privacy: notification me OTP/private message bhi ho sakta hai — isliye list sirf phone par, server par kabhi nahi; auto-announce NAHI (chupchaap bolna private content leak kar sakta hai). Voice se "notification batao" poochhna agle chunk me.
 - Audit: 4 files brace/paren balance; enum+title+menu+branch+manifest grep-verify; FloraApp.kt me NOTIFICATIONS ke baaki matches sirf POST_NOTIFICATIONS permission wale hain (alag cheez).
+
+## v2.22 chunk 4c CI FAIL — root fix (2026-10-28 ~18:00 IST)
+- Wajah (job log, d7b186e0): VoiceEngine.kt me platform declaration clash — `var persona` ka generated setter aur mera haath ka `fun setPersona()` dono ki JVM signature ek (setPersona(String)V). Ye galti chunk 4 ki thi, pehle do errors ke peeche chhupi thi.
+- Fix: fun hataya, 4 call sites ko property assignment (`voice.persona = ...`) par laaya. Sed ke greedy match ne startup wali line ka `catch (e: Exception)` bigaad diya tha — use haath se theek kiya (grep se verify: ab koi `voice.setPersona` call nahi bacha).
+- Seekh (AGENTS.md me bhi): Kotlin `var` ke saath usi naam ka setter fun kabhi mat likho; sed me `.*` greedy hota hai — replacement ke baad har line grep se padho.
