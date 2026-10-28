@@ -16,10 +16,13 @@ import kotlinx.coroutines.delay
 object AppAutomation {
 
     const val CHATGPT_PKG = "com.openai.chatgpt"
+    const val GEMINI_PKG = "com.google.android.apps.bard"
 
     private val KNOWN_APPS = mapOf(
         "chatgpt" to CHATGPT_PKG,
         "chat gpt" to CHATGPT_PKG,
+        "gemini" to GEMINI_PKG,
+        "google gemini" to GEMINI_PKG,
         "whatsapp" to "com.whatsapp",
         "whatsapp business" to "com.whatsapp.w4b",
         "instagram" to "com.instagram.android",

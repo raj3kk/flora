@@ -44,7 +44,7 @@ import kotlinx.coroutines.launch
  * lagata hai.
  */
 @Composable
-fun RoutinesScreen(voice: VoiceEngine, onRunRoutine: (Routine) -> Unit) {
+fun RoutinesScreen(voice: VoiceEngine, onRunRoutine: (Routine) -> Unit, onRunMacro: (com.flora.app.data.StoredMacro) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var routines by remember { mutableStateOf<List<Routine>>(emptyList()) }
@@ -52,12 +52,19 @@ fun RoutinesScreen(voice: VoiceEngine, onRunRoutine: (Routine) -> Unit) {
     var timeInputs by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var name by remember { mutableStateOf("") }
     var commandsText by remember { mutableStateOf("") }
+    // Phase 6: Macros — naam + JSON steps. Save se pehle parse
+    // validate hota hai; kharab JSON save nahi hoga.
+    var macros by remember { mutableStateOf<List<com.flora.app.data.StoredMacro>>(emptyList()) }
+    var macroName by remember { mutableStateOf("") }
+    var macroJsonText by remember { mutableStateOf("") }
+    var confirmMacro by remember { mutableStateOf<com.flora.app.data.StoredMacro?>(null) }
     var note by remember { mutableStateOf("") }
     var confirmRun by remember { mutableStateOf<Routine?>(null) }
 
     LaunchedEffect(Unit) {
         routines = RoutineStore.load(context)
         jobs = JobStore.load(context)
+        macros = com.flora.app.data.MacroStore.load(context)
     }
 
     fun say(message: String) {
@@ -151,6 +158,68 @@ fun RoutinesScreen(voice: VoiceEngine, onRunRoutine: (Routine) -> Unit) {
             }
             Spacer(modifier = Modifier.height(8.dp))
         }
+        item {
+            Text("Macros — JSON steps (open → tap → type → wait → waitText → scroll → back).")
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = macroName, onValueChange = { macroName = it },
+                label = { Text("Macro ka naam") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = macroJsonText, onValueChange = { macroJsonText = it },
+                label = { Text("Steps JSON (jaise {\"name\":\"Subah\",\"steps\":[{\"type\":\"open\",\"app\":\"YouTube\"}]}") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = {
+                if (macroName.isBlank() || macroJsonText.isBlank()) {
+                    say("Macro ka naam aur steps JSON dono chahiye.")
+                } else {
+                    val parsed = com.flora.app.automation.MacroJson.parse(macroJsonText.trim())
+                    if (parsed == null) {
+                        say("Macro JSON galat hai — steps ka format check karo, save nahi hua.")
+                    } else {
+                        val updated = macros.filter { it.name != macroName.trim() } +
+                            com.flora.app.data.StoredMacro(macroName.trim(), macroJsonText.trim())
+                        scope.launch {
+                            com.flora.app.data.MacroStore.save(context, updated)
+                            macros = updated
+                            macroName = ""
+                            macroJsonText = ""
+                            say("Macro '${updated.last().name}' save ho gayi.")
+                        }
+                    }
+                }
+            }) { Text("Macro save karo") }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Mere macros")
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        items(macros) { macro ->
+            Text("${macro.name}")
+            Spacer(modifier = Modifier.height(4.dp))
+            Button(onClick = { confirmMacro = macro }) { Text("Chalao: ${macro.name}") }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+
+    confirmMacro?.let { macro ->
+        AlertDialog(
+            onDismissRequest = { confirmMacro = null },
+            title = { Text("Macro chalau?") },
+            text = { Text("'${macro.name}' ke steps accessibility se chalenge. Sensitive step (password wali screen par pay/submit) par dobara poocha jayega.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmMacro = null
+                    onRunMacro(macro)
+                }) { Text("Haan, chalao") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmMacro = null }) { Text("Ruko") }
+            }
+        )
     }
 
     confirmRun?.let { routine ->

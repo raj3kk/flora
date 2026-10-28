@@ -193,6 +193,15 @@ class BackgroundMicService : Service() {
         return lower.startsWith("call ") || lower.startsWith("sms ") ||
             lower.startsWith("open ") || lower.startsWith("kholo ") ||
             lower.startsWith("image banao ") || lower.startsWith("photo banao ") ||
+            lower.startsWith("image generate karo ") || lower.startsWith("gemini se image generate karo ") ||
+            lower.startsWith("macro chalao ") || lower == "macros batao" || lower == "macro batao" ||
+            lower == "form bharo" || lower == "is form ko bharo" ||
+            lower.startsWith("field ") && lower.endsWith(" likho") ||
+            lower == "form submit karo" ||
+            lower == "notification ka jawab batao" || lower == "is notification ka jawab batao" ||
+            lower.endsWith(" ka jawab batao") ||
+            (lower.startsWith("is app me ") || lower.startsWith("is me ") || lower.startsWith("yahan ")) &&
+            lower.endsWith(" search karo") ||
             lower.startsWith("install karo ") || lower.startsWith("install kar do ") ||
             lower.startsWith("download karo ") ||
             lower.endsWith(" install karo") || lower.endsWith(" install kar do") ||

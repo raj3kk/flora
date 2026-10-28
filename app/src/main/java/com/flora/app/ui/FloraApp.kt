@@ -214,6 +214,15 @@ fun FloraApp(
     // chalega jab user dialog me "Haan" dabaye — kabhi silent nahi.
     var termuxConfirm by remember { mutableStateOf<String?>(null) }
     var voiceAppConfirm by remember { mutableStateOf<com.flora.app.automation.LaunchableApp?>(null) }
+    // Phase 6: macro run state — pending = chal raha/ruka macro + agla step index.
+    // macroNeedsConfirm true ho to sensitive step par dialog dikhega; Haan par wahi
+    // step se resume, Ruko par macro ruk jayegi. Kabhi silent resume nahi.
+    var macroPending by remember { mutableStateOf<Pair<com.flora.app.automation.Macro, Int>?>(null) }
+    var macroNeedsConfirm by remember { mutableStateOf(false) }
+    // Phase 6: form submit confirm — password field wale form par submit se pehle dialog.
+    var formSubmitPending by remember { mutableStateOf(false) }
+    // Phase 6: reply confirm — pkg + sender + draft; Haan par hi bhejne ka raasta chalega.
+    var replyPending by remember { mutableStateOf<Triple<String, String, String>?>(null) }
     // Auto mode (v2.17 switch; v2.18 user order se DEFAULT ON):
     // ON par call/SMS/app bina har baar poochhe chalenge, har kaam
     // Auto Log me dikhega.
@@ -1207,7 +1216,18 @@ fun FloraApp(
                         return false
                     }
                     delay(20000)
-                    val msg = "Prompt ChatGPT ko bhej diya hai, image ban rahi hai — ChatGPT app me dekh lo. Ban jaate hi wahi dikh jayegi. (ChatGPT me login/subscription manga to wo tumhe khud karna hoga.)"
+                    val savedBack = try {
+                        com.flora.app.automation.ImageGenFlow.saveJpegToGallery(
+                            appContext, service.screenshotJpeg()
+                        )
+                    } catch (e: Exception) {
+                        false
+                    }
+                    val msg = if (savedBack) {
+                        "Prompt ChatGPT ko bhej diya hai, image ban rahi hai — ChatGPT app me dekh lo, aur Gallery ke Flora folder me bhi save kar di hai. (ChatGPT me login/subscription manga to wo tumhe khud karna hoga.)"
+                    } else {
+                        "Prompt ChatGPT ko bhej diya hai, image ban rahi hai — ChatGPT app me dekh lo. Ban jaate hi wahi dikh jayegi. (ChatGPT me login/subscription manga to wo tumhe khud karna hoga.)"
+                    }
                     messages = messages + ChatMsg("Flora: $msg", false)
                     voice.speak(msg)
                     return true
@@ -1336,8 +1356,84 @@ fun FloraApp(
                         messages = messages + ChatMsg("Flora: $msg", false)
                         voice.speak(msg)
                         try { autoLogStore.add("App khola (auto): ${app.label} -> ${if (verified) "ho gaya" else "fail"}") } catch (e: Exception) { }
+                        if (verified) {
+                            com.flora.app.automation.ForegroundAppContext.noteOpened(app.packageName, app.label)
+                        }
                         onDone?.invoke(result)
                     }
+                    }
+                }
+
+                // Phase 6: macro chalao — step-by-step bol kar + Auto Log.
+                // Sensitive step par runner NeedsConfirm dega to dialog
+                // dikhega (macroNeedsConfirm); Haan par wahi step se
+                // resume hoga. Kabhi silent macro nahi.
+                fun runMacroFrom(macro: com.flora.app.automation.Macro, fromStep: Int) {
+                    runGuardedVoice {
+                        scope.launch {
+                            val service = com.flora.app.automation.FloraAutomationService.instance
+                            if (service == null) {
+                                val msg = "Macro chalane ke liye Accessibility service ON karni hogi, Settings me."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                                return@launch
+                            }
+                            val result = com.flora.app.automation.MacroEngine.runMacro(
+                                appContext, service, macro, fromStep
+                            ) { stepMsg ->
+                                messages = messages + ChatMsg("Flora: $stepMsg", false)
+                                voice.speak(stepMsg)
+                            }
+                            when (result) {
+                                is com.flora.app.automation.MacroOutcome.Done -> {
+                                    val msg = "Macro '${macro.name}' poora ho gaya."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                    macroPending = null
+                                    try { autoLogStore.add("Macro: ${macro.name} -> ho gaya") } catch (e: Exception) { }
+                                }
+                                is com.flora.app.automation.MacroOutcome.Failed -> {
+                                    val msg = "Macro '${macro.name}' step ${result.stepIndex + 1} par ruk gaya: ${result.reason}"
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                    macroPending = null
+                                    try { autoLogStore.add("Macro: ${macro.name} -> fail (${result.reason})") } catch (e: Exception) { }
+                                }
+                                is com.flora.app.automation.MacroOutcome.NeedsConfirm -> {
+                                    macroPending = macro to result.stepIndex
+                                    macroNeedsConfirm = true
+                                    val msg = "Macro '${macro.name}' ka agla step sensitive hai (${result.reason}) — confirm karo to aage badhungi, warna ruk jayegi."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Phase 6: auto-reply draft propose karo — thread (aakhri
+                // 6) + brain draft user ko sunao + chat me likho; bhejna
+                // sirf replyPending dialog me Haan par hoga.
+                fun proposeReply(pkg: String) {
+                    scope.launch {
+                        when (val d = com.flora.app.automation.ReplyDraft.buildDraft(appContext, pkg, brain)) {
+                            is com.flora.app.automation.DraftResult.Empty -> {
+                                voice.speak("Is app ki koi notification nahi mili — pehle Notifications se access ON karo.")
+                            }
+                            is com.flora.app.automation.DraftResult.Ready -> {
+                                val summary = d.thread.lines.joinToString(" | ")
+                                if (d.draft.isBlank()) {
+                                    val msg = "Aakhri baatchit: $summary. Draft nahi bana payi — brain key check karo (Settings me Keys check karo)."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else {
+                                    val msg = "Aakhri baatchit: $summary. Mera sujha hua jawab: ${d.draft}"
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak("Mera sujha hua jawab: ${d.draft}. Bheju to dialog me Haan dabao — bina confirm ke kuch nahi jayega.")
+                                    replyPending = Triple(pkg, d.thread.senderTitle, d.draft)
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1883,6 +1979,402 @@ fun FloraApp(
                         }
                         // Number nahi hai to game background me rehta
                         // hai — baaki commands normal chalenge.
+                    }
+                    // Phase 6: foreground-app context carryover — khuli hui
+                    // app ke andar search. Flora foreground me ho to plain
+                    // form research branch par hi jayega (behaviour same).
+                    // Explicit form ("is app me / is me / yahan") hamesha
+                    // in-app: target saamne na ho to use dobara verified
+                    // khol kar search hota hai.
+                    val carryQuery: String? = when {
+                        lower.startsWith("is app me ") && lower.endsWith(" search karo") ->
+                            question.substring(10, (question.length - 12).coerceAtLeast(10)).trim()
+                        lower.startsWith("is me ") && lower.endsWith(" search karo") ->
+                            question.substring(6, (question.length - 12).coerceAtLeast(6)).trim()
+                        lower.startsWith("yahan ") && lower.endsWith(" search karo") ->
+                            question.substring(6, (question.length - 12).coerceAtLeast(6)).trim()
+                        else -> null
+                    }
+                    val plainSearchQuery: String? = when {
+                        lower.startsWith("search karo ") -> question.substring(12).trim()
+                        lower.endsWith(" search karo") -> question.dropLast(12).trim()
+                        else -> null
+                    }
+                    if (carryQuery != null) {
+                        input = ""
+                        val fgService = com.flora.app.automation.FloraAutomationService.instance
+                        val fgPkg = try { fgService?.foregroundPackage() } catch (e: Exception) { null }
+                        val targetPkg: String? = when {
+                            fgPkg != null && fgPkg != appContext.packageName -> fgPkg
+                            else -> com.flora.app.automation.ForegroundAppContext.lastOpenedPkg
+                        }
+                        if (carryQuery.isEmpty()) {
+                            voice.speak("Kya search karu? Aise boliye: 'is app me chai search karo'.")
+                        } else if (fgService == null || targetPkg == null) {
+                            voice.speak("Koi app saamne nahi hai — pehle app kholo, phir 'is app me' bolo.")
+                        } else {
+                            scope.launch {
+                                var svc: com.flora.app.automation.FloraAutomationService? = fgService
+                                if (fgPkg != targetPkg) {
+                                    val label = com.flora.app.automation.ForegroundAppContext.lastOpenedLabel ?: targetPkg
+                                    val opened = com.flora.app.automation.VerifiedAppLauncher.openVerified(
+                                        appContext,
+                                        com.flora.app.automation.LaunchableApp(label, targetPkg)
+                                    )
+                                    if (opened != com.flora.app.automation.VerifiedAppLauncher.OpenResult.Opened &&
+                                        opened != com.flora.app.automation.VerifiedAppLauncher.OpenResult.AlreadyOpen
+                                    ) {
+                                        val msg = "Wo app dobara khul nahi payi, isliye andar search nahi kar payi."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                        return@launch
+                                    }
+                                    svc = com.flora.app.automation.FloraAutomationService.instance
+                                }
+                                val serviceNow = svc
+                                if (serviceNow == null) {
+                                    voice.speak("App ke andar search ke liye Accessibility service ON karni hogi, Settings me.")
+                                    return@launch
+                                }
+                                when (val res = com.flora.app.automation.InAppSearch.searchInApp(serviceNow, carryQuery)) {
+                                    com.flora.app.automation.InAppSearchOutcome.Done -> {
+                                        val msg = "Is app me '$carryQuery' search kar diya hai."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    }
+                                    com.flora.app.automation.InAppSearchOutcome.TypedOnly -> {
+                                        val msg = "Search box me '$carryQuery' likh diya hai, enter dabate hi search ho jayega."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    }
+                                    else -> {
+                                        val msg = "Is app me search box nahi mila, isliye andar search nahi kar payi."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    }
+                                }
+                            }
+                        }
+                        return
+                    }
+                    if (plainSearchQuery != null) {
+                        val fgService = com.flora.app.automation.FloraAutomationService.instance
+                        val fgPkg = try { fgService?.foregroundPackage() } catch (e: Exception) { null }
+                        val inApp = fgService != null && fgPkg != null &&
+                            fgPkg != appContext.packageName &&
+                            com.flora.app.automation.ForegroundAppContext.matchesForeground(fgPkg)
+                        if (inApp) {
+                            input = ""
+                            if (plainSearchQuery.isEmpty()) {
+                                voice.speak("Kya search karu?")
+                            } else {
+                                scope.launch {
+                                    when (val res = com.flora.app.automation.InAppSearch.searchInApp(fgService, plainSearchQuery)) {
+                                        com.flora.app.automation.InAppSearchOutcome.Done -> {
+                                            val msg = "Is app me '$plainSearchQuery' search kar diya hai."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                        com.flora.app.automation.InAppSearchOutcome.TypedOnly -> {
+                                            val msg = "Search box me '$plainSearchQuery' likh diya hai, enter dabate hi search ho jayega."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                        else -> {
+                                            val msg = "Is app me search box nahi mila, isliye andar search nahi kar payi."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                    }
+                                }
+                            }
+                            return
+                        }
+                        // In-app nahi bana to neeche research branch chalegi.
+                    }
+                    // Phase 6: macros — "macro chalao <naam>" sirf tab
+                    // chalta hai jab user ne saaf bola ho; sensitive
+                    // step par confirm dialog aayega (kabhi silent nahi).
+                    if (lower == "macros batao" || lower == "macro batao") {
+                        input = ""
+                        scope.launch {
+                            try {
+                                val macros = com.flora.app.automation.MacroStore.load(appContext)
+                                val msg = if (macros.isEmpty()) {
+                                    "Koi macro save nahi hai — Routines screen par Macros me banao."
+                                } else {
+                                    "Macros: " + macros.joinToString(", ") { it.name }
+                                }
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            } catch (e: Exception) {
+                                voice.speak("Macros nahi padh payi.")
+                            }
+                        }
+                        return
+                    }
+                    if (lower.startsWith("macro chalao ")) {
+                        input = ""
+                        val mName = question.substring(13).trim()
+                        if (mName.isEmpty()) {
+                            voice.speak("Kaunsa macro chalau? Aise boliye: 'macro chalao subah'.")
+                        } else {
+                            scope.launch {
+                                try {
+                                    val macros = com.flora.app.automation.MacroStore.load(appContext)
+                                    val stored = macros.firstOrNull { it.name.equals(mName, ignoreCase = true) }
+                                    if (stored == null) {
+                                        val msg = "Macro '$mName' nahi mila — 'macros batao' se list dekh lo."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    } else {
+                                        val macro = com.flora.app.automation.MacroJson.parse(stored.json)
+                                        if (macro == null) {
+                                            voice.speak("Macro '$mName' ka format kharab hai, dobara save karo.")
+                                        } else {
+                                            val msg = "Macro '${macro.name}' chala rahi hun, har step bol kar bataungi."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                            macroPending = macro to 0
+                                            runMacroFrom(macro, 0)
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    voice.speak("Macro nahi chala payi.")
+                                }
+                            }
+                        }
+                        return
+                    }
+                    // Phase 6: form-fill — pehle "form bharo" se fields
+                    // ki list, phir "field <naam> me <value> likho" se
+                    // ek-ek field, phir "form submit karo". Password
+                    // field me Flora kabhi nahi likhegi; password wale
+                    // form ka submit confirm dialog ke baad hi hoga.
+                    if (lower == "form bharo" || lower == "is form ko bharo") {
+                        input = ""
+                        scope.launch {
+                            val service = com.flora.app.automation.FloraAutomationService.instance
+                            if (service == null) {
+                                voice.speak("Form bharne ke liye Accessibility service ON karni hogi, Settings me.")
+                            } else {
+                                val fields = com.flora.app.automation.FormFiller.findFields(service)
+                                if (fields.isEmpty()) {
+                                    voice.speak("Is screen par koi bharne layak field nahi mila.")
+                                } else {
+                                    val list = fields.joinToString(", ") { f ->
+                                        f.label + if (f.isPassword) " (password — tum khud bharo)" else ""
+                                    }
+                                    val msg = "Form me ye fields mile: $list. Kisi field me likhne ke liye bolo: 'field <naam> me <value> likho'."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                }
+                            }
+                        }
+                        return
+                    }
+                    if (lower.startsWith("field ") && lower.contains(" me ") && lower.endsWith(" likho")) {
+                        input = ""
+                        val body = question.substring(6, question.length - 6).trim()
+                        val meIdx = body.lowercase().lastIndexOf(" me ")
+                        if (meIdx < 0) {
+                            voice.speak("Aise boliye: 'field naam me Priyadarshi likho'.")
+                        } else {
+                            val fLabel = body.substring(0, meIdx).trim()
+                            val fValue = body.substring(meIdx + 4).trim()
+                            if (fLabel.isEmpty() || fValue.isEmpty()) {
+                                voice.speak("Aise boliye: 'field naam me Priyadarshi likho'.")
+                            } else {
+                                scope.launch {
+                                    val service = com.flora.app.automation.FloraAutomationService.instance
+                                    if (service == null) {
+                                        voice.speak("Field bharne ke liye Accessibility service ON karni hogi, Settings me.")
+                                    } else {
+                                        when (val r = com.flora.app.automation.FormFiller.fillField(service, fLabel, fValue)) {
+                                            is com.flora.app.automation.FillOutcome.Filled -> {
+                                                val msg = "Field '${r.label}' me likh diya hai."
+                                                messages = messages + ChatMsg("Flora: $msg", false)
+                                                voice.speak(msg)
+                                            }
+                                            is com.flora.app.automation.FillOutcome.PasswordRefused -> {
+                                                val msg = "Ye password field hai — isme main nahi likhungi, tum khud bharo."
+                                                messages = messages + ChatMsg("Flora: $msg", false)
+                                                voice.speak(msg)
+                                            }
+                                            is com.flora.app.automation.FillOutcome.NotFound -> {
+                                                val msg = "Field '$fLabel' nahi mila — 'form bharo' se list dekh lo."
+                                                messages = messages + ChatMsg("Flora: $msg", false)
+                                                voice.speak(msg)
+                                            }
+                                            else -> {
+                                                val msg = "Field '$fLabel' me likh nahi payi."
+                                                messages = messages + ChatMsg("Flora: $msg", false)
+                                                voice.speak(msg)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return
+                    }
+                    if (lower == "form submit karo") {
+                        input = ""
+                        scope.launch {
+                            val service = com.flora.app.automation.FloraAutomationService.instance
+                            if (service == null) {
+                                voice.speak("Form submit karne ke liye Accessibility service ON karni hogi, Settings me.")
+                            } else if (com.flora.app.automation.FormFiller.hasPasswordField(service)) {
+                                formSubmitPending = true
+                                voice.speak("Ye form me password field hai, isliye submit se pehle confirm chahiye — dialog me Haan dabao to submit karungi.")
+                            } else {
+                                val ok = com.flora.app.automation.FormFiller.clickSubmit(service)
+                                voice.speak(if (ok) "Form submit kar diya hai." else "Submit button nahi mila.")
+                            }
+                        }
+                        return
+                    }
+                    // Phase 6B: image generate via external app — Gemini
+                    // ya ChatGPT. "image banao" wala purana ChatGPT +
+                    // Pollinations raasta chheda nahi hai; ye naya
+                    // branch sirf "image generate karo" par chalta hai.
+                    // Login user khud ek baar karega — password Flora
+                    // kabhi nahi mangegi.
+                    if (lower.startsWith("image generate karo") || lower.startsWith("gemini se image generate karo")) {
+                        input = ""
+                        var rest = when {
+                            lower.startsWith("gemini se image generate karo ") ->
+                                question.substring(30).trim()
+                            lower.startsWith("image generate karo ") ->
+                                question.substring(20).trim()
+                            else -> ""
+                        }
+                        var appName: String? = null
+                        val restLower = rest.lowercase()
+                        if (restLower.endsWith(" gemini se")) {
+                            appName = "Gemini"
+                            rest = rest.dropLast(10).trim()
+                        } else if (restLower.endsWith(" chatgpt pe")) {
+                            appName = "ChatGPT"
+                            rest = rest.dropLast(11).trim()
+                        } else if (restLower.endsWith(" chat gpt pe")) {
+                            appName = "ChatGPT"
+                            rest = rest.dropLast(12).trim()
+                        }
+                        if (rest.isEmpty()) {
+                            voice.speak("Kaisi image banau? Aise boliye: 'image generate karo ek sher, Gemini se'.")
+                        } else if (appName == null) {
+                            voice.speak("Kis app se image banau — Gemini ya ChatGPT? Aise boliye: 'image generate karo ek sher, Gemini se'.")
+                        } else {
+                            val prompt = rest
+                            val app = appName
+                            scope.launch {
+                                val service = com.flora.app.automation.FloraAutomationService.instance
+                                if (service == null) {
+                                    voice.speak("Image banane ke liye Accessibility service ON karni hogi, Settings me.")
+                                } else {
+                                    voice.speak("'$app' se image bana rahi hun — pehle app kholegi, phir prompt likh kar generate dabayegi. Login tumne ek baar khud karna hoga.")
+                                    val outcome = if (app == "Gemini") {
+                                        val installed = com.flora.app.automation.AppAutomation.isInstalled(
+                                            appContext, com.flora.app.automation.AppAutomation.GEMINI_PKG
+                                        )
+                                        if (!installed) {
+                                            voice.speak("Gemini app installed nahi hai, Play Store khol raha hun — install poora hote hi dobara bol dena.")
+                                            com.flora.app.automation.AppAutomation.openPlayStoreDetails(
+                                                appContext, com.flora.app.automation.AppAutomation.GEMINI_PKG
+                                            )
+                                            null
+                                        } else {
+                                            com.flora.app.automation.ImageGenFlow.generateWithApp(
+                                                appContext, service,
+                                                com.flora.app.automation.AppAutomation.GEMINI_PKG, "Gemini",
+                                                listOf("Ask Gemini", "Message", "Ask anything"),
+                                                listOf("Send", "Send message"),
+                                                prompt
+                                            ) { p -> voice.speak(p) }
+                                        }
+                                    } else {
+                                        // runChatGptImage khud screenshot-save nahi karta
+                                        // (wo sirf app me banata hai) — isliye bring-back
+                                        // yahan khud karo, warna "Saved" jhooth hota.
+                                        val ok = runChatGptImage(prompt)
+                                        if (!ok) {
+                                            null
+                                        } else {
+                                            val jpeg = try { service.screenshotJpeg() } catch (e: Exception) { null }
+                                            if (com.flora.app.automation.ImageGenFlow.saveJpegToGallery(appContext, jpeg)) {
+                                                com.flora.app.automation.ImageOutcome.Saved("ChatGPT")
+                                            } else {
+                                                com.flora.app.automation.ImageOutcome.AppOnly("ChatGPT")
+                                            }
+                                        }
+                                    }
+                                    when (outcome) {
+                                        is com.flora.app.automation.ImageOutcome.Saved -> {
+                                            val msg = "Image ban gayi hai aur Gallery ke Flora folder me save kar di hai — Photos me dekh lo."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                        is com.flora.app.automation.ImageOutcome.AppOnly -> {
+                                            val msg = "Image '$app' me ban gayi hai, par screenshot nahi le payi — app me hi dekh lo."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                        is com.flora.app.automation.ImageOutcome.Failed -> {
+                                            val msg = "Image nahi bana payi: ${outcome.reason}"
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                        null -> {
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return
+                    }
+                    // Phase 6: auto-reply design (ask-first) — notification
+                    // ka message + pehle ke 5-6 messages padh kar draft
+                    // banao, user ko sunao; bhejna sirf confirm dialog
+                    // me Haan par hoga. Silent auto-reply kabhi nahi.
+                    if (lower == "is notification ka jawab batao" ||
+                        lower == "notification ka jawab batao" ||
+                        lower == "is ka jawab batao"
+                    ) {
+                        input = ""
+                        scope.launch {
+                            try {
+                                val all = com.flora.app.data.NotificationStore.load(appContext)
+                                val latest = all.lastOrNull()
+                                if (latest == null) {
+                                    voice.speak("Koi notification save nahi hai — pehle Notifications se access ON karo.")
+                                } else {
+                                    proposeReply(latest.pkg)
+                                }
+                            } catch (e: Exception) {
+                                voice.speak("Notifications nahi padh payi.")
+                            }
+                        }
+                        return
+                    }
+                    if (lower.endsWith(" ka jawab batao")) {
+                        input = ""
+                        val appWord = question.dropLast(15).trim()
+                        if (appWord.isEmpty()) {
+                            voice.speak("Kis app ka jawab batau? Aise boliye: 'WhatsApp ka jawab batao'.")
+                        } else {
+                            scope.launch {
+                                val matches = com.flora.app.automation.VerifiedAppLauncher.findByName(appContext, appWord)
+                                if (matches.isEmpty()) {
+                                    voice.speak("App '$appWord' nahi mili.")
+                                } else if (matches.size > 1) {
+                                    voice.speak("App '$appWord' ke liye ek se zyada app mili — naam poora bolo.")
+                                } else {
+                                    proposeReply(matches[0].packageName)
+                                }
+                            }
+                        }
+                        return
                     }
                     // Research voice commands (v2.22, P3-F12):
                     // ToolsScreen me ye tools pehle se the, awaaz
@@ -3796,7 +4288,18 @@ fun FloraApp(
             } else if (screen == Screen.AUTO) {
                 AutoScreen(voice)
             } else if (screen == Screen.ROUTINES) {
-                RoutinesScreen(voice) { routine ->
+                RoutinesScreen(voice, onRunMacro = { stored ->
+                    screen = Screen.CHAT
+                    val macro = com.flora.app.automation.MacroJson.parse(stored.json)
+                    if (macro == null) {
+                        voice.speak("Macro '${stored.name}' ka format kharab hai, dobara save karo.")
+                    } else {
+                        messages = messages + ChatMsg("Flora: Macro '${macro.name}' chala rahi hun, har step bol kar bataungi.", false)
+                        voice.speak("Macro ${macro.name} chala rahi hun.")
+                        macroPending = macro to 0
+                        runMacroFrom(macro, 0)
+                    }
+                }) { routine ->
                     screen = Screen.CHAT
                     routineName = routine.name
                     routineRunning = true
@@ -3838,6 +4341,96 @@ fun FloraApp(
                 ToolsScreen(searchTools)
             }
 
+            // Phase 6: macro sensitive-step confirm — Haan par wahi
+            // step se resume, Ruko par macro ruk jayegi.
+            if (macroNeedsConfirm) {
+                val pending = macroPending
+                AlertDialog(
+                    onDismissRequest = { macroNeedsConfirm = false },
+                    title = { Text("Macro ka sensitive step?") },
+                    text = { Text("Macro '${pending?.first?.name}' ka agla step sensitive hai — Haan dabao to wahi step se aage badhungi, Ruko par macro ruk jayegi.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            macroNeedsConfirm = false
+                            val p = macroPending
+                            if (p != null) runMacroFrom(p.first, p.second)
+                        }) { Text("Haan, aage badho") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            macroNeedsConfirm = false
+                            macroPending = null
+                            voice.speak("Macro rok diya.")
+                        }) { Text("Ruko") }
+                    }
+                )
+            }
+            // Phase 6: form submit confirm (password field wale form par).
+            if (formSubmitPending) {
+                AlertDialog(
+                    onDismissRequest = { formSubmitPending = false },
+                    title = { Text("Form submit karu?") },
+                    text = { Text("Ye form me password field hai — Haan dabao to submit karungi, Ruko par nahi karungi.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            formSubmitPending = false
+                            scope.launch {
+                                val service = com.flora.app.automation.FloraAutomationService.instance
+                                if (service == null) {
+                                    voice.speak("Submit karne ke liye Accessibility service ON karni hogi, Settings me.")
+                                } else {
+                                    val ok = com.flora.app.automation.FormFiller.clickSubmit(service)
+                                    voice.speak(if (ok) "Form submit kar diya hai." else "Submit button nahi mila.")
+                                }
+                            }
+                        }) { Text("Haan, submit karo") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            formSubmitPending = false
+                            voice.speak("Form submit nahi kiya.")
+                        }) { Text("Ruko") }
+                    }
+                )
+            }
+            // Phase 6: auto-reply confirm — Haan par hi bhejne ka
+            // raasta chalega; WhatsApp par aakhri Send user khud
+            // dabata hai (wa.me prefilled). Baaki apps me sirf draft.
+            replyPending?.let { (pkg, sender, draft) ->
+                AlertDialog(
+                    onDismissRequest = { replyPending = null },
+                    title = { Text("Ye jawab bheju?") },
+                    text = { Text("'$sender' ko: $draft") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            replyPending = null
+                            scope.launch {
+                                if (pkg == "com.whatsapp") {
+                                    when (val res = com.flora.app.automation.ContactResolver.resolve(appContext, prefs, sender)) {
+                                        is com.flora.app.automation.ContactResolver.Result.Resolved -> {
+                                            runContactAction(res.number, "whatsapp", draft)
+                                        }
+                                        is com.flora.app.automation.ContactResolver.Result.Ambiguous -> {
+                                            voice.speak("'$sender' ke liye ek se zyada contact mile — naam poora bolo, tabhi bhej paungi.")
+                                        }
+                                        else -> {
+                                            voice.speak("Number nahi mila — draft chat me hai, tum khud bhej do.")
+                                        }
+                                    }
+                                } else {
+                                    voice.speak("Is app me Flora direct reply nahi bhej sakti — draft chat me hai, app khol kar bhej do.")
+                                }
+                            }
+                        }) { Text("Haan, bhejo") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            replyPending = null
+                            voice.speak("Jawab nahi bheja.")
+                        }) { Text("Ruko") }
+                    }
+                )
+            }
             voiceCallConfirm?.let { number ->
                 AlertDialog(
                     onDismissRequest = { voiceCallConfirm = null },
