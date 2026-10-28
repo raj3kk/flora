@@ -65,3 +65,23 @@ jaye. Koi expiry nahi, koi 250-download limit nahi.
   count limit nahi hai, par pehli baar upload me waqt lagega.
 - Debug-signed APK hi rahega (release signing key nahi hai) —
   install par "unknown sources" permission abhi bhi chahiye hogi.
+
+## CORRECTION 2026-10-28 ~21:50 IST — workflow file abhi push NAHI hua
+
+- `.github/workflows/android.yml` wala step abhi repo me NAHI
+  gaya: GitHub token ke paas `workflows` permission nahi hai,
+  isliye workflow file ko API se badalna BLOCKED hai
+  (createCommitOnBranch FORBIDDEN, trees API 404, contents API
+  404 — teeno raaste same wajah se fail hue; bina workflow
+  file ke push turant kaam karta hai, isliye baaki 11 files ka
+  commit 548f5e7a ban gaya hai).
+- **Fix (ek baar, 2 minute, GitHub web UI se):** repo >
+  `.github/workflows/android.yml` kholo > Edit (pencil) >
+  local file wale "Upload direct APK to Supabase Storage" step
+  ko `Upload APK` step ke baad paste karo > Commit. Uske baad
+  har PASS build auto-upload karega.
+- **Ya:** workflows-scope wala token mile to API se push ho
+  jayega — tab tak web UI wala raasta hi hai.
+- Jab tak workflow file nahi hai, direct link live NAHI hoga
+  (SwissTransfer primary hi rahega) — ye baat page par bhi
+  likhi hai, koi dead link ship nahi hua hai.
