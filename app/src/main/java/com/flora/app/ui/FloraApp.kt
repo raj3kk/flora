@@ -174,13 +174,15 @@ fun FloraApp(
     var voiceCallConfirm by remember { mutableStateOf<String?>(null) }
     var voiceSmsConfirm by remember { mutableStateOf<Pair<String, String>?>(null) }
     var voiceAppConfirm by remember { mutableStateOf<com.flora.app.automation.LaunchableApp?>(null) }
-    // Auto mode (v2.17, user order): default OFF; ON par call/SMS/app
-    // bina har baar poochhe chalenge, har kaam Auto Log me dikhega.
+    // Auto mode (v2.17 switch; v2.18 user order se DEFAULT ON):
+    // ON par call/SMS/app bina har baar poochhe chalenge, har kaam
+    // Auto Log me dikhega.
     var autoMode by remember { mutableStateOf(false) }
-    val autoLogStore = remember { AutoLogStore(appContext) }
     var pendingVoiceCallRequest by remember { mutableStateOf<String?>(null) }
     var pendingVoiceSmsRequest by remember { mutableStateOf<Pair<String, String>?>(null) }
     val appContext = LocalContext.current
+    // appContext ke BAAD (declaration order — pehle wali galti se CI fail hua tha).
+    val autoLogStore = remember { AutoLogStore(appContext) }
     val voicePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->

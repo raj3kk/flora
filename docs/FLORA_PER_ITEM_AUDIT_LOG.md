@@ -497,3 +497,8 @@ maujood, index bhi 200. Download page ab live hai.
 - Narration: voice commands + routine steps pehle se bol kar chalte the — v2.18 me ye poora cover hai (koi chupchaap kaam nahi). Ek confirmation abhi bhi lagega: payment, delete-all, ek naam ki kai apps, pehli permission, SOS emergency — ye Settings text + test entry me saaf likha hai.
 - Audit: 2 files brace/paren 0/0; routine branch me autoMode/autoLogStore/scope sab pehle declare hain; comment bhi update (purana "nahi chalte" wala jhooth nahi rahega).
 - Test entry: docs/FLORA_V218_TEST_ENTRY.md.
+
+## v2.17 CI FAIL → ROOT FIX (2026-10-28 ~15:56 IST, meri galti)
+- CI run 40671342205 completed failure: FloraApp.kt:180:48 Unresolved reference: appContext.
+- Wajah: autoLogStore line appContext ki declaration (line 183) se PEHLE likhi thi — wahi declaration-order trap jo AGENTS.md me darj hai. Fix: autoLogStore ko appContext ke BAAD le jaya gaya + comment bhi sudhara (default OFF → v2.18 default ON).
+- Re-audit: brace/paren balance OK; line order grep se verify (appContext < autoLogStore < helpers).
