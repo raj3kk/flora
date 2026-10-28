@@ -18,8 +18,9 @@
   Money flow: website signup -> UPI pay -> UTR submit ->
   admin approval -> licence active. Koi payment gateway,
   koi auto-charge nahi.
-  Sections Users/Usage abhi placeholder hain (unki list ke liye
-  server function baaki hai); Audit list wired hai; Secrets
+  Sections Users/Usage admin-list function se wired hain
+  (function DEPLOYED + auth gate live-verified 2026-10-28;
+  asli list admin user banne ke baad dikhegi); Secrets
   section by-design sirf note hai (values kabhi page par nahi
   aayengi — status dashboard se hi dekha jayega).
 -->
@@ -149,8 +150,51 @@ async function loadPayments() {
   });
 }
 
-async function loadAudit() {
-  const { data, error } = await client
+async function loadAdminList() {
+  const res = await fetch(SUPABASE_URL + "/functions/v1/admin-list", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + adminSession.access_token,
+    },
+    body: JSON.stringify({}),
+  });
+  const data = await res.json().catch(() => ({}));
+  const uEl = document.getElementById('users-list');
+  const gEl = document.getElementById('usage-list');
+  if (!res.ok) {
+    uEl.textContent = "Load fail: " + (data.error || ("HTTP " + res.status));
+    gEl.textContent = "Load fail: " + (data.error || ("HTTP " + res.status));
+    return;
+  }
+  const licByUser = {};
+  (data.licences || []).forEach(l => { licByUser[l.user_id] = l; });
+  if (!(data.users || []).length) { uEl.textContent = "Koi user nahi hai."; }
+  else {
+    uEl.innerHTML = "";
+    data.users.forEach(u => {
+      const div = document.createElement('div');
+      const lic = licByUser[u.id];
+      div.textContent = u.id + " | device " + (u.device_id || "?") +
+        (u.is_admin ? " | ADMIN" : "") +
+        (lic ? " | " + lic.plan_id + "/" + lic.status +
+          (lic.expires_at ? " (exp " + lic.expires_at + ")" : "") : " | no licence");
+      uEl.appendChild(div);
+    });
+  }
+  if (!(data.usage || []).length) { gEl.textContent = "Koi usage nahi hai."; }
+  else {
+    gEl.innerHTML = "";
+    data.usage.forEach(r => {
+      const div = document.createElement('div');
+      div.textContent = r.day + " | user " + r.user_id +
+        " | " + r.talk_seconds + "s | " + r.tool_calls + " tools";
+      gEl.appendChild(div);
+    });
+  }
+}
+
+async function loadAudit() {  const { data, error } = await client
     .from("admin_audit")
     .select("id,admin_user_id,action,target_user_id,created_at")
     .order("created_at", { ascending: false }).limit(50);
@@ -177,6 +221,7 @@ document.getElementById('login-btn').addEventListener('click', async () => {
     " (admin check server-side function me hoga — non-admin ko approve/reject par 403 milega).";
   loadPayments();
   loadAudit();
+  loadAdminList();
 });
 </script>
 </body>

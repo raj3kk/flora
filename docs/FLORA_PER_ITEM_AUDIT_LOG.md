@@ -187,3 +187,19 @@
   rahenge. Koi app code change nahi, isliye version bump
   nahi (web-only commit).
 - Verify: naye deploy par clean URLs 200-check hoga.
+- Verify (naya deploy flora-f83x55cea READY): clean URLs
+  /admin /pricing /login /signup /pay /account sab 200;
+  .html paths 308 redirect karke clean URL par 200; root 200.
+  Clean-URL issue CLOSED.
+
+## admin-list function + admin Users/Usage wiring — DEPLOYED + gate verified
+- Function admin-list dashboard editor se deploy hui
+  ("Successfully deployed edge function"); ab total 6
+  functions live hain.
+- Live verify: bina header gateway 401; anon-key Bearer par
+  code ka apna {"error":"unauthorized"} 401 — code deploy
+  hua aur chal raha hai, iska proof hai. Asli list (users/
+  usage/licences) tabhi test hogi jab admin user banega.
+- admin.html: loadAdminList() wired (session token se call,
+  users + licences + usage render; koi token/UTR render nahi).
+  Push ke baad naye deploy par admin page 200-check hoga.
