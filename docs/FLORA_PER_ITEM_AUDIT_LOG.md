@@ -722,3 +722,8 @@ maujood, index bhi 200. Download page ab live hai.
 - Nayi WhiteboardScreen.kt: ungli se draw (drag paths), 4 colors, Undo, Saaf karo, Save → gallery Pictures/Flora (MediaStore, PNG). Drawing sirf phone par banti hai, koi upload nahi. Wiring: Screen.WHITEBOARD + title + Menu entry + branch (Docs ke baad).
 - Audit: dono files brace/paren balance; Save IO par, note main par; khaali canvas par Save mana karta hai.
 - P3 baaki sirf F13 image post step (image voice maujood; auto-post ka raasta koi nahi — IG auto-post bada + risky, confirm flow ke saath alag se banega).
+
+## v2.22 P3-F13 poora — image share with confirm (2026-10-28 ~19:00 IST, CI PENDING)
+- "image share karo" / "aakhri image share karo" → Gallery/Flora ki aakhri image (MediaStore, DATE_ADDED DESC) ko ACTION_SEND share sheet se bhejta hai. App user khud chunta hai — share sheet hi confirm hai; Flora kabhi chhupke post nahi karti. Koi image na ho to pehle "image banao" ka raasta batata hai.
+- Audit: MediaStore import joda gaya (pehle nahi tha — push se pehle pakda gaya); brace/paren balance.
+- CI GOOD NEWS: b91ff250 (bargeIn fix) + 802199dc (notification query) dono SUCCESS — fail chain toot gayi hai.

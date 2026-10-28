@@ -2,6 +2,7 @@ package com.flora.app.ui
 
 import android.Manifest
 import android.content.Intent
+import android.provider.MediaStore
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -1387,6 +1388,64 @@ fun FloraApp(
                                 voice.speak(lines.joinToString(" • "))
                             } catch (e: Exception) {
                                 val msg = "Market ka haal nahi mil paya, dobara bol dena."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                        return
+                    }
+                    // Image share with confirm (v2.22, P3-F13):
+                    // "image banao" se bani Gallery/Flora image ko
+                    // share sheet se bhejo — app user khud chunta
+                    // hai, post Flora kabhi chhupke nahi karti.
+                    // Share sheet hi confirm hai.
+                    if (lower == "image share karo" ||
+                        lower == "aakhri image share karo"
+                    ) {
+                        input = ""
+                        scope.launch {
+                            try {
+                                val uri = withContext(Dispatchers.IO) {
+                                    var found: android.net.Uri? = null
+                                    try {
+                                        val cursor = appContext.contentResolver.query(
+                                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                                            arrayOf(MediaStore.Images.Media._ID),
+                                            MediaStore.Images.Media.RELATIVE_PATH + "=?",
+                                            arrayOf("Pictures/Flora"),
+                                            MediaStore.Images.Media.DATE_ADDED + " DESC"
+                                        )
+                                        cursor?.use {
+                                            if (it.moveToFirst()) {
+                                                val id = it.getLong(0)
+                                                found = android.content.ContentUris.withAppendedId(
+                                                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id
+                                                )
+                                            }
+                                        }
+                                    } catch (e: Exception) { }
+                                    found
+                                }
+                                if (uri == null) {
+                                    val msg = "Share karne layak koi image nahi mili. Pehle 'image banao' bolkar ek image banao."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else {
+                                    val send = Intent(Intent.ACTION_SEND).apply {
+                                        type = "image/jpeg"
+                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    appContext.startActivity(
+                                        Intent.createChooser(send, "Image kahan share karni hai?")
+                                    )
+                                    val msg = "Share sheet khol diya hai — jis app par post karni hai, use chuno."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                }
+                            } catch (e: Exception) {
+                                val msg = "Image share nahi ho payi."
                                 messages = messages + ChatMsg("Flora: $msg", false)
                                 voice.speak(msg)
                             }
