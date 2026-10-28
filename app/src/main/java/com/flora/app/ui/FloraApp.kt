@@ -59,6 +59,13 @@ private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DO
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
 
+/** Persona style prefix (v1.8, local): sirf tone guide karta hai, user ka sawaal nahi badalta. */
+private fun personaPrefix(persona: String): String = when (persona) {
+    "saathi" -> "Dostana, chhote aur hausla dene wale tone me jawab do. "
+    "guru" -> "Step-by-step, to-the-point, padhai/kaam par focus karke jawab do. "
+    else -> ""
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FloraApp(
@@ -561,7 +568,8 @@ fun FloraApp(
                                         } else if (mime.startsWith("text/") || fname.endsWith(".md") || fname.endsWith(".txt")) {
                                             val text = String(bytes, Charsets.UTF_8).take(8000)
                                             val reply = brain.ask(
-                                                "File ka text:\n$text\n\nUser ka sawaal: " +
+                                                personaPrefix(prefs.persona()) +
+                                                    "File ka text:\n$text\n\nUser ka sawaal: " +
                                                     if (q.isBlank()) "Is file ke baare me batao." else q
                                             )
                                             messages = messages + ChatMsg(reply, false)
@@ -598,7 +606,7 @@ fun FloraApp(
                                     busy = false
                                     return@launch
                                 }
-                                val reply = brain.ask(question)
+                                val reply = brain.ask(personaPrefix(prefs.persona()) + question)
                                 messages = messages + ChatMsg(reply, false)
                                 voice.speak(reply)
                                 busy = false
@@ -752,6 +760,8 @@ private fun SettingsScreen(
     var utr by remember { mutableStateOf("") }
     var callAnnounce by remember { mutableStateOf(false) }
     var eventAnnounce by remember { mutableStateOf(false) }
+    // Persona state (v1.8, local): launcher se PEHLE declare (order trap).
+    var persona by remember { mutableStateOf("flora") }
     var note by remember { mutableStateOf("") }
     val phonePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -774,6 +784,7 @@ private fun SettingsScreen(
         utr = prefs.lastUtr()
         callAnnounce = prefs.callAnnounce()
         eventAnnounce = prefs.eventAnnounce()
+        persona = prefs.persona()
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -843,6 +854,18 @@ private fun SettingsScreen(
                 })
             }
             Text("Default OFF.")
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Persona — Flora ka tone (sirf tone badlega, awaaz nahi)")
+            Row {
+                listOf("flora" to "Flora", "saathi" to "Saathi", "guru" to "Guru").forEach { (id, label) ->
+                    Button(onClick = {
+                        persona = id
+                        scope.launch { prefs.setPersona(id) }
+                    }) { Text(if (persona == id) "✓ $label" else label) }
+                    Spacer(modifier = Modifier.padding(2.dp))
+                }
+            }
+            Text("Flora: friendly + professional. Saathi: dostana, chhote jawab. Guru: step-by-step, to-the-point.")
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedTextField(
                 value = pin, onValueChange = { pin = it },
