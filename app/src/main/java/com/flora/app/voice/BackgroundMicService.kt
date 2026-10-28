@@ -14,7 +14,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.flora.app.MainActivity
 import com.flora.app.assistant.BrainClient
+import com.flora.app.assistant.VisionClient
 import com.flora.app.assistant.VoiceEngine
+import com.flora.app.automation.FloraAutomationService
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
 import com.flora.app.tools.ImageTools
@@ -57,6 +59,13 @@ object FloraCommandBus {
  *   bol kar milega. Command (call/sms/app kholo) background se
  *   execute NAHI hota — uske liye app aage la kar confirmation
  *   li jati hai (ek-confirmation rule kabhi nahi toota).
+ * - READ-ONLY screen sawaal (v2.22, user order 2026-10-28:
+ *   "dusri app me hun, Flora wahi se bata de"): user kisi bhi
+ *   app me ho, background mic sun kar screen sawaal pehchanta
+ *   hai to accessibility screenshot + vision se jawab BOL KAR
+ *   deta hai — app aage laye bina, user usi app me rehta hai.
+ *   Screenshot sirf isi sawaal par hota hai; accessibility OFF
+ *   ho ya key na ho to seedha bataya jata hai, andaza nahi.
  * - Mic hamesha ON rehta hai (mute dabane tak): Flora bole ya
  *   user bole, service chalti rehti hai. Sirf Flora ke bolte
  *   waqt sunna roka jata hai taaki wo apni awaaz khud na sune
@@ -191,6 +200,13 @@ class BackgroundMicService : Service() {
             lower == "yaadein kholo" || lower == "memories kholo"
     }
 
+    /** User dusri app me hai aur screen/current kaam ke baare me poochh raha hai. */
+    private fun isScreenQuestion(lower: String): Boolean {
+        return lower.contains("screen") || lower.contains("is app me") ||
+            lower.contains("ye app") || lower.contains("kya karu") ||
+            lower.contains("ye kya hai") || lower.contains("is screen")
+    }
+
     private suspend fun handleHeard(
         text: String,
         prefs: FloraPreferences,
@@ -217,6 +233,38 @@ class BackgroundMicService : Service() {
             } catch (e: Exception) {
             }
             return
+        }
+        // Screen sawaal background me bhi (v2.22): user kisi app
+        // me ho, Flora usi app ki screen dekh kar BOL KAR jawab
+        // degi — app aage laye bina. Execution command nahi hai,
+        // isliye confirmation rule yahan nahi tootta (sirf dekhna
+        // + bolna). Screenshot/key na mile to seedha batao.
+        if (isScreenQuestion(lower)) {
+            val jpeg = try {
+                FloraAutomationService.instance?.screenshotJpeg()
+            } catch (e: Exception) {
+                null
+            }
+            val key = try { prefs.geminiApiKey() } catch (e: Exception) { "" }
+            if (jpeg != null && key.isNotEmpty()) {
+                val reply = try {
+                    VisionClient().askAboutImage(question, jpeg, key)
+                } catch (e: Exception) {
+                    null
+                }
+                voice?.speak(reply?.take(500) ?: "Is baar dekh nahi payi — dobara boliye.")
+                return
+            }
+            if (jpeg == null && FloraAutomationService.isEnabled().not()) {
+                voice?.speak("Screen dekhne ke liye Accessibility ek baar ON karna hoga, Settings me. Uske baad main kisi bhi app se dekh kar bata dungi.")
+                return
+            }
+            if (key.isEmpty()) {
+                voice?.speak("Screen dekhne ke liye Settings me apni free Gemini key daaliye.")
+                return
+            }
+            // Screenshot fail (screen off/locked jaisa): neeche
+            // brain wala general raasta chalega.
         }
         // Image (Pollinations, bina key): background me bhi banegi.
         if (lower.startsWith("image banao ") || lower.startsWith("photo banao ")) {

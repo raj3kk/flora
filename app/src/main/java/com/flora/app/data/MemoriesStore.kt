@@ -16,15 +16,25 @@ private val Context.memoriesDataStore: DataStore<Preferences> by preferencesData
 
 /**
  * Yaadein (Memories): on-device only, stored as a JSON array in
- * DataStore on this phone. Nothing is sent to any server, backup, or
- * message. Edit = replace at index; delete = remove at index.
+ * DataStore on this phone, ENCRYPTED with MemoryCrypto (KeyStore
+ * AES/GCM) — file haath lag bhi jaye to sirf Flora hi padh
+ * sakti hai. Nothing is sent to any server, backup, or message.
+ * Purana plain data migration: decrypt fail ho to plain samajh
+ * kar padha jata hai, agle save par encrypted ho jata hai.
+ * Edit = replace at index; delete = remove at index.
  */
 class MemoriesStore(private val context: Context) {
 
     private val key = stringPreferencesKey("memories_json")
 
+    /** Ciphertext ko plain me badlo; fail ho to raw (purana plain). */
+    private fun decode(raw: String): String = MemoryCrypto.decrypt(raw) ?: raw
+
+    /** Plain ko ciphertext me badlo; fail ho to plain (data safe). */
+    private fun encode(json: String): String = MemoryCrypto.encrypt(json) ?: json
+
     val items: Flow<List<String>> = context.memoriesDataStore.data.map { prefs ->
-        val raw = prefs[key] ?: "[]"
+        val raw = decode(prefs[key] ?: "[]")
         val out = mutableListOf<String>()
         try {
             val arr = JSONArray(raw)
@@ -43,7 +53,7 @@ class MemoriesStore(private val context: Context) {
     // purani entries (plain strings) ka ts null rehta hai — unko
     // prune kabhi delete nahi karega (date pata hi nahi hai).
     private suspend fun loadPairs(): MutableList<Pair<String, Long?>> {
-        val raw = context.memoriesDataStore.data.map { it[key] ?: "[]" }.first()
+        val raw = decode(context.memoriesDataStore.data.map { it[key] ?: "[]" }.first())
         val out = mutableListOf<Pair<String, Long?>>()
         try {
             val arr = JSONArray(raw)
@@ -67,13 +77,13 @@ class MemoriesStore(private val context: Context) {
             if (ts != null) arr.put(JSONObject().put("text", text).put("ts", ts))
             else arr.put(text)
         }
-        context.memoriesDataStore.edit { it[key] = arr.toString() }
+        context.memoriesDataStore.edit { it[key] = encode(arr.toString()) }
     }
 
     private suspend fun save(list: List<String>) {
         val arr = JSONArray()
         list.forEach { arr.put(it) }
-        context.memoriesDataStore.edit { it[key] = arr.toString() }
+        context.memoriesDataStore.edit { it[key] = encode(arr.toString()) }
     }
 
     suspend fun add(text: String) {

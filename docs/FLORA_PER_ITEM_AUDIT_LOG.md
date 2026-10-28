@@ -837,3 +837,9 @@ maujood, index bhi 200. Download page ab live hai.
 - User order: Allow tap khatam karo, one-time setup ke baad sab bol kar. Imaandari: MediaProjection Allow Flora khud NAHI daba sakti (OS hard rule, self-grant band hai).
 - Raasta: Accessibility takeScreenshot (API 30+) — one-time setup (Settings → Accessibility ON + Android 13+ restricted-settings toggle, user khud, ek baar) ke baad har "screen dekho" bina dialog/tap ke. Sirf bolne par capture, kabhi passive nahi; secure windows black.
 - Code: FloraAutomationService.screenshotJpeg() + FloraApp.lookAtScreen/LiveScreen.ask() me pehle try + fallback session path + "screen share chalu" par dialog skip. Service header ka purana "never screenshotted" comment naye rule se badla gaya.
+
+## Full-autonomy chunk 1 (2026-10-28 ~19:25 IST, CI PENDING)
+- Encrypted memories: MemoryCrypto (KeyStore AES/GCM) + MemoriesStore value encrypt/decrypt; purana plain data migration-safe (decrypt fail → plain padho, agle save par encrypt). File copy hone par bhi sirf Flora padh sakti hai.
+- Background screen-Q&A: BackgroundMicService.handleHeard me screen sawaal (screen/is app/kya karu) par accessibility screenshot + vision + TTS jawab, app aage laye bina. Accessibility OFF/key missing ho to seedha batao. Execution commands abhi bhi bring-forward + confirmation (rule nahi toota).
+- Website dropdown: 8 pages (index/signup/login/account/pay/pricing/admin/download) par "Sab pages" dropdown — saare pages ek jagah se. admin-draft ka apna nav nahi (admin par redirect hai).
+- Baaki mega-order items (overlay mic button, code-likho branch, website-link hosting faisla, Chrome/GitHub/Vercel flow, journal/docs encryption, hisaab branch) agle chunks + user faislon par — plan doc me darj hoga.
