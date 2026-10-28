@@ -34,8 +34,8 @@ class VisionClient {
         withContext(Dispatchers.IO) {
             if (key.isEmpty()) return@withContext null
             val discovered = discoverVisionModels(key)
-            val models = if (discovered.isNotEmpty()) discovered.take(3) else
-                listOf("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash")
+            val models = if (discovered.isNotEmpty()) discovered.take(6) else
+                listOf("gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash")
             for (model in models) {
                 val reply = tryOne(prompt, jpeg, key, model)
                 if (reply != null) return@withContext reply

@@ -55,12 +55,15 @@ class BrainClient(private val prefs: FloraPreferences) {
                     "Settings me meri line jod do, phir main sab kuch " +
                     "achhe se bata paungi. Tab tak kuch halka poochho na!"
         }
-        // v2.15 root-cause fix: purane model names band ho chuke
-        // hain (Gemini 1.5-flash retired, Groq llama-3.1-8b-instant
-        // 16 Aug 2026 ko free/dev tier se hata) — isliye key sahi
-        // hone par bhi har lane 404 de rahi thi, aur app use
-        // "network error" bata raha tha. Ab naye model names +
-        // har lane ka asli code report hota hai.
+        // v2.22 model-chain fix (user ki key par 2026-10-28 ko
+        // live verify): gemini-2.5-flash aur 2.5-flash-lite is key
+        // par 404 dete hain (do baar check), jabki
+        // gemini-flash-lite-latest, gemini-3-flash-preview aur
+        // gemini-3.5-flash 200 par chalte hain. Pehle chain sirf
+        // 3 models tak jaati thi — working model chautha tha, isliye
+        // baat kabhi banti hi nahi thi. Ab 6 tak try + har failure
+        // par agla (quota bhi per-model hota hai, isliye 429 par
+        // bhi rukna galat tha). Key ki value kahin log nahi hoti.
         val laneCodes = mutableListOf<Pair<String, Int>>()
         val reply = geminiAsk(prompt, keys[0], laneCodes, memoryContext)
             ?: geminiAsk(prompt, keys[1], laneCodes, memoryContext)
@@ -180,8 +183,8 @@ class BrainClient(private val prefs: FloraPreferences) {
         // list se poochho, phir unhi me se flash-prefer karke
         // try karo. List na mile to purani fallback list.
         val discovered = discoverGeminiModels(key)
-        val models = if (discovered.isNotEmpty()) discovered.take(3) else
-            listOf("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash")
+        val models = if (discovered.isNotEmpty()) discovered.take(6) else
+            listOf("gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash")
         for (model in models) {
             val body = JSONObject()
                 .put("contents", JSONArray().put(
@@ -208,10 +211,9 @@ class BrainClient(private val prefs: FloraPreferences) {
             )
             laneCodes += ("Gemini $model" to result.code)
             val text = result.body ?: continue
-            if (result.code !in 200..299) {
-                if (result.code == 404) continue
-                return null
-            }
+            // v2.22: koi bhi failure (404/429/network) agle model
+            // par jao — rukna hi asli bug tha.
+            if (result.code !in 200..299) continue
             val reply = try {
                 JSONObject(text).optJSONArray("candidates")
                     ?.optJSONObject(0)?.optJSONObject("content")
@@ -315,10 +317,7 @@ class BrainClient(private val prefs: FloraPreferences) {
             )
             laneCodes += ("Groq $model" to result.code)
             val text = result.body ?: continue
-            if (result.code !in 200..299) {
-                if (result.code == 404) continue
-                return null
-            }
+            if (result.code !in 200..299) continue
             val reply = try {
                 JSONObject(text).optJSONArray("choices")
                     ?.optJSONObject(0)?.optJSONObject("message")?.optString("content", "")

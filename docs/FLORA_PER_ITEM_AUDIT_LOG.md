@@ -819,3 +819,9 @@ maujood, index bhi 200. Download page ab live hai.
 - Continuous 10-frame cap HATA DIYA (user order): ab ROKO dabane tak chalega, har 10 sec ek frame (har frame = user key par 1 Gemini call, isliye gap rakha hai).
 - brain-proxy (repo only): Gemini chain flash -> lite (deploy pending).
 - NOTE: ye fixes code me hain, phone tak v2.22 final ke saath aayenge (single-deploy order barkarar).
+
+## Model chain + voice compound + echo guard (2026-10-28 ~18:40 IST, CI PENDING)
+- MODEL CHECK (user ki di hui key se live, key kahin save nahi): models-list 200 (35 models); gemini-2.5-flash 404 (do baar), 2.5-flash-lite 404, gemini-flash-latest network fail; CHALTE HAIN: gemini-flash-lite-latest (200), gemini-3-flash-preview (200), gemini-3.5-flash (200). "Baat nahi" ki jad: chain sirf 3 models tak jaati thi, working model chautha tha.
+- Fix: BrainClient + VisionClient take(3)->take(6), har failure par agla (429 par bhi — quota per-model hota hai), fallback list me flash-lite-latest + 3.5-flash pehle. brain-proxy chain me bhi ye 2 models jude (repo only, deploy pending).
+- VOICE DIAGNOSIS: (1) Compound command ("X kholo aur Y karo") pehle sirf pehla hissa chalata tha, baaki drop — ab compound parser: app kholo + 2.5s baad doosra hissa usi sendChat se (call/sms ka confirm niyam doosre hisse par barkarar). (2) Repeat loop ka sabse bada candidate: barge-in Flora ki apni awaaz ko transcript samajh kar dobara bolta tha — ab echo guard (aakhri Flora message se overlap par ignore). (3) Background me command execute NAHI hota by design (ek-confirmation niyam): service Flora ko aage la kar confirm karwati hai; Auto Mode ON ho to confirm bina kholega. STANDBY/TAKEOVER wiring sahi hai (double-listening nahi).
+- NOTE: user ki key app ke Settings me user ko khud daalni hogi — assistant ne key kahin save nahi ki, phone par tabhi chalegi jab Settings me wahi working key ho.

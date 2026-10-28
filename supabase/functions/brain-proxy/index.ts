@@ -47,8 +47,9 @@ serve(async (req) => {
 
   const geminiKey = Deno.env.get("GEMINI_API_KEY") || "";
   if (geminiKey) {
-    // v2.22: ek model sadne par chain (Maya wala tareeqa) — flash, phir lite.
-    for (const model of ["gemini-2.5-flash", "gemini-2.5-flash-lite"]) {
+    // v2.22: chain me verified-working models bhi (user key par
+    // 2.5-flash/lite 404 dete hain; flash-lite-latest + 3.5 chalte hain).
+    for (const model of ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash"]) {
       try {
         const r = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,

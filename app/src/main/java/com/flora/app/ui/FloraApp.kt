@@ -463,7 +463,20 @@ fun FloraApp(
                         scope.launch {
                             bargeIn.stop()
                             voice.stop()
-                            sendChatHolder[0]?.invoke(transcript)
+                            // Echo guard (v2.22): Flora ki apni awaaz
+                            // speaker se mic me aakar transcript ban
+                            // jaye to use ignore karo — warna Flora
+                            // apni hi baat par dobara bolegi (repeat
+                            // loop). Aakhri Flora message se milao.
+                            val spoken = transcript.trim().lowercase()
+                            val lastFlora = messages.lastOrNull { !it.fromUser }
+                                ?.text?.removePrefix("Flora:")?.trim()?.lowercase() ?: ""
+                            val words = spoken.split(" ").filter { it.isNotBlank() }
+                            val overlap = if (words.isEmpty()) 0 else
+                                words.count { it in lastFlora.split(" ") }
+                            val echo = spoken.isNotEmpty() && lastFlora.isNotEmpty() &&
+                                (lastFlora.contains(spoken) || overlap * 2 >= words.size)
+                            if (!echo) sendChatHolder[0]?.invoke(transcript)
                         }
                     }
                 } catch (e: Exception) {
@@ -1884,6 +1897,56 @@ fun FloraApp(
                             }
                         }
                         return
+                    }
+                    // Compound voice (v2.22): "X kholo aur <kaam>" /
+                    // "kholo X aur <kaam>" / "... phir <kaam>" — pehla
+                    // hissa app kholega, doosra hissa usi sendChat se
+                    // chalega, taaki ek command par ek kaam karke
+                    // rukna band ho. App kholna direct + logged hai
+                    // (wapas liya ja sakta hai); call/sms ka confirm
+                    // niyam doosre hisse par phir bhi lagu rahega.
+                    val sep = when {
+                        lower.contains(" aur ") -> " aur "
+                        lower.contains(" phir ") -> " phir "
+                        else -> null
+                    }
+                    if (sep != null) {
+                        val first = lower.substringBefore(sep).trim()
+                        val rest = lower.substringAfter(sep).trim()
+                        val appName = when {
+                            first.startsWith("open ") || first.startsWith("kholo ") ->
+                                first.substringAfter(" ").trim()
+                            first.endsWith(" kholo") &&
+                                first !in setOf("camera kholo", "yaadein kholo", "memories kholo") &&
+                                !first.startsWith("chrome me ") && !first.startsWith("website ") ->
+                                first.removeSuffix(" kholo").trim()
+                            else -> ""
+                        }
+                        if (appName.isNotEmpty() && rest.isNotEmpty()) {
+                            input = ""
+                            val matches = AppLauncher.findByName(appContext, appName)
+                            when {
+                                matches.isEmpty() -> {
+                                    val msg = "'$appName' naam ki app nahi mili, naam dobara boliye."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                }
+                                matches.size > 1 -> {
+                                    val names = matches.take(3).joinToString(", ") { it.label }
+                                    val msg = "Ek se zyada app mili: $names. Poora naam boliye."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                }
+                                else -> {
+                                    autoExecuteOpen(matches[0])
+                                    scope.launch {
+                                        delay(2500)
+                                        sendChatHolder[0]?.invoke(rest)
+                                    }
+                                }
+                            }
+                            return
+                        }
                     }
                     // Voice: "open <app>" / "kholo <app>" — ek confirmation, phir app khul jayegi.
                     if (lower.startsWith("open ") || lower.startsWith("kholo ")) {
