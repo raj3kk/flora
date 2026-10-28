@@ -958,7 +958,36 @@ fun FloraApp(
                 // Clarification ke baad kaam chalana (v2.22): confirm
                 // ya auto flow — call/sms branches jaisa hi.
                 fun runContactAction(number: String, action: String, text: String) {
-                    if (action == "call") {
+                    if (action == "whatsapp") {
+                        // wa.me chat kholo, message bhara hua — Send
+                        // user dabata hai (silent send kabhi nahi).
+                        val digitsOnly = number.filter { it.isDigit() }
+                        val waNumber = if (digitsOnly.length == 10) "91$digitsOnly" else digitsOnly
+                        if (waNumber.length < 11) {
+                            val msg = "WhatsApp ke liye poora number chahiye (10 digit ya country code ke saath)."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else {
+                            try {
+                                val uri = android.net.Uri.parse(
+                                    "https://wa.me/$waNumber?text=" +
+                                        android.net.Uri.encode(text)
+                                )
+                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                    data = uri
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                appContext.startActivity(intent)
+                                val msg = "WhatsApp khol diya hai, message likha hua milega — Send dabate hi jayega."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            } catch (e: Exception) {
+                                val msg = "WhatsApp nahi khul paya — kya WhatsApp installed hai?"
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                    } else if (action == "call") {
                         if (autoMode && AutoActions.hasCallPermission(appContext)) {
                             autoExecuteCall(number)
                         } else {
@@ -1010,6 +1039,7 @@ fun FloraApp(
                         val ansLower = question.lowercase()
                         val isNewCommand = ansLower.startsWith("call ") ||
                             ansLower.startsWith("sms ") ||
+                            ansLower.startsWith("whatsapp ") ||
                             ansLower.startsWith("auto mode") ||
                             ansLower == "romantic mode" ||
                             ansLower == "normal mode"
@@ -1630,6 +1660,63 @@ fun FloraApp(
                                         }
                                         ContactResolver.Result.NotFound -> {
                                             pendingContact = PendingContact(parts[0], emptyList(), "sms", text)
+                                            val msg = "Contacts me '${parts[0]}' nahi mila — poora number de do, ya sahi naam batao, main yaad rakh lungi."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                        ContactResolver.Result.NoPermission -> {
+                                            val msg = "Contacts permission nahi mili — Settings se Contacts permission do, ya poora number likho."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        return
+                    }
+                    // Voice: "whatsapp karo <naam> <message>" (v2.22,
+                    // P4-F3): SMS wale raaste par — naam resolve
+                    // (seekha/exact/poochho), phir WhatsApp chat
+                    // kholta hai, message pehle se bhara hua.
+                    // Flora kabhi chhupke WhatsApp nahi bhejti —
+                    // Send user khud dabata hai (koi official API
+                    // nahi hai, isliye yehi imaandari wala raasta hai).
+                    if (lower.startsWith("whatsapp karo ")) {
+                        val rest = question.substring(14).trim()
+                        val parts = rest.split(" ", limit = 2)
+                        input = ""
+                        if (parts.size < 2) {
+                            val msg = "Aise boliye: 'whatsapp karo Ram kal milte hain'."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else {
+                            val firstDigits = parts[0].filter { it.isDigit() || it == '+' }
+                            val text = parts[1]
+                            if (firstDigits.length >= 7) {
+                                runContactAction(firstDigits, "whatsapp", text)
+                            } else {
+                                scope.launch {
+                                    when (val res = ContactResolver.resolve(appContext, prefs, parts[0])) {
+                                        is ContactResolver.Result.Resolved -> {
+                                            val foundDigits = res.number.filter { it.isDigit() || it == '+' }
+                                            if (foundDigits.length < 7) {
+                                                val msg = "Contacts me '${parts[0]}' ka number poora nahi mila — poora number likhiye."
+                                                messages = messages + ChatMsg("Flora: $msg", false)
+                                                voice.speak(msg)
+                                            } else {
+                                                runContactAction(foundDigits, "whatsapp", text)
+                                            }
+                                        }
+                                        is ContactResolver.Result.Ambiguous -> {
+                                            pendingContact = PendingContact(parts[0], res.candidates, "whatsapp", text)
+                                            val names = res.candidates.joinToString(", ") { it.name }
+                                            val msg = "'${parts[0]}' naam ke kai log mile — $names. Kisko WhatsApp karun? Naam bolo ya pehla/doosra bolo."
+                                            messages = messages + ChatMsg("Flora: $msg", false)
+                                            voice.speak(msg)
+                                        }
+                                        ContactResolver.Result.NotFound -> {
+                                            pendingContact = PendingContact(parts[0], emptyList(), "whatsapp", text)
                                             val msg = "Contacts me '${parts[0]}' nahi mila — poora number de do, ya sahi naam batao, main yaad rakh lungi."
                                             messages = messages + ChatMsg("Flora: $msg", false)
                                             voice.speak(msg)

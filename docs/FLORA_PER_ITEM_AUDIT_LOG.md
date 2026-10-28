@@ -727,3 +727,8 @@ maujood, index bhi 200. Download page ab live hai.
 - "image share karo" / "aakhri image share karo" → Gallery/Flora ki aakhri image (MediaStore, DATE_ADDED DESC) ko ACTION_SEND share sheet se bhejta hai. App user khud chunta hai — share sheet hi confirm hai; Flora kabhi chhupke post nahi karti. Koi image na ho to pehle "image banao" ka raasta batata hai.
 - Audit: MediaStore import joda gaya (pehle nahi tha — push se pehle pakda gaya); brace/paren balance.
 - CI GOOD NEWS: b91ff250 (bargeIn fix) + 802199dc (notification query) dono SUCCESS — fail chain toot gayi hai.
+
+## v2.22 P4-F3 poora — WhatsApp message voice (2026-10-28 ~19:05 IST, CI PENDING)
+- "whatsapp karo <naam> <message>" → SMS wale raaste par (ContactResolver: seekha/exact/poochho; pending clarification bhi whatsapp action se chalta hai; naya whatsapp command purana pending khatam karta hai) → wa.me chat kholta hai, message bhara hua, Send user dabata hai.
+- Imaandari: Flora kabhi chhupke WhatsApp nahi bhejti (koi official API nahi) — yehi raasta hai. 10-digit number par 91 lagta hai. Prefix length verify (whatsapp karo = 14); brace/paren balance.
+- P4-F2 note: call voice-answer code pehle se hai (FloraInCallService: dialer role + callTalk pref → answer + speaker + greeting) — phone test hi baaki proof hai, naya code nahi.
