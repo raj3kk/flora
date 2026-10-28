@@ -9,6 +9,7 @@ import android.os.IBinder
 import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.flora.app.MainActivity
 import com.flora.app.security.BiometricTemplates
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -98,6 +99,25 @@ class WakeWordService : Service() {
                 if (now - lastWakeMs > 10_000) {
                     lastWakeMs = now
                     tts?.speak("Haan, boliye", TextToSpeech.QUEUE_FLUSH, null, "wake")
+                    // Background baat (v2.14): app ko aage lao taaki
+                    // continuous mic se baat shuru ho jaye. MainActivity
+                    // "flora_wake" dekh kar isi session ke liye sunna
+                    // shuru karega (2s baad, greeting ke baad).
+                    try {
+                        val launch = Intent(
+                            this@WakeWordService,
+                            MainActivity::class.java,
+                        ).apply {
+                            addFlags(
+                                Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            )
+                            putExtra("flora_wake", true)
+                        }
+                        startActivity(launch)
+                    } catch (e: Exception) {
+                    }
                 }
             }
         }

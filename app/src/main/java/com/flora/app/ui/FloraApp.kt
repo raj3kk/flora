@@ -127,8 +127,19 @@ fun FloraApp(
     docsStore: DocsStore,
     voiceResult: MutableState<String>,
     onMicRequest: () -> Unit,
+    // Continuous mic (v2.14): MainActivity ka listener + state.
+    voiceCommand: MutableState<String>,
+    listeningState: MutableState<Boolean>,
+    speakingState: MutableState<Boolean>,
+    onContinuousStart: () -> Unit,
+    onContinuousStop: () -> Unit,
 ) {
     var screen by remember { mutableStateOf(Screen.CHAT) }
+    // Continuous mic (v2.14): toggle state + sendChat holder (local
+    // fun baad me declare hota hai, isliye effect holder se call
+    // karta hai — hook order ke liye effect yahan, call holder se).
+    var continuousOn by remember { mutableStateOf(false) }
+    val sendChatHolder = remember { arrayOfNulls<((String) -> Unit)>(1) }
     // Theme state (v1.9): states block me, launcher se pehle.
     var theme by remember { mutableStateOf("light") }
     var messages by remember { mutableStateOf(listOf(ChatMsg("Namaste! Main Flora hun. Kya madad kar sakti hun?", false))) }
@@ -330,6 +341,8 @@ fun FloraApp(
 
     LaunchedEffect(Unit) {
         faceLockOn = prefs.faceLock()
+        // Continuous mic toggle ki shuruati haalat prefs se.
+        try { continuousOn = prefs.continuousMic() } catch (e: Exception) { }
     }
     LaunchedEffect(screen) {
         if (screen == Screen.CHAT) faceLockOn = prefs.faceLock()
@@ -340,6 +353,17 @@ fun FloraApp(
         if (spoken.isNotEmpty()) {
             input = spoken
             voiceResult.value = ""
+        }
+    }
+
+    // Continuous mic (v2.14): suni hui baat seedha sendChat ko —
+    // user ko Bhejo dabana nahi padta. busy ho to us baat ko chhod
+    // do (dobara sunna TTS-done par phir shuru hoga).
+    LaunchedEffect(voiceCommand.value) {
+        val spoken = voiceCommand.value
+        if (spoken.isNotEmpty()) {
+            voiceCommand.value = ""
+            if (!busy) sendChatHolder[0]?.invoke(spoken)
         }
     }
 
@@ -354,6 +378,18 @@ fun FloraApp(
                     scope.launch {
                         try { prefs.setPermissionsGateDone(true) } catch (e: Exception) { }
                         showGate = false
+                        // Continuous mic (v2.14): wizard poora hote hi,
+                        // mic mila ho to sunna apne aap shuru — mute
+                        // dabane tak. Mute ki pasand prefs me rehti hai.
+                        try {
+                            val micOk = ContextCompat.checkSelfPermission(
+                                appContext, Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (prefs.continuousMic() && micOk) {
+                                continuousOn = true
+                                onContinuousStart()
+                            }
+                        } catch (e: Exception) { }
                     }
                 },
             )
@@ -522,343 +558,393 @@ fun FloraApp(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Row {
-                    Button(
-                        onClick = {
-                            val question = input.trim()
-                            if (question.isEmpty() || busy) return@Button
-                            // Voice command, one confirmation, full execution, spoken
-                            // commentary — no stopping at intermediate steps to ask again.
-                            // "call <number>" / "call <naam>" / "sms <number|naam> <message>".
-                            val lower = question.lowercase()
-                            if (lower.startsWith("call ")) {
-                                val raw = question.substring(5).trim()
-                                val number = raw.filter { it.isDigit() || it == '+' }
-                                input = ""
-                                if (number.length >= 7) {
+                // sendChat (v2.14): Bhejo button ka pipeline, ab continuous
+                // mic bhi isi se auto-send karta hai. Holder ke zariye
+                // upar ke LaunchedEffect se call hota hai.
+                fun sendChat(questionRaw: String) {
+                    val question = questionRaw.trim()
+                    if (question.isEmpty() || busy) return
+                    // Voice command, one confirmation, full execution, spoken
+                    // commentary — no stopping at intermediate steps to ask again.
+                    // "call <number>" / "call <naam>" / "sms <number|naam> <message>".
+                    val lower = question.lowercase()
+                    if (lower.startsWith("call ")) {
+                        val raw = question.substring(5).trim()
+                        val number = raw.filter { it.isDigit() || it == '+' }
+                        input = ""
+                        if (number.length >= 7) {
+                            messages = messages + ChatMsg(
+                                "Flora: Theek hai, $number par call laga raha hun — ek baar confirm kijiye.", false
+                            )
+                            voice.speak("Theek hai, call laga raha hun, ek baar confirm kijiye.")
+                            if (AutoActions.hasCallPermission(appContext)) {
+                                voiceCallConfirm = number
+                            } else {
+                                pendingVoiceCallRequest = number
+                                voicePermissionLauncher.launch(
+                                    arrayOf(Manifest.permission.CALL_PHONE)
+                                )
+                            }
+                        } else if (raw.isNotEmpty()) {
+                            // Naam se number (v2.13): Contacts me dhoondho,
+                            // phir wahi confirmation flow.
+                            scope.launch {
+                                val found = ContactLookup.findNumber(appContext, raw)
+                                val foundDigits = found?.filter { it.isDigit() || it == '+' } ?: ""
+                                if (foundDigits.length < 7) {
+                                    val msg = "Contacts me '$raw' nahi mila — poora number " +
+                                        "likhiye, ya Contacts permission dijiye."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else {
                                     messages = messages + ChatMsg(
-                                        "Flora: Theek hai, $number par call laga raha hun — ek baar confirm kijiye.", false
+                                        "Flora: Theek hai, $raw ($foundDigits) par call laga raha hun — ek baar confirm kijiye.", false
                                     )
                                     voice.speak("Theek hai, call laga raha hun, ek baar confirm kijiye.")
                                     if (AutoActions.hasCallPermission(appContext)) {
-                                        voiceCallConfirm = number
+                                        voiceCallConfirm = foundDigits
                                     } else {
-                                        pendingVoiceCallRequest = number
+                                        pendingVoiceCallRequest = foundDigits
                                         voicePermissionLauncher.launch(
                                             arrayOf(Manifest.permission.CALL_PHONE)
                                         )
                                     }
-                                } else if (raw.isNotEmpty()) {
-                                    // Naam se number (v2.13): Contacts me dhoondho,
-                                    // phir wahi confirmation flow.
-                                    scope.launch {
-                                        val found = ContactLookup.findNumber(appContext, raw)
-                                        val foundDigits = found?.filter { it.isDigit() || it == '+' } ?: ""
-                                        if (foundDigits.length < 7) {
-                                            val msg = "Contacts me '$raw' nahi mila — poora number " +
-                                                "likhiye, ya Contacts permission dijiye."
-                                            messages = messages + ChatMsg("Flora: $msg", false)
-                                            voice.speak(msg)
-                                        } else {
-                                            messages = messages + ChatMsg(
-                                                "Flora: Theek hai, $raw ($foundDigits) par call laga raha hun — ek baar confirm kijiye.", false
-                                            )
-                                            voice.speak("Theek hai, call laga raha hun, ek baar confirm kijiye.")
-                                            if (AutoActions.hasCallPermission(appContext)) {
-                                                voiceCallConfirm = foundDigits
-                                            } else {
-                                                pendingVoiceCallRequest = foundDigits
-                                                voicePermissionLauncher.launch(
-                                                    arrayOf(Manifest.permission.CALL_PHONE)
-                                                )
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    val msg = "Number poora likhiye, jaise 'call 9876543210'."
-                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                    voice.speak(msg)
                                 }
-                                return@Button
                             }
-                            if (lower.startsWith("sms ")) {
-                                val rest = question.substring(4).trim()
-                                val parts = rest.split(" ", limit = 2)
-                                input = ""
-                                if (parts.size < 2) {
-                                    val msg = "Aise likhiye: 'sms 9876543210 aapka message'."
-                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                    voice.speak(msg)
+                        } else {
+                            val msg = "Number poora likhiye, jaise 'call 9876543210'."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        }
+                        return
+                    }
+                    if (lower.startsWith("sms ")) {
+                        val rest = question.substring(4).trim()
+                        val parts = rest.split(" ", limit = 2)
+                        input = ""
+                        if (parts.size < 2) {
+                            val msg = "Aise likhiye: 'sms 9876543210 aapka message'."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else {
+                            val firstDigits = parts[0].filter { it.isDigit() || it == '+' }
+                            val text = parts[1]
+                            if (firstDigits.length >= 7) {
+                                messages = messages + ChatMsg(
+                                    "Flora: Theek hai, $firstDigits par SMS bhej raha hun — ek baar confirm kijiye.", false
+                                )
+                                voice.speak("Theek hai, SMS bhej raha hun, ek baar confirm kijiye.")
+                                if (AutoActions.hasSmsPermission(appContext)) {
+                                    voiceSmsConfirm = firstDigits to text
                                 } else {
-                                    val firstDigits = parts[0].filter { it.isDigit() || it == '+' }
-                                    val text = parts[1]
-                                    if (firstDigits.length >= 7) {
+                                    pendingVoiceSmsRequest = firstDigits to text
+                                    voicePermissionLauncher.launch(
+                                        arrayOf(Manifest.permission.SEND_SMS)
+                                    )
+                                }
+                            } else {
+                                scope.launch {
+                                    val found = ContactLookup.findNumber(appContext, parts[0])
+                                    val foundDigits = found?.filter { it.isDigit() || it == '+' } ?: ""
+                                    if (foundDigits.length < 7) {
+                                        val msg = "Contacts me '${parts[0]}' nahi mila — poora " +
+                                            "number likhiye, ya Contacts permission dijiye."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
+                                    } else {
                                         messages = messages + ChatMsg(
-                                            "Flora: Theek hai, $firstDigits par SMS bhej raha hun — ek baar confirm kijiye.", false
+                                            "Flora: Theek hai, ${parts[0]} ($foundDigits) par SMS bhej raha hun — ek baar confirm kijiye.", false
                                         )
                                         voice.speak("Theek hai, SMS bhej raha hun, ek baar confirm kijiye.")
                                         if (AutoActions.hasSmsPermission(appContext)) {
-                                            voiceSmsConfirm = firstDigits to text
+                                            voiceSmsConfirm = foundDigits to text
                                         } else {
-                                            pendingVoiceSmsRequest = firstDigits to text
+                                            pendingVoiceSmsRequest = foundDigits to text
                                             voicePermissionLauncher.launch(
                                                 arrayOf(Manifest.permission.SEND_SMS)
                                             )
                                         }
+                                    }
+                                }
+                            }
+                        }
+                        return
+                    }
+                    // Voice: "open <app>" / "kholo <app>" — ek confirmation, phir app khul jayegi.
+                    if (lower.startsWith("open ") || lower.startsWith("kholo ")) {
+                        val name = question.substringAfter(" ").trim()
+                        input = ""
+                        val matches = AppLauncher.findByName(appContext, name)
+                        when {
+                            matches.isEmpty() -> {
+                                val msg = "'$name' naam ki app nahi mili, naam dobara boliye."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                            matches.size == 1 -> {
+                                val app = matches[0]
+                                messages = messages + ChatMsg(
+                                    "Flora: Theek hai, ${app.label} khol raha hun — ek baar confirm kijiye.", false
+                                )
+                                voice.speak("Theek hai, ${app.label} khol raha hun, ek baar confirm kijiye.")
+                                voiceAppConfirm = app
+                            }
+                            else -> {
+                                val names = matches.take(3).joinToString(", ") { it.label }
+                                val msg = "Ek se zyada app mili: $names. Poora naam boliye ya Auto screen se chuniye."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                            }
+                        }
+                        return
+                    }
+                    // Voice: "chrome me <site> kholo" / "website kholo <site>".
+                    if (lower.startsWith("chrome me ") || lower.startsWith("website kholo ") ||
+                        lower.startsWith("website ")
+                    ) {
+                        val site = question.substringAfter("kholo", "")
+                            .trim().ifEmpty { question.substringAfter("me", "").trim() }
+                        input = ""
+                        if (site.isBlank()) {
+                            val msg = "Kaun si website kholu? Naam boliye, jaise 'chrome me example.com kholo'."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else if (AppLauncher.openWebsite(appContext, site)) {
+                            val msg = "$site khol raha hun."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else {
+                            val msg = "Website nahi khul payi."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        }
+                        return
+                    }
+                    // Voice: "gaana bajao <song>" — YouTube search kholo.
+                    if (lower.startsWith("gaana bajao ") || lower.startsWith("gaana chalao ")) {
+                        val song = question.substringAfter("bajao", "").trim()
+                            .ifEmpty { question.substringAfter("chalao", "").trim() }
+                        input = ""
+                        if (song.isBlank()) {
+                            val msg = "Kaun sa gaana bajau? Naam boliye."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else {
+                            AppLauncher.openWebsite(
+                                appContext,
+                                "https://www.youtube.com/results?search_query=" +
+                                    android.net.Uri.encode(song)
+                            )
+                            val msg = "$song YouTube par khol raha hun."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        }
+                        return
+                    }
+                    // Voice navigation: bolte hi screen khul jayegi, beech me koi
+                    // step nahi rukega. "photo lo" / "sos bhejo" / "yaadein kholo".
+                    if (lower == "photo lo" || lower == "scan karo" || lower == "camera kholo") {
+                        input = ""
+                        screen = Screen.SCAN
+                        val msg = "Scan khol raha hun, Photo lo dabate hi photo save ho jayegi."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        return
+                    }
+                    if (lower == "sos" || lower == "sos bhejo" || lower == "madad") {
+                        input = ""
+                        screen = Screen.SOS
+                        val msg = "SOS khol raha hun, Auto SOS se ek confirmation me call aur SMS dono ho jayenge."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        return
+                    }
+                    if (lower == "yaadein kholo" || lower == "memories kholo") {
+                        input = ""
+                        screen = Screen.MEMORIES
+                        val msg = "Yaadein khol raha hun."
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                        return
+                    }
+                    // Attachments (v1.7): file + sawaal ek saath.
+                    // Image -> vision, text/md -> brain. PDF abhi
+                    // supported nahi (koi PDF parser dependency nahi).
+                    // Talk-limit yahan bhi lagu hota hai (free cap).
+                    if (attachedUri != null) {
+                        val uri = attachedUri ?: return
+                        val mime = attachedMime
+                        val fname = attachedName
+                        val q = question
+                        attachedUri = null
+                        attachedMime = ""
+                        attachedName = ""
+                        messages = messages + ChatMsg(question, true)
+                        input = ""
+                        busy = true
+                        scope.launch {
+                            val today = java.text.SimpleDateFormat(
+                                "yyyy-MM-dd", java.util.Locale.US
+                            ).format(java.util.Date())
+                            val used = prefs.talkSecondsUsed(today)
+                            if (licence?.plan != "pro" && used >= 600) {
+                                val msg = "Aaj ka free talk time (10 minute) khatam ho gaya hai. Kal phir milega, ya Pro (₹199/month) lijiye."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                                busy = false
+                                return@launch
+                            }
+                            try {
+                                val bytes = kotlinx.coroutines.withContext(
+                                    kotlinx.coroutines.Dispatchers.IO
+                                ) {
+                                    appContext.contentResolver.openInputStream(uri)?.readBytes()
+                                }
+                                if (bytes == null || bytes.isEmpty()) {
+                                    val msg = "File padh nahi payi, dobara attach kijiye."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else if (bytes.size > 5 * 1024 * 1024) {
+                                    val msg = "File 5 MB se badi hai, chhoti file bhejo."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                } else if (mime.startsWith("image/")) {
+                                    val key = prefs.geminiApiKey()
+                                    if (key.isEmpty()) {
+                                        val msg = "Image dekhne ke liye Settings me apni free Gemini key daaliye."
+                                        messages = messages + ChatMsg("Flora: $msg", false)
+                                        voice.speak(msg)
                                     } else {
-                                        scope.launch {
-                                            val found = ContactLookup.findNumber(appContext, parts[0])
-                                            val foundDigits = found?.filter { it.isDigit() || it == '+' } ?: ""
-                                            if (foundDigits.length < 7) {
-                                                val msg = "Contacts me '${parts[0]}' nahi mila — poora " +
-                                                    "number likhiye, ya Contacts permission dijiye."
-                                                messages = messages + ChatMsg("Flora: $msg", false)
-                                                voice.speak(msg)
-                                            } else {
-                                                messages = messages + ChatMsg(
-                                                    "Flora: Theek hai, ${parts[0]} ($foundDigits) par SMS bhej raha hun — ek baar confirm kijiye.", false
-                                                )
-                                                voice.speak("Theek hai, SMS bhej raha hun, ek baar confirm kijiye.")
-                                                if (AutoActions.hasSmsPermission(appContext)) {
-                                                    voiceSmsConfirm = foundDigits to text
-                                                } else {
-                                                    pendingVoiceSmsRequest = foundDigits to text
-                                                    voicePermissionLauncher.launch(
-                                                        arrayOf(Manifest.permission.SEND_SMS)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                return@Button
-                            }
-                            // Voice: "open <app>" / "kholo <app>" — ek confirmation, phir app khul jayegi.
-                            if (lower.startsWith("open ") || lower.startsWith("kholo ")) {
-                                val name = question.substringAfter(" ").trim()
-                                input = ""
-                                val matches = AppLauncher.findByName(appContext, name)
-                                when {
-                                    matches.isEmpty() -> {
-                                        val msg = "'$name' naam ki app nahi mili, naam dobara boliye."
-                                        messages = messages + ChatMsg("Flora: $msg", false)
-                                        voice.speak(msg)
-                                    }
-                                    matches.size == 1 -> {
-                                        val app = matches[0]
-                                        messages = messages + ChatMsg(
-                                            "Flora: Theek hai, ${app.label} khol raha hun — ek baar confirm kijiye.", false
+                                        val reply = vision.askAboutImage(
+                                            if (q.isBlank()) "Is image me kya dikh raha hai, detail me batao?" else q,
+                                            bytes, key
                                         )
-                                        voice.speak("Theek hai, ${app.label} khol raha hun, ek baar confirm kijiye.")
-                                        voiceAppConfirm = app
-                                    }
-                                    else -> {
-                                        val names = matches.take(3).joinToString(", ") { it.label }
-                                        val msg = "Ek se zyada app mili: $names. Poora naam boliye ya Auto screen se chuniye."
-                                        messages = messages + ChatMsg("Flora: $msg", false)
-                                        voice.speak(msg)
-                                    }
-                                }
-                                return@Button
-                            }
-                            // Voice: "chrome me <site> kholo" / "website kholo <site>".
-                            if (lower.startsWith("chrome me ") || lower.startsWith("website kholo ") ||
-                                lower.startsWith("website ")
-                            ) {
-                                val site = question.substringAfter("kholo", "")
-                                    .trim().ifEmpty { question.substringAfter("me", "").trim() }
-                                input = ""
-                                if (site.isBlank()) {
-                                    val msg = "Kaun si website kholu? Naam boliye, jaise 'chrome me example.com kholo'."
-                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                    voice.speak(msg)
-                                } else if (AppLauncher.openWebsite(appContext, site)) {
-                                    val msg = "$site khol raha hun."
-                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                    voice.speak(msg)
-                                } else {
-                                    val msg = "Website nahi khul payi."
-                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                    voice.speak(msg)
-                                }
-                                return@Button
-                            }
-                            // Voice: "gaana bajao <song>" — YouTube search kholo.
-                            if (lower.startsWith("gaana bajao ") || lower.startsWith("gaana chalao ")) {
-                                val song = question.substringAfter("bajao", "").trim()
-                                    .ifEmpty { question.substringAfter("chalao", "").trim() }
-                                input = ""
-                                if (song.isBlank()) {
-                                    val msg = "Kaun sa gaana bajau? Naam boliye."
-                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                    voice.speak(msg)
-                                } else {
-                                    AppLauncher.openWebsite(
-                                        appContext,
-                                        "https://www.youtube.com/results?search_query=" +
-                                            android.net.Uri.encode(song)
-                                    )
-                                    val msg = "$song YouTube par khol raha hun."
-                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                    voice.speak(msg)
-                                }
-                                return@Button
-                            }
-                            // Voice navigation: bolte hi screen khul jayegi, beech me koi
-                            // step nahi rukega. "photo lo" / "sos bhejo" / "yaadein kholo".
-                            if (lower == "photo lo" || lower == "scan karo" || lower == "camera kholo") {
-                                input = ""
-                                screen = Screen.SCAN
-                                val msg = "Scan khol raha hun, Photo lo dabate hi photo save ho jayegi."
-                                messages = messages + ChatMsg("Flora: $msg", false)
-                                voice.speak(msg)
-                                return@Button
-                            }
-                            if (lower == "sos" || lower == "sos bhejo" || lower == "madad") {
-                                input = ""
-                                screen = Screen.SOS
-                                val msg = "SOS khol raha hun, Auto SOS se ek confirmation me call aur SMS dono ho jayenge."
-                                messages = messages + ChatMsg("Flora: $msg", false)
-                                voice.speak(msg)
-                                return@Button
-                            }
-                            if (lower == "yaadein kholo" || lower == "memories kholo") {
-                                input = ""
-                                screen = Screen.MEMORIES
-                                val msg = "Yaadein khol raha hun."
-                                messages = messages + ChatMsg("Flora: $msg", false)
-                                voice.speak(msg)
-                                return@Button
-                            }
-                            // Attachments (v1.7): file + sawaal ek saath.
-                            // Image -> vision, text/md -> brain. PDF abhi
-                            // supported nahi (koi PDF parser dependency nahi).
-                            // Talk-limit yahan bhi lagu hota hai (free cap).
-                            if (attachedUri != null) {
-                                val uri = attachedUri ?: return@Button
-                                val mime = attachedMime
-                                val fname = attachedName
-                                val q = question
-                                attachedUri = null
-                                attachedMime = ""
-                                attachedName = ""
-                                messages = messages + ChatMsg(question, true)
-                                input = ""
-                                busy = true
-                                scope.launch {
-                                    val today = java.text.SimpleDateFormat(
-                                        "yyyy-MM-dd", java.util.Locale.US
-                                    ).format(java.util.Date())
-                                    val used = prefs.talkSecondsUsed(today)
-                                    if (licence?.plan != "pro" && used >= 600) {
-                                        val msg = "Aaj ka free talk time (10 minute) khatam ho gaya hai. Kal phir milega, ya Pro (₹199/month) lijiye."
-                                        messages = messages + ChatMsg("Flora: $msg", false)
-                                        voice.speak(msg)
-                                        busy = false
-                                        return@launch
-                                    }
-                                    try {
-                                        val bytes = kotlinx.coroutines.withContext(
-                                            kotlinx.coroutines.Dispatchers.IO
-                                        ) {
-                                            appContext.contentResolver.openInputStream(uri)?.readBytes()
-                                        }
-                                        if (bytes == null || bytes.isEmpty()) {
-                                            val msg = "File padh nahi payi, dobara attach kijiye."
+                                        if (reply == null) {
+                                            val msg = "Image ka jawab nahi de payi, dobara koshish kijiye."
                                             messages = messages + ChatMsg("Flora: $msg", false)
                                             voice.speak(msg)
-                                        } else if (bytes.size > 5 * 1024 * 1024) {
-                                            val msg = "File 5 MB se badi hai, chhoti file bhejo."
-                                            messages = messages + ChatMsg("Flora: $msg", false)
-                                            voice.speak(msg)
-                                        } else if (mime.startsWith("image/")) {
-                                            val key = prefs.geminiApiKey()
-                                            if (key.isEmpty()) {
-                                                val msg = "Image dekhne ke liye Settings me apni free Gemini key daaliye."
-                                                messages = messages + ChatMsg("Flora: $msg", false)
-                                                voice.speak(msg)
-                                            } else {
-                                                val reply = vision.askAboutImage(
-                                                    if (q.isBlank()) "Is image me kya dikh raha hai, detail me batao?" else q,
-                                                    bytes, key
-                                                )
-                                                if (reply == null) {
-                                                    val msg = "Image ka jawab nahi de payi, dobara koshish kijiye."
-                                                    messages = messages + ChatMsg("Flora: $msg", false)
-                                                    voice.speak(msg)
-                                                } else {
-                                                    messages = messages + ChatMsg(reply, false)
-                                                    voice.speak(reply.take(500))
-                                                }
-                                            }
-                                        } else if (mime.startsWith("text/") || fname.endsWith(".md") || fname.endsWith(".txt")) {
-                                            val text = String(bytes, Charsets.UTF_8).take(8000)
-                                            val reply = brain.ask(
-                                                personaPrefix(prefs.persona()) +
-                                                    "File ka text:\n$text\n\nUser ka sawaal: " +
-                                                    if (q.isBlank()) "Is file ke baare me batao." else q
-                                            )
+                                        } else {
                                             messages = messages + ChatMsg(reply, false)
                                             voice.speak(reply.take(500))
-                                        } else {
-                                            val msg = "Ye file type abhi nahi padh sakti — image ya text/md file bhejo. PDF abhi supported nahi hai."
-                                            messages = messages + ChatMsg("Flora: $msg", false)
-                                            voice.speak(msg)
                                         }
-                                    } catch (e: Exception) {
-                                        val msg = "File padhte waqt error aaya, dobara koshish kijiye."
-                                        messages = messages + ChatMsg("Flora: $msg", false)
-                                        voice.speak(msg)
                                     }
-                                    busy = false
-                                }
-                                return@Button
-                            }
-                            messages = messages + ChatMsg(question, true)
-                            input = ""
-                            busy = true
-                            scope.launch {
-                                // Yahan ka mausam (v2.13): bina brain key ke,
-                                // phone ki location se seedha Open-Meteo.
-                                val weatherHere = lower == "yahan ka mausam" ||
-                                    lower == "mausam yahan ka" ||
-                                    lower.startsWith("yahan ka mausam ") ||
-                                    lower == "weather here"
-                                if (weatherHere) {
-                                    val reply = searchTools.weatherHere(appContext)
-                                    messages = messages + ChatMsg("Flora: $reply", false)
-                                    voice.speak(reply)
-                                    busy = false
-                                    return@launch
-                                }
-                                // Free talk limit (v1.3 audit gap fix): Pro nahi
-                                // to 600 sec/day ke baad brain jawab nahi dega.
-                                // Licence null = free mana jaata hai (safe default).
-                                val today = java.text.SimpleDateFormat(
-                                    "yyyy-MM-dd", java.util.Locale.US
-                                ).format(java.util.Date())
-                                val used = prefs.talkSecondsUsed(today)
-                                if (licence?.plan != "pro" && used >= 600) {
-                                    val msg = "Aaj ka free talk time (10 minute) khatam ho gaya hai. Kal phir milega, ya Pro (₹199/month) lijiye."
+                                } else if (mime.startsWith("text/") || fname.endsWith(".md") || fname.endsWith(".txt")) {
+                                    val text = String(bytes, Charsets.UTF_8).take(8000)
+                                    val reply = brain.ask(
+                                        personaPrefix(prefs.persona()) +
+                                            "File ka text:\n$text\n\nUser ka sawaal: " +
+                                            if (q.isBlank()) "Is file ke baare me batao." else q
+                                    )
+                                    messages = messages + ChatMsg(reply, false)
+                                    voice.speak(reply.take(500))
+                                } else {
+                                    val msg = "Ye file type abhi nahi padh sakti — image ya text/md file bhejo. PDF abhi supported nahi hai."
                                     messages = messages + ChatMsg("Flora: $msg", false)
                                     voice.speak(msg)
-                                    busy = false
-                                    return@launch
                                 }
-                                val reply = brain.ask(personaPrefix(prefs.persona()) + question)
-                                messages = messages + ChatMsg(reply, false)
-                                voice.speak(reply)
-                                busy = false
+                            } catch (e: Exception) {
+                                val msg = "File padhte waqt error aaya, dobara koshish kijiye."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
                             }
+                            busy = false
+                        }
+                        return
+                    }
+                    messages = messages + ChatMsg(question, true)
+                    input = ""
+                    busy = true
+                    scope.launch {
+                        // Yahan ka mausam (v2.13): bina brain key ke,
+                        // phone ki location se seedha Open-Meteo.
+                        val weatherHere = lower == "yahan ka mausam" ||
+                            lower == "mausam yahan ka" ||
+                            lower.startsWith("yahan ka mausam ") ||
+                            lower == "weather here"
+                        if (weatherHere) {
+                            val reply = searchTools.weatherHere(appContext)
+                            messages = messages + ChatMsg("Flora: $reply", false)
+                            voice.speak(reply)
+                            busy = false
+                            return@launch
+                        }
+                        // Free talk limit (v1.3 audit gap fix): Pro nahi
+                        // to 600 sec/day ke baad brain jawab nahi dega.
+                        // Licence null = free mana jaata hai (safe default).
+                        val today = java.text.SimpleDateFormat(
+                            "yyyy-MM-dd", java.util.Locale.US
+                        ).format(java.util.Date())
+                        val used = prefs.talkSecondsUsed(today)
+                        if (licence?.plan != "pro" && used >= 600) {
+                            val msg = "Aaj ka free talk time (10 minute) khatam ho gaya hai. Kal phir milega, ya Pro (₹199/month) lijiye."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                            busy = false
+                            return@launch
+                        }
+                        val reply = brain.ask(personaPrefix(prefs.persona()) + question)
+                        messages = messages + ChatMsg(reply, false)
+                        voice.speak(reply)
+                        busy = false
+                    }
+                }
+                sendChatHolder[0] = { q -> sendChat(q) }
+                Row {
+                    Button(
+                        onClick = {
+                            val q = input.trim()
+                            if (q.isEmpty() || busy) return@Button
+                            sendChat(q)
                         },
                         enabled = !busy
                     ) { Text(if (busy) "Soch rahi hun…" else "Bhejo") }
                     Spacer(modifier = Modifier.padding(4.dp))
                     Button(onClick = onMicRequest) { Text("Mic") }
                     Spacer(modifier = Modifier.padding(4.dp))
+                    // Continuous mic toggle (v2.14): ON = mute dabane
+                    // tak sunta rahe; OFF = mic band. Mic permission
+                    // na ho to wizard/settings se pehle deni hogi.
+                    Button(onClick = {
+                        if (continuousOn) {
+                            continuousOn = false
+                            onContinuousStop()
+                        } else {
+                            val micOk = ContextCompat.checkSelfPermission(
+                                appContext, Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (micOk) {
+                                continuousOn = true
+                                onContinuousStart()
+                            }
+                        }
+                    }) { Text(if (continuousOn) "🔇 Mute" else "🎤 Mic ON karo") }
+                    Spacer(modifier = Modifier.padding(4.dp))
                     Button(onClick = { attachLauncher.launch("*/*") }) { Text("Attach") }
                     Spacer(modifier = Modifier.padding(4.dp))
-                    Button(onClick = { voice.stop() }) { Text("Stop") }
+                    Button(onClick = {
+                        voice.stop()
+                        // Interrupt (v2.14): continuous mode me Stop
+                        // dabana matlab user kuch kehna chahta hai —
+                        // casually poochho, phir sunna apne aap shuru
+                        // hoga (TTS-done par). Manual mode me sirf roko.
+                        if (continuousOn) {
+                            val msg = "Ruk, kuch bol rahe the?"
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        }
+                    }) { Text("Stop") }
+                }
+                if (continuousOn && listeningState.value) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("🎤 Sun raha hun… (Mute dabate hi band ho jayega)")
+                }
+                if (speakingState.value) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("🔊 Bol rahi hun… (rokne ke liye Stop dabao)")
+                }
+                if (busy && !speakingState.value) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("💭 Soch rahi hun…")
                 }
                 if (attachedUri != null) {
                     Spacer(modifier = Modifier.height(8.dp))

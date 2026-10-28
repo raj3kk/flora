@@ -21,6 +21,14 @@ class VoiceEngine(context: Context) {
      */
     var onSpoken: ((Long) -> Unit)? = null
 
+    /** TTS poora bolne par (v2.14): continuous mic isi se dobara
+     * sunna shuru karta hai — taaki Flora apni awaaz khud na sune. */
+    var onSpeechDone: (() -> Unit)? = null
+
+    /** TTS shuru hote hi (v2.14): UI ko "Bol rahi hun" dikhane ke
+     * liye — taaki user ko baari ka pata rahe. */
+    var onSpeechStart: (() -> Unit)? = null
+
     init {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -28,6 +36,20 @@ class VoiceEngine(context: Context) {
                 if (hindi == TextToSpeech.LANG_MISSING_DATA || hindi == TextToSpeech.LANG_NOT_SUPPORTED) {
                     tts?.setLanguage(Locale.ENGLISH)
                 }
+                tts?.setOnUtteranceProgressListener(
+                    object : android.speech.tts.UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) {
+                            if (utteranceId == "flora-reply") onSpeechStart?.invoke()
+                        }
+                        override fun onError(utteranceId: String?) {
+                            if (utteranceId == "flora-reply") onSpeechDone?.invoke()
+                        }
+
+                        override fun onDone(utteranceId: String?) {
+                            if (utteranceId == "flora-reply") onSpeechDone?.invoke()
+                        }
+                    }
+                )
                 ready = true
             }
         }

@@ -2,8 +2,12 @@ package com.flora.app
 
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognizerIntent
+import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import com.flora.app.assistant.VoiceEngine
+import com.flora.app.voice.ContinuousListener
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
 import com.flora.app.data.DocsStore
@@ -34,6 +39,23 @@ import com.flora.app.ui.FloraApp
 class MainActivity : ComponentActivity() {
     private lateinit var voice: VoiceEngine
     private val voiceResult = mutableStateOf("")
+    // Continuous mic (v2.14): suni hui baat + sunne ki haalat.
+    private val voiceCommand = mutableStateOf("")
+    private val listeningState = mutableStateOf(false)
+    // Bolne ki haalat (v2.14): UI ko baari dikhane ke liye.
+    private val speakingState = mutableStateOf(false)
+    private var continuousListener: ContinuousListener? = null
+    private var continuousWanted = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val restartRunnable = Runnable {
+        if (continuousWanted) startContinuous()
+    }
+
+    private fun startContinuous() {
+        mainHandler.removeCallbacks(restartRunnable)
+        continuousListener?.start()
+        listeningState.value = continuousListener?.isListening() == true
+    }
 
     /**
      * Talk-seconds record karne ke liye apna scope (lifecycleScope
@@ -57,6 +79,32 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val prefs = FloraPreferences(applicationContext)
         voice = VoiceEngine(applicationContext)
+        // Continuous mic (v2.14): suno -> text FloraApp ko -> jawab
+        // bolne ke baad TTS-done par dobara suno. Error/chuppi par
+        // chhota delay, aur har result ke baad 45s safety restart.
+        continuousListener = ContinuousListener(
+            applicationContext,
+            onResult = { text ->
+                listeningState.value = false
+                voiceCommand.value = text
+                mainHandler.removeCallbacks(restartRunnable)
+                mainHandler.postDelayed(restartRunnable, 45_000)
+            },
+            onError = {
+                listeningState.value = false
+                if (continuousWanted) {
+                    mainHandler.removeCallbacks(restartRunnable)
+                    mainHandler.postDelayed(restartRunnable, 600)
+                }
+            },
+        )
+        voice.onSpeechDone = {
+            speakingState.value = false
+            if (continuousWanted) startContinuous()
+        }
+        voice.onSpeechStart = {
+            speakingState.value = true
+        }
         val licenceClient = LicenceClient(prefs)
         voice.onSpoken = { seconds ->
             talkScope.launch {
@@ -68,7 +116,7 @@ class MainActivity : ComponentActivity() {
                 // nahi (triple-count ho jayega). Fail ho to local
                 // counter hi sach hai, baat-cheet nahi rukti.
                 try {
-                    licenceClient.countUsage(prefs.userId(), seconds)
+                    licenceClient.countUsage(prefs.effectiveUserId(), seconds)
                 } catch (e: Exception) {
                 }
             }
@@ -105,12 +153,79 @@ class MainActivity : ComponentActivity() {
                     } catch (e: Exception) {
                         // No speech recognizer on device: mic button simply does nothing.
                     }
-                }
+                },
+                voiceCommand = voiceCommand,
+                listeningState = listeningState,
+                speakingState = speakingState,
+                onContinuousStart = {
+                    continuousWanted = true
+                    talkScope.launch {
+                        try { prefs.setContinuousMic(true) } catch (e: Exception) { }
+                    }
+                    startContinuous()
+                },
+                onContinuousStop = {
+                    continuousWanted = false
+                    mainHandler.removeCallbacks(restartRunnable)
+                    continuousListener?.stop()
+                    listeningState.value = false
+                    talkScope.launch {
+                        try { prefs.setContinuousMic(false) } catch (e: Exception) { }
+                    }
+                },
             )
+        }
+        // Returning user (v2.14 fix): wizard pehle se poora ho aur mic
+        // mila ho to app khulte hi sunna apne aap shuru — wizard wale
+        // user ke liye onDone raasta alag se hai (upar FloraApp me).
+        talkScope.launch {
+            try {
+                val micOk = ContextCompat.checkSelfPermission(
+                    applicationContext, android.Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+                val wasOn = prefs.continuousMic()
+                if (wasOn && micOk) {
+                    continuousWanted = true
+                    runOnUiThread { startContinuous() }
+                }
+            } catch (e: Exception) {
+            }
+        }
+        // Background wake (v2.14): "Hey Flora" se app aage aayi ho to
+        // isi session ke liye sunna shuru karo — mute bhi ho to bhi,
+        // kyunki wake khud "ab baat karo" ka ishara hai. 2s delay
+        // taaki wake greeting ("Haan, boliye") mic me na aaye.
+        if (intent?.getBooleanExtra("flora_wake", false) == true) {
+            continuousWanted = true
+            mainHandler.postDelayed({ startContinuous() }, 2000)
         }
     }
 
+    override fun onNewIntent(newIntent: Intent) {
+        super.onNewIntent(newIntent)
+        if (newIntent.getBooleanExtra("flora_wake", false)) {
+            continuousWanted = true
+            mainHandler.postDelayed({ startContinuous() }, 2000)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Foreground me wapas aate hi sunna phir shuru (mute na ho to).
+        if (continuousWanted) startContinuous()
+    }
+
+    override fun onPause() {
+        // Background me continuous mic nahi chalta (privacy + Android
+        // limit) — background wake "Hey Flora" service se hota hai.
+        continuousListener?.stop()
+        listeningState.value = false
+        mainHandler.removeCallbacks(restartRunnable)
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        continuousListener?.stop()
         voice.stop()
         voice.shutdown()
         super.onDestroy()
