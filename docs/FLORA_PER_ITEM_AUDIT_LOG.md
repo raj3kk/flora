@@ -703,3 +703,8 @@ maujood, index bhi 200. Download page ab live hai.
 - ToolsScreen me search/study/define/stock pehle se the, awaaz se nahi chalte the. sendChat me jode: "search karo X", "X search karo", "matlab batao X" / "X ka matlab", "stock price X" / "X ka share price", "study karo X" / "X par study" — bolna (500 chars tak) + chat me poora result.
 - Sirf padhna hai, isliye Auto Mode gate nahi. Audit: prefix/suffix lengths verify (search 12/12, matlab 13/9, stock 12/14, study 11/10 — " par study" ka 9→10 fix push se pehle pakda gaya); brace/paren balance.
 - NOTE (CI): 929f67b8 run wahi purana appContext error (line 172) se fail hua — ye b91ff250 me pehle hi fix ho chuka hai, naya kaam nahi hai. Website deploy (Vercel) isse affected nahi — wo READY hai.
+
+## v2.22 P3-F11 poora — website starter voice (2026-10-28 ~18:40 IST, CI PENDING)
+- "website banao X" / "website starter X" → SearchTools.websiteStarter (pehle se ToolsScreen me tha). Chat me poora starter, bolkar sirf summary — HTML sunana bekaar hota.
+- Imaandari barkarar: starter local template hai, poori website/file-save nahi — Flora bolkar bhi wahi kehti hai. Prefix lengths verify (banao 14, starter 16); brace/paren balance.
+- P3 survey note: F16 whiteboard ka code abhi ZERO hai (naya screen banega — bada item, baad me); F14 docs screen + email intent maujood hain, voice routing survey baaki; F13 image voice maujood hai, post step ka survey baaki.

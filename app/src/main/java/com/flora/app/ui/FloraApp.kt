@@ -1240,6 +1240,30 @@ fun FloraApp(
                         }
                         return
                     }
+                    // Code-writer voice (v2.22, P3-F11): website
+                    // starter pehle se ToolsScreen me tha, awaaz se
+                    // nahi chalta tha. Imaandari: ye sirf starter
+                    // HTML text hai (local template), poori website
+                    // ya file save nahi — isliye bolkar bhi wahi
+                    // bataya jaata hai, HTML sunaya nahi jaata.
+                    if (lower.startsWith("website banao ") ||
+                        lower.startsWith("website starter ")
+                    ) {
+                        input = ""
+                        val idea = if (lower.startsWith("website banao "))
+                            question.substring(14).trim()
+                        else question.substring(16).trim()
+                        if (idea.isEmpty()) {
+                            val msg = "Kis cheez ki website banau? Aise boliye: 'website banao chai ki dukaan'."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                            return
+                        }
+                        val result = searchTools.websiteStarter(idea)
+                        messages = messages + ChatMsg("Flora: $result", false)
+                        voice.speak("Website starter taiyaar hai — chat me dekh lo. Ye sirf shuruati HTML hai, poori website banani ho to detail bata dena.")
+                        return
+                    }
                     // General tap/type/swipe voice commands (v2.22,
                     // P2-F4 poora): primitives FloraAutomationService
                     // me pehle se the, ab awaaz se bhi chalte hain.
