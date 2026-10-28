@@ -33,6 +33,7 @@ object FloraConfig {
     const val DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_qMjX-cw11dB_Y9nT8IlVzw_nPup-Yxe"
     const val LICENCE_FUNCTION_PATH = "/functions/v1/licence-verify"
     const val USAGE_FUNCTION_PATH = "/functions/v1/usage-count"
+    const val PUSH_TOKEN_FUNCTION_PATH = "/functions/v1/push-token-sync"
 
     // Wake phrase DECIDED hai: "Hey Flora" (user decision 2026-10-28).
     // v2.4 se v0 model hai: MFCC mean template (user ke 6 clips se

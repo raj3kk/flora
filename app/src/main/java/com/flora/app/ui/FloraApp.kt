@@ -173,14 +173,24 @@ fun FloraApp(
                 val deviceId = prefs.deviceId(androidId)
                 licence = licenceClient.verify(userId, deviceId)
             }
-            // FCM token (v2.2): app khulte hi token lo aur sirf is phone
-            // par save karo. Fail ho to onNewToken se dobara milega.
+            // FCM token (v2.2 local save, v2.5 server sync): app khulte
+            // hi token lo, is phone par save karo, aur server ko bhi
+            // bhejo taaki send-push dhoondh sake. Sync fail ho to
+            // local token phir bhi rehta hai, agle open par retry.
             try {
                 FirebaseMessaging.getInstance().token
                     .addOnSuccessListener { token ->
                         scope.launch {
                             try {
                                 prefs.setFcmToken(token)
+                                val uid = prefs.userId()
+                                val aid = Settings.Secure.getString(
+                                    appContext.contentResolver,
+                                    Settings.Secure.ANDROID_ID
+                                ) ?: "flora-device"
+                                licenceClient.syncPushToken(
+                                    uid, prefs.deviceId(aid), token
+                                )
                             } catch (e: Exception) {
                             }
                         }

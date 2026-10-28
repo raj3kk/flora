@@ -117,3 +117,19 @@
   no copy/old-key — PASS (continuous audit doc me darj).
 - Phone test baaki: docs/FLORA_FACE_TEST_ENTRY.md (7 steps).
   Face-match akela PIN unlock nahi karta — ye test me hai.
+
+## v2.4 — PASS (2026-10-28)
+- Commit c9c47cc0, versionCode 26 / 2.4.0-rebuild, CI run
+  40630716314: completed / success, artifact flora-debug-apk
+  59,400,661 bytes, expired false.
+- Scope: wake word v0 — MFCC template, Settings enrolment
+  (3 samples), foreground service, default OFF. Voice-match
+  is push me nahi hai (alag item).
+- Code audit: declaration order (wake states launcher se
+  pehle), brace/paren, permissions, privacy (audio kabhi
+  save/server par nahi, template encrypted on-device),
+  no copy/old-key — PASS.
+- Phone test baaki: docs/FLORA_WAKE_TEST_ENTRY.md (8 steps).
+  Threshold 0.60 shuruaati guess hai — false trigger ka
+  risk test entry me pehle se likha hai.
+- v2.5 FCM token sync (2026-10-28): push-token-sync Edge Function DEPLOYED + live-verified (invalid->400 detail, test-UUID->ok:true); app: FloraConfig path, LicenceClient.syncPushToken, FloraApp token-fetch sync, FloraMessagingService onNewToken sync; balance 0/0/0 all touched files; CI pending; phone test entry FLORA_FCM_SYNC_TEST_ENTRY.md. AUDIT: code PASS, build PENDING.

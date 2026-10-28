@@ -20,10 +20,10 @@ data class LicenceStatus(
 data class UsageResult(val counted: Boolean, val detail: String)
 
 /**
- * Talks to Supabase Edge Functions only. No key is hardcoded: the anon
- * key comes from FloraPreferences (entered once by the user in Settings).
- * With no key configured, the app honestly reports local free mode and
- * never claims a server check happened.
+ * Talks to Supabase Edge Functions only. Anon key FloraPreferences
+ * se aati hai (user ki Settings key ho to wahi, warna app ka
+ * default publishable key — v2.3 se default wiring hai).
+ * Service_role key app me kabhi nahi hoti.
  */
 class LicenceClient(private val prefs: FloraPreferences) {
 
@@ -71,4 +71,24 @@ class LicenceClient(private val prefs: FloraPreferences) {
             ?: return@withContext UsageResult(false, "server unreachable")
         UsageResult(res.optBoolean("counted", false), res.optString("detail", ""))
     }
+
+    /**
+     * FCM token server sync (v2.5). Fire-and-forget: fail ho to
+     * local token phir bhi saved rehta hai, agle app-open par
+     * dobara try hoga. Token kabhi log nahi hota. Server
+     * function users row bhi bana deta hai (isliye usage-count
+     * FK + admin-approve device lookup us user ke liye chalne
+     * lagte hain). JWT auth nahi hai (app me Auth session
+     * nahi) — user_id random UUID hi pehchaan hai.
+     */
+    suspend fun syncPushToken(userId: String, deviceId: String, token: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val key = prefs.supabaseAnonKey()
+            if (key.isEmpty() || token.isEmpty()) return@withContext false
+            val body = JSONObject().put("user_id", userId)
+                .put("device_id", deviceId).put("fcm_token", token)
+            val res = post(FloraConfig.PUSH_TOKEN_FUNCTION_PATH, body, key)
+                ?: return@withContext false
+            res.optBoolean("ok", false)
+        }
 }

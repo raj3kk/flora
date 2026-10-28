@@ -1,12 +1,13 @@
 package com.flora.app.push
 
-// FCM receive + token (v2.2, wired): Firebase project flora-f22a7,
-// Android app package com.flora.app (google-services.json app/ me).
+// FCM receive + token (v2.2 wired, v2.5 server sync):
+// Firebase project flora-f22a7, Android app package com.flora.app.
 // Behaviour: push sirf ek saaf notification dikhata hai — koi silent
-// action, koi silent automation, koi data collection nahi. Token sirf
-// is phone par DataStore me save hota hai; kabhi log/chat/backup me
-// nahi jata. Server ko token sync tabhi hoga jab push_tokens table
-// aur server-side send function taiyaar ho (alag step).
+// action, koi silent automation, koi data collection nahi. Token is
+// phone par DataStore me save hota hai aur push-token-sync Edge
+// Function se server ke push_tokens table me bhi jaata hai (v2.5),
+// taaki send-push usko dhoondh sake. Token kabhi log/chat/backup
+// me nahi jata.
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,9 +15,11 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.flora.app.MainActivity
 import com.flora.app.data.FloraPreferences
+import com.flora.app.data.LicenceClient
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
@@ -29,7 +32,17 @@ class FloraMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         serviceScope.launch {
             try {
-                FloraPreferences(applicationContext).setFcmToken(token)
+                val prefs = FloraPreferences(applicationContext)
+                prefs.setFcmToken(token)
+                // v2.5: refreshed token bhi server ko bhejo, warna
+                // purana token push_tokens me pada reh jayega.
+                val androidId = Settings.Secure.getString(
+                    applicationContext.contentResolver,
+                    Settings.Secure.ANDROID_ID
+                ) ?: "flora-device"
+                LicenceClient(prefs).syncPushToken(
+                    prefs.userId(), prefs.deviceId(androidId), token
+                )
             } catch (e: Exception) {
                 // Token save fail: agle app-open par dobara fetch hoga.
             }
