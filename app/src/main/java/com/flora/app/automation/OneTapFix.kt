@@ -33,15 +33,30 @@ object OneTapFix {
         "adb shell pm grant com.flora.app android.permission.WRITE_SECURE_SETTINGS"
 
     sealed class Result {
-        /** Service pehle se ON hai — kuch badla nahi. */
+        /**
+         * Service pehle se ON hai — kuch badla nahi. A1 follow-up
+         * F1: ye SIRF tab jab component list me ho AUR
+         * accessibility_enabled == "1" ho. List me entry par
+         * flag "0" ho to ye kabhi nahi milta (warna agla Fix
+         * tap wahi galat AlreadyOn dekar stuck loop banata).
+         */
         object AlreadyOn : Result()
 
         /**
          * Restore hua. enabledFlagChanged = true matlab
          * accessibility_enabled "0" se "1" bhi karna pada (sirf tab
          * jab wo "1" nahi tha — koi doosri setting overwrite nahi).
+         * Restored(false) sirf tab jab flag pehle se "1" tha.
          */
         data class Restored(val enabledFlagChanged: Boolean) : Result()
+
+        /**
+         * AADHA restore (F1): list-write ho gaya par flag-write
+         * fail ya flag-verify fail — kabhi Restored nahi. UI isko
+         * "pehle se ON hai — kuch badla nahi" jaisa kabhi nahi
+         * dikhata; automation abhi poori tarah ON nahi hai.
+         */
+        data class PartiallyRestored(val reason: String) : Result()
 
         /** Koi grant nahi mila — adb guide / Shizuku-start dikhao. */
         data class GrantMissing(val shizukuReady: Boolean) : Result()
@@ -85,32 +100,89 @@ object OneTapFix {
         }
     }
 
+    /** List me Flora entry hai ya nahi — sirf membership, ON ka saboot nahi. */
+    private fun listContains(list: String?): Boolean {
+        if (list == null) return false
+        return COMPONENT in list.split(":").map { it.trim() }
+    }
+
+    /** accessibility_enabled flag — null = padha nahi ja saka, "1" nahi mana jayega. */
+    private fun readEnabledFlag(context: Context): String? {
+        return try {
+            Settings.Secure.getString(context.contentResolver, "accessibility_enabled")
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Shizuku-first write-permission gate (R-A1-6, dono raaston se
+     * ek hi jagah): permission ho to null (aage badho), warna
+     * Shizuku se grant ki koshish, phir bhi na mile to GrantMissing.
+     */
+    private fun ensureWritePermission(context: Context): Result? {
+        if (hasWritePermission(context)) return null
+        // Shizuku-write PEHLE: Shizuku se grant lekar dobara check.
+        if (ShizukuBridge.isReady() && ShizukuBridge.hasPermission()) {
+            val granted = try {
+                ShizukuBridge.grantSecureSettingsPermission(
+                    context.packageName,
+                    context,
+                )
+            } catch (e: Exception) {
+                false
+            }
+            if (!granted || !hasWritePermission(context)) {
+                return Result.GrantMissing(shizukuReady = true)
+            }
+            return null
+        }
+        return Result.GrantMissing(shizukuReady = ShizukuBridge.isReady())
+    }
+
+    /**
+     * Flag-repair (F1): list me entry hai par flag "1" nahi.
+     * Grant lekar flag "1" likho aur re-read se verify karo.
+     * Sachha result hi: Restored(true) sirf verified "1" par,
+     * warna PartiallyRestored — kabhi AlreadyOn nahi.
+     */
+    private fun repairFlag(context: Context): Result {
+        val missing = ensureWritePermission(context)
+        if (missing != null) return missing
+        try {
+            Settings.Secure.putString(
+                context.contentResolver,
+                "accessibility_enabled",
+                "1",
+            )
+        } catch (e: Exception) {
+            return Result.PartiallyRestored("accessibility flag likh nahi paya")
+        }
+        if (readEnabledFlag(context) != "1") {
+            return Result.PartiallyRestored("flag likhne ke baad verify nahi hua")
+        }
+        return Result.Restored(enabledFlagChanged = true)
+    }
+
     fun restore(context: Context): Result {
         return try {
             val before = readEnabledList(context)
-            if (appendService(before) == null) return Result.AlreadyOn
-            if (!hasWritePermission(context)) {
-                // Shizuku-write PEHLE: Shizuku se grant lekar dobara check.
-                if (ShizukuBridge.isReady() && ShizukuBridge.hasPermission()) {
-                    val granted = try {
-                        ShizukuBridge.grantSecureSettingsPermission(
-                            context.packageName,
-                            context,
-                        )
-                    } catch (e: Exception) {
-                        false
-                    }
-                    if (!granted || !hasWritePermission(context)) {
-                        return Result.GrantMissing(shizukuReady = true)
-                    }
-                } else {
-                    return Result.GrantMissing(
-                        shizukuReady = ShizukuBridge.isReady(),
-                    )
-                }
+            if (listContains(before)) {
+                // F1 (a): sirf list-membership AlreadyOn nahi hai.
+                // Flag "1" ho to hi AlreadyOn; warna flag repair
+                // ki koshish aur uska sachha result.
+                if (readEnabledFlag(context) == "1") return Result.AlreadyOn
+                return repairFlag(context)
             }
+            val missing = ensureWritePermission(context)
+            if (missing != null) return missing
             val newList = appendService(readEnabledList(context))
-                ?: return Result.AlreadyOn
+                ?: run {
+                    // Beech me kisi ne list me entry jod di (race):
+                    // andha AlreadyOn nahi — wahi flag check.
+                    if (readEnabledFlag(context) == "1") return Result.AlreadyOn
+                    return repairFlag(context)
+                }
             try {
                 Settings.Secure.putString(context.contentResolver, SECURE_KEY, newList)
             } catch (e: Exception) {
@@ -118,28 +190,30 @@ object OneTapFix {
             }
             // Verify: dobara padh kar hi success mano.
             val after = readEnabledList(context)
-            if (after == null || COMPONENT !in after.split(":").map { it.trim() }) {
+            if (!listContains(after)) {
                 return Result.Failed("likhne ke baad verify nahi hua")
             }
-            var flagChanged = false
+            // F1 (b): flag-write fail ab nigla nahi jata.
+            // Flag pehle se "1" tha to Restored(false); likhna
+            // pada aur verified "1" hua to Restored(true);
+            // likhna fail ya verify fail to PartiallyRestored,
+            // kabhi Restored nahi.
+            if (readEnabledFlag(context) == "1") {
+                return Result.Restored(enabledFlagChanged = false)
+            }
             try {
-                val enabled = Settings.Secure.getString(
+                Settings.Secure.putString(
                     context.contentResolver,
                     "accessibility_enabled",
+                    "1",
                 )
-                if (enabled != "1") {
-                    Settings.Secure.putString(
-                        context.contentResolver,
-                        "accessibility_enabled",
-                        "1",
-                    )
-                    flagChanged = true
-                }
             } catch (e: Exception) {
-                // List jud chuki hai — flag fail par bhi restore mana jayega,
-                // par Auto Log me ye baat darj hogi (caller log karta hai).
+                return Result.PartiallyRestored("accessibility flag likh nahi paya")
             }
-            Result.Restored(flagChanged)
+            if (readEnabledFlag(context) != "1") {
+                return Result.PartiallyRestored("flag likhne ke baad verify nahi hua")
+            }
+            Result.Restored(enabledFlagChanged = true)
         } catch (e: Exception) {
             Result.Failed("fix chalate waqt dikkat aayi")
         }

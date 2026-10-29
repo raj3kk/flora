@@ -13,6 +13,7 @@ import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.flora.app.MainActivity
+import com.flora.app.assistant.BatteryTransientNote
 import com.flora.app.assistant.BrainClient
 import com.flora.app.automation.OverlayMicService
 import com.flora.app.data.ChatMemoryStore
@@ -501,8 +502,23 @@ class BackgroundMicService : Service() {
         } catch (e: Exception) {
             emptyList()
         }
+        // A1 follow-up F3: background-mic conversational path bhi
+        // battery note pata hai — shared non-composable
+        // BatteryTransientNote se, wahi BATTERY_LAST_WARNED
+        // no-repeat key ke saath (chat + background-mic ek hi
+        // source: ek state par ek surface ne warn kar diya to
+        // doosri chup rahegi). handleHeard suspend hai aur
+        // scope.launch se chalta hai, isliye DataStore read
+        // suspend-safe hai. BrainClient server contract badla
+        // nahi — transientNote param pehle se tha. Note sirf
+        // is ek call ke prompt me jata hai, persisted store
+        // me sirf user turn + bola gaya jawab jate hain.
         val reply = try {
-            brain.ask(question, history = bgHistory)
+            brain.ask(
+                question,
+                history = bgHistory,
+                transientNote = BatteryTransientNote.note(applicationContext, prefs),
+            )
         } catch (e: Exception) {
             "Brain se baat nahi ho payi, dobara boliye."
         }

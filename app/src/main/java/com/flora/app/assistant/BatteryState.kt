@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import com.flora.app.data.FloraPreferences
 
 /**
  * Battery-aware reply ka ekmatra reader (Lane A — A1).
@@ -21,6 +22,38 @@ import android.os.BatteryManager
  *   low/critical nag nahi.
  */
 data class BatteryState(val percent: Int, val charging: Boolean)
+
+/**
+ * Shared NON-COMPOSABLE battery-note source (Lane A — A1 follow-up F3).
+ *
+ * Pehle ye logic sirf FloraApp ke composable-local helper me tha, isliye
+ * BackgroundMicService (service context, koi composable nahi) use nahi
+ * kar sakta tha. Ab ek hi jagah hai: FloraApp ke 4 chat call sites
+ * isi logic ko wrapper se use karte hain, aur background-mic path
+ * seedha isi ko call karta hai — duplicate logic nahi bana.
+ * No-repeat key wahi ek hai (FloraPreferences battery_last_warned):
+ * ek state par chat ne warn kar diya to background-mic chup rahega,
+ * aur ulta bhi. Koi exception aaye to khali note — jawab kabhi
+ * battery read par nahi rukega. Note sirf transient hai: ye string
+ * kabhi memCtx/history/stored turn me nahi jati (BrainClient.ask ka
+ * transientNote param dekho).
+ */
+object BatteryTransientNote {
+    suspend fun note(context: Context, prefs: FloraPreferences): String {
+        return try {
+            val state = BatteryStateReader.read(context)
+            val key = BatteryStateReader.keyFor(state)
+            val last = try { prefs.batteryLastWarnedKey() } catch (e: Exception) { "" }
+            val isNew = key != last
+            if (isNew) {
+                try { prefs.setBatteryLastWarnedKey(key) } catch (e: Exception) { }
+            }
+            BatteryStateReader.instructionFor(key, state.percent, isNew) ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+    }
+}
 
 object BatteryStateReader {
 

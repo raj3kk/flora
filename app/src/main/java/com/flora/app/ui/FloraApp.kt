@@ -58,7 +58,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.flora.app.assistant.BatteryStateReader
+import com.flora.app.assistant.BatteryTransientNote
 import com.flora.app.assistant.BrainClient
 import com.flora.app.assistant.VisionClient
 import com.flora.app.assistant.VoiceEngine
@@ -396,23 +396,16 @@ fun FloraApp(
     // Helper scope + appContext ke BAAD declare hai, aur routine
     // runner + sendChat se PEHLE — declaration order trap se bachne
     // ke liye yahi jagah hai, neeche mat le jao.
+    // A1 follow-up F3: asli logic ab shared non-composable
+    // BatteryTransientNote (BatteryState.kt) me hai — ye sirf
+    // wrapper hai, duplicate logic nahi. Wahi BATTERY_LAST_WARNED
+    // no-repeat key chat + background-mic dono ke liye ek hai.
     // Note kabhi memCtx/history me nahi jata (BrainClient.ask ka
     // transientNote param); stored turn me sirf Flora ka jawab jata
     // hai, battery instruction nahi. Koi exception aaye to khali note
     // — chat kabhi battery read par nahi rukegi.
     suspend fun batteryTransientNote(): String {
-        return try {
-            val state = BatteryStateReader.read(appContext)
-            val key = BatteryStateReader.keyFor(state)
-            val last = try { prefs.batteryLastWarnedKey() } catch (e: Exception) { "" }
-            val isNew = key != last
-            if (isNew) {
-                try { prefs.setBatteryLastWarnedKey(key) } catch (e: Exception) { }
-            }
-            BatteryStateReader.instructionFor(key, state.percent, isNew) ?: ""
-        } catch (e: Exception) {
-            ""
-        }
+        return BatteryTransientNote.note(appContext, prefs)
     }
     // N5 system-STT interrupt listener: Deepgram path na chale
     // (key khali / gate blocked / barge-in fail / continuous
@@ -4175,8 +4168,20 @@ fun FloraApp(
                                         messages = messages + ChatMsg("Flora: $msg", false)
                                         voice.speak(msg)
                                     } else {
+                                        // A1 follow-up F2: image-attachment path bhi
+                                        // battery note pata hai — VisionClient ka
+                                        // signature/server contract badle bina caller
+                                        // prompt me note prepend hota hai (wahi
+                                        // batteryTransientNote, wahi
+                                        // BATTERY_LAST_WARNED no-repeat key, isliye
+                                        // text path ke saath ek state par dobara
+                                        // warning nahi milegi). Vision reply
+                                        // conversational hai, isliye transient
+                                        // instruction yahan bhi lagu hota hai.
+                                        val visionUserQ = if (q.isBlank()) "Is image me kya dikh raha hai, detail me batao?" else q
+                                        val visionNote = batteryTransientNote()
                                         val reply = vision.askAboutImage(
-                                            if (q.isBlank()) "Is image me kya dikh raha hai, detail me batao?" else q,
+                                            if (visionNote.isBlank()) visionUserQ else visionNote + "\n" + visionUserQ,
                                             bytes, key
                                         )
                                         if (reply == null) {

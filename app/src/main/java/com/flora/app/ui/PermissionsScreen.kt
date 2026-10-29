@@ -308,6 +308,12 @@ fun PermissionsScreen(onShowWizard: () -> Unit) {
                                 is OneTapFix.Result.Restored ->
                                     "Ho gaya ✓ — Flora ki accessibility service wapas ON ho gayi." +
                                         if (result.enabledFlagChanged) " (Accessibility bhi ON kiya gaya.)" else ""
+                                // A1 follow-up F1: aadha restore — "pehle se
+                                // ON hai, kuch badla nahi" jaisa message
+                                // yahan kabhi nahi; automation abhi poori
+                                // tarah ON nahi hai, dobara Fix / adb guide.
+                                is OneTapFix.Result.PartiallyRestored ->
+                                    "Aadha hua: service list me jud gayi, par accessibility flag ON nahi ho paya (${result.reason}). Dobara Fix dabao ya adb guide se grant do — abhi automation poori tarah ON nahi hai."
                                 is OneTapFix.Result.GrantMissing ->
                                     "Fix nahi ho paya: WRITE_SECURE_SETTINGS grant nahi mila. " +
                                         if (result.shizukuReady) {
