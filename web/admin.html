@@ -123,9 +123,37 @@ Admin banne ke liye: (1) app me Settings → “Website account link” me isi e
 
 <section class="card">
 <h2>Users &amp; Licences</h2>
-<p class="note">Har user: email, device, admin badge, licence plan/status/expiry, push token (haan/naa), usage total. Email auth se aati hai; token value kabhi nahi aati.</p>
+<p class="note">Har user: email, device, admin badge, licence plan/status/expiry, push token (haan/naa), usage total. Email auth se aati hai; token value kabhi nahi aati. Ek user ki saari licences dikhti hain (pehle sirf aakhri wali dikhti thi — E1 fix).</p>
 <label>Search (email / device) <input id="user-search" type="text" placeholder="email ya device id ka hissa"></label>
 <div id="users-list">Login ke baad list yahan aayegi.</div>
+</section>
+
+<section class="card">
+<h2>Licences (keys)</h2>
+<p class="note">Admin se licence issue karo — ek submit = ek licence. Nayi licence aate hi user ki pehli active licence 'superseded' ho jati hai (ek user ki ek waqt par sirf ek active licence). Ek licence ek waqt par sirf ek device par chalti hai (15-day transfer rule; admin Rebind wait ka bypass hai). Key list me hamesha masked dikhegi (sirf last 4) — poori key dekhne/copy karne ke liye Show dabao (reveal audit me darj hoga). Create ke baad full key EK BAAR dikhegi — uske baad sirf masked. Keyless rows (payment-approved, bina key) waise hi chalti hain.</p>
+<label>User
+<select id="licence-user"></select>
+</label>
+<label>Plan
+<select id="licence-plan">
+<option value="pro">Pro</option>
+<option value="free">Free</option>
+</select>
+</label>
+<label>Duration (din) <input id="licence-days" type="number" value="30" min="1" max="3650"></label>
+<div class="row"><button id="licence-create-btn" type="button">Licence create karo</button></div>
+<p class="note" id="licence-create-status"></p>
+<div id="licence-create-result"></div>
+<div class="row">
+<button type="button" class="small ghost" data-licfilter="all">Sab</button>
+<button type="button" class="small ghost" data-licfilter="active">Active</button>
+<button type="button" class="small ghost" data-licfilter="revoked">Revoked</button>
+<button type="button" class="small ghost" data-licfilter="expired">Expired</button>
+<button type="button" class="small ghost" data-licfilter="superseded">Superseded</button>
+</div>
+<label>Search (email / key last4 / device) <input id="licence-search" type="text" placeholder="email ya key ke aakhri 4"></label>
+<div id="licences-list">Login ke baad list yahan aayegi.</div>
+<p class="note" id="licences-status"></p>
 </section>
 
 <section class="card">
@@ -173,6 +201,14 @@ Admin banne ke liye: (1) app me Settings → “Website account link” me isi e
 <button id="flag-user-del-btn" type="button" class="small danger">Override hatao</button>
 </div>
 <p class="note" id="flag-user-status"></p>
+</section>
+
+<section class="card">
+<h2>Plan features (per-plan)</h2>
+<p class="note">Har plan par kaunse features ON hain — licence-verify v2 isi mapping se features[] deta hai. Ye feature-flags (global/per-user toggle) se alag hai: flags toggle hain, ye plan ka package hai. Save ke baad nayi verify calls se asar hoga.</p>
+<div id="plan-features-free">Login ke baad yahan aayenge.</div>
+<div id="plan-features-pro">Login ke baad yahan aayenge.</div>
+<p class="note" id="plan-features-status"></p>
 </section>
 
 <section class="card">
@@ -359,8 +395,8 @@ function renderUsers() {
   const el = document.getElementById('users-list');
   if (!adminData) { el.textContent = "Login ke baad list yahan aayegi."; return; }
   const q = (document.getElementById('user-search').value || "").toLowerCase();
-  const licByUser = {};
-  (adminData.licences || []).forEach(l => { licByUser[l.user_id] = l; });
+  const licsByUser = {};
+  (adminData.licences || []).forEach(l => { (licsByUser[l.user_id] = licsByUser[l.user_id] || []).push(l); });
   const users = (adminData.users || []).filter(u => {
     if (!q) return true;
     const email = (adminData.emails || {})[u.id] || "";
@@ -371,14 +407,16 @@ function renderUsers() {
   users.forEach(u => {
     const div = document.createElement('div');
     div.className = "item";
-    const lic = licByUser[u.id];
+    const lics = licsByUser[u.id] || [];
     const push = (adminData.push || {})[u.id];
     const tot = (adminData.usage_totals || {})[u.id];
     div.innerHTML = "<strong>" + ((adminData.emails || {})[u.id] || ("user " + shortId(u.id))) + "</strong>" +
       (u.is_admin ? " <span class='badge green'>ADMIN</span>" : "") +
       "<div class='meta'>device " + (u.device_id ? shortId(u.device_id) : "?") +
-      (lic ? " | <span class='badge orange'>" + lic.plan_id + "/" + lic.status + "</span>" +
-        (lic.expires_at ? " (exp " + lic.expires_at + ")" : "") : " | <span class='badge grey'>no licence</span>") +
+      (lics.length ? " | " + lics.map(l => "<span class='badge " + (l.status === "active" ? "green" : (l.status === "revoked" ? "red" : (l.status === "expired" ? "orange" : "grey"))) + "'>" + l.plan_id + "/" + l.status + "</span>" +
+        (l.expires_at ? " (exp " + l.expires_at + ")" : "") +
+        (l.device_id ? " [" + shortId(l.device_id) + "]" : " [unclaimed]") +
+        (l.has_key && l.key_last4 ? " key …" + l.key_last4 : "")).join(" ") : " | <span class='badge grey'>no licence</span>") +
       " | push token: " + (push ? "haan (" + (push.updated_at || "?") + ")" : "nahi") +
       (tot ? " | usage: " + tot.talk_seconds + "s / " + tot.tool_calls + " tools" : "") + "</div>";
     el.appendChild(div);
@@ -450,6 +488,7 @@ function fillPushUsers() {
     sel.appendChild(opt);
   });
   fillFlagUsers();
+  fillLicenceUsers();
 }
 
 const PUSH_TEMPLATES = {
@@ -726,7 +765,234 @@ document.getElementById('brain-save-btn').addEventListener('click', async () => 
   } catch (e) { st.textContent = "Save fail: " + e.message; }
 });
 
-function loadAll() { loadPayments(); loadAudit(); loadAdminList(); loadKeys(); loadUpi(); loadOverview(); loadFlags(); loadInstructions(); }
+function fillLicenceUsers() {
+  const sel = document.getElementById('licence-user');
+  if (!sel || !adminData) return;
+  sel.innerHTML = "";
+  (adminData.users || []).forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.id;
+    opt.textContent = (adminData.emails || {})[u.id] || shortId(u.id);
+    sel.appendChild(opt);
+  });
+}
+
+async function copyText(val) {
+  try { await navigator.clipboard.writeText(val); return true; } catch (e) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = val; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta); return true;
+    } catch (_e) { return false; }
+  }
+}
+
+let licFilter = "all";
+let lastLicences = [];
+function licBadge(status) {
+  if (status === "active") return "<span class='badge green'>active</span>";
+  if (status === "revoked") return "<span class='badge red'>revoked</span>";
+  if (status === "expired") return "<span class='badge orange'>expired</span>";
+  if (status === "superseded") return "<span class='badge grey'>superseded</span>";
+  return "<span class='badge grey'>" + status + "</span>";
+}
+async function loadLicences() {
+  const el = document.getElementById('licences-list');
+  try {
+    const body = licFilter === "all" ? {} : { status: licFilter };
+    const data = await callFn("admin-licences", Object.assign({ action: "list" }, body));
+    lastLicences = data.licences || [];
+    fillLicenceUsers();
+    renderLicences();
+  } catch (e) {
+    el.textContent = "Load fail: " + e.message;
+  }
+}
+function renderLicences() {
+  const el = document.getElementById('licences-list');
+  if (!adminSession) { el.textContent = "Login ke baad list yahan aayegi."; return; }
+  const q = (document.getElementById('licence-search').value || "").toLowerCase();
+  const rows = lastLicences.filter(r => {
+    if (!q) return true;
+    return ((r.user_email || "").toLowerCase().includes(q) ||
+      (r.key_last4 || "").toLowerCase().includes(q) ||
+      (r.device_id || "").toLowerCase().includes(q) ||
+      (r.user_id || "").toLowerCase().includes(q));
+  });
+  if (!rows.length) { el.textContent = "Koi licence nahi mili."; return; }
+  el.innerHTML = "";
+  rows.forEach(r => {
+    const div = document.createElement('div');
+    div.className = "item";
+    const title = document.createElement('div');
+    title.innerHTML = "<strong>" + (r.user_email || ("user " + shortId(r.user_id))) + "</strong> " +
+      licBadge(r.status) + " " + r.plan_id +
+      (r.expires_at ? " (exp " + r.expires_at + ")" : " (no expiry)");
+    div.appendChild(title);
+    const meta = document.createElement('div');
+    meta.className = "meta";
+    meta.textContent = "device " + (r.device_short || "unclaimed") +
+      (r.revoked_reason ? " | reason: " + r.revoked_reason : "") +
+      (r.activated_at ? " | activated " + r.activated_at : "");
+    div.appendChild(meta);
+    const keyRow = document.createElement('div');
+    keyRow.className = "row";
+    const keySpan = document.createElement('code');
+    keySpan.textContent = r.has_key ? (r.masked_key || "••••") : "Keyless (payment row)";
+    keyRow.appendChild(keySpan);
+    if (r.has_key) {
+      let revealed = false;
+      const showBtn = document.createElement('button');
+      showBtn.textContent = "Show";
+      showBtn.className = "small ghost";
+      const copyBtn = document.createElement('button');
+      copyBtn.textContent = "Copy";
+      copyBtn.className = "small ghost";
+      copyBtn.style.display = "none";
+      copyBtn.onclick = async () => {
+        if (await copyText(keySpan.textContent)) {
+          document.getElementById('licences-status').textContent = "Copy ho gaya.";
+        } else {
+          document.getElementById('licences-status').textContent = "Copy fail — key ko haath se copy karo.";
+        }
+      };
+      showBtn.onclick = async () => {
+        if (revealed) {
+          keySpan.textContent = r.masked_key; showBtn.textContent = "Show";
+          copyBtn.style.display = "none"; revealed = false; return;
+        }
+        try {
+          const d = await callFn("admin-licences", { action: "reveal", licence_id: r.id });
+          keySpan.textContent = d.licence_key; showBtn.textContent = "Hide";
+          copyBtn.style.display = ""; revealed = true;
+        } catch (e) {
+          document.getElementById('licences-status').textContent = "Reveal fail: " + e.message;
+        }
+      };
+      keyRow.appendChild(showBtn);
+      keyRow.appendChild(copyBtn);
+    }
+    div.appendChild(keyRow);
+    if (r.status === "active") {
+      const btnRow = document.createElement('div');
+      btnRow.className = "row";
+      const revBtn = document.createElement('button');
+      revBtn.textContent = "Revoke";
+      revBtn.className = "small danger";
+      revBtn.onclick = async () => {
+        const reason = prompt("Revoke reason (zaroori):");
+        if (!reason) return;
+        try {
+          await callFn("admin-licences", { action: "revoke", licence_id: r.id, reason });
+          document.getElementById('licences-status').textContent = "Revoked.";
+        } catch (e) {
+          document.getElementById('licences-status').textContent = "Revoke fail: " + e.message; return;
+        }
+        loadLicences();
+      };
+      const rebBtn = document.createElement('button');
+      rebBtn.textContent = "Rebind";
+      rebBtn.className = "small ghost";
+      rebBtn.onclick = async () => {
+        if (!confirm("Is licence ka device unbind karna hai? Agli verify nayi device se turant bind hogi (15-day wait nahi lagega).")) return;
+        try {
+          await callFn("admin-licences", { action: "rebind", licence_id: r.id });
+          document.getElementById('licences-status').textContent = "Rebound (device unbound).";
+        } catch (e) {
+          document.getElementById('licences-status').textContent = "Rebind fail: " + e.message; return;
+        }
+        loadLicences();
+      };
+      btnRow.appendChild(revBtn);
+      btnRow.appendChild(rebBtn);
+      div.appendChild(btnRow);
+    }
+    el.appendChild(div);
+  });
+}
+document.getElementById('licence-create-btn').addEventListener('click', async () => {
+  const st = document.getElementById('licence-create-status');
+  const resEl = document.getElementById('licence-create-result');
+  const uid = document.getElementById('licence-user').value;
+  const plan = document.getElementById('licence-plan').value;
+  const days = parseInt(document.getElementById('licence-days').value, 10);
+  if (!uid) { st.textContent = "Pehle user chuno (users load hone par list bharegi)."; return; }
+  if (!days || days < 1 || days > 3650) { st.textContent = "Duration 1..3650 din honi chahiye."; return; }
+  try {
+    const d = await callFn("admin-licences", { action: "create", user_id: uid, plan, duration_days: days });
+    st.textContent = "Licence ban gayi (" + plan + ", exp " + d.expires_at + ", " + (d.superseded_count || 0) + " purani supersede)." + (d.warning ? " Warning: " + d.warning : "");
+    resEl.innerHTML = "";
+    const box = document.createElement('div');
+    box.className = "item";
+    const code = document.createElement('code');
+    code.textContent = d.licence_key;
+    box.appendChild(code);
+    const note = document.createElement('div');
+    note.className = "meta";
+    note.textContent = "Ye full key SIRF ABHI dikh rahi hai — list me sirf masked dikhegi. Copy karke safe jagah rakh lo.";
+    box.appendChild(note);
+    const cp = document.createElement('button');
+    cp.textContent = "Copy";
+    cp.className = "small";
+    cp.onclick = async () => {
+      if (await copyText(d.licence_key)) { st.textContent = "Copy ho gaya."; }
+      else { st.textContent = "Copy fail — key ko haath se copy karo."; }
+    };
+    box.appendChild(cp);
+    resEl.appendChild(box);
+    loadLicences();
+  } catch (e) { st.textContent = "Create fail: " + e.message; }
+});
+document.querySelectorAll('[data-licfilter]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    licFilter = btn.getAttribute('data-licfilter');
+    if (adminSession) loadLicences();
+  });
+});
+document.getElementById('licence-search').addEventListener('input', () => { renderLicences(); });
+
+async function loadPlanFeatures() {
+  try {
+    const d = await callFn("admin-plan-features", { action: "get" });
+    ["free", "pro"].forEach(plan => {
+      const el = document.getElementById('plan-features-' + plan);
+      el.innerHTML = "";
+      const h = document.createElement('div');
+      h.innerHTML = "<strong>" + (plan === "free" ? "Free" : "Pro") + "</strong>";
+      el.appendChild(h);
+      const cur = (d.plans && d.plans[plan]) || [];
+      Object.keys(FLAG_LABELS).forEach(k => {
+        const lab = document.createElement('label');
+        lab.style.display = "block";
+        const cb = document.createElement('input');
+        cb.type = "checkbox"; cb.value = k; cb.checked = cur.indexOf(k) !== -1;
+        cb.style.width = "auto"; cb.style.marginRight = "8px";
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(FLAG_LABELS[k]));
+        el.appendChild(lab);
+      });
+      const btn = document.createElement('button');
+      btn.textContent = "Save " + plan;
+      btn.className = "small";
+      btn.onclick = async () => {
+        const feats = [];
+        el.querySelectorAll('input[type=checkbox]:checked').forEach(c => feats.push(c.value));
+        try {
+          await callFn("admin-plan-features", { action: "set", plan, features: feats });
+          document.getElementById('plan-features-status').textContent = plan + " features save ho gaye (" + feats.length + ").";
+        } catch (e) {
+          document.getElementById('plan-features-status').textContent = "Save fail: " + e.message;
+        }
+      };
+      el.appendChild(btn);
+    });
+  } catch (e) {
+    document.getElementById('plan-features-free').textContent = "Load fail: " + e.message;
+    document.getElementById('plan-features-pro').textContent = "Load fail: " + e.message;
+  }
+}
+
+function loadAll() { loadPayments(); loadAudit(); loadAdminList(); loadKeys(); loadUpi(); loadOverview(); loadFlags(); loadInstructions(); loadLicences(); loadPlanFeatures(); }
 
 async function afterLogin(session, user) {
   adminSession = session;

@@ -1381,3 +1381,101 @@ maujood, index bhi 200. Download page ab live hai.
   heartbeat tabhi chalenge jab linked account ho (JWT chahiye);
   G17: CA badle to app update ke saath pin refresh zaroori (fail-closed);
   Kokoro download me resume nahi.
+
+- LFMS SERVER BUILD (licence + features management, Wave A server, 2026-10-29):
+  Base tip 6e36b72d se shuru, Phase 8 push (5ca6c4e8, sirf app/ + home-sync +
+  docs) se takrao nahi — compare se verify kiya gaya; audit log push se
+  pehle tip 0aa656b8 se fresh liya gaya (Phase 8 entries barkaraar).
+  Audit: docs/FLORA_LICENCE_SYSTEM_AUDIT.md (sections A–H) + parent
+  correction 09:59 (15-day rule barkaraar) + F8 plaintext-with-controls.
+- CONTRACT (server shapes, Wave B isi par banega):
+  Key FLORA-XXXX-XXXX-XXXX (A-Z + 2-9, no 0/O/1/I; server generate;
+  unique index; collision par retry). Key ADDITIVE hai — keyless
+  payment rows bina key ke waise hi chalengi. valid=false SIRF tab
+  jab blocked/invalid ho (revoked/expired/superseded/device_locked/
+  invalid_key); free tier (koi pro nahi) valid:true + plan 'free'
+  hai (error nahi). Pro sirf valid+active+plan==pro par.
+  15-DAY RULE (correction se, audit ke bound_mismatch sujhav ko
+  override karta hai): mismatch par 15 din na hue hon -> plan
+  free + status free + device_locked + device_change_available_at
+  (purani device par chalti rehti hai); 15 din poore -> TRANSFER
+  (device_id + activated_at update, device_changed:true). NULL-claim
+  par koi wait nahi. Admin rebind = wait ka bypass (device NULL +
+  audit). Ek user ki ek active licence (nayi purani ko superseded
+  karti hai, superseded_by set hota hai). Renewal stacking default
+  (admin-approve): nayi expiry = max(ab, pehli expiry) + 30 din.
+  plan_features hi plans ka single source hai (plans table ko koi
+  code read nahi karta). Masked default (last 4) + click reveal +
+  copy (panel + user apni key apne JWT se).
+- FILES: supabase/sql/licence_system.sql (licence_key unique index,
+  revoked_reason/by/at, superseded_by, status check me superseded,
+  (user_id,device_id) unique index, plan_features + seed free=[talk]
+  / pro=14 flags, RLS ON no policy; device_id nullability NAHI
+  chhedi — deploy-check); licence-verify v2 (JWT gate + user match,
+  key path, v1 logic preserve, features[], bound short, key kabhi
+  response me nahi); brain-proxy v5 + tts-proxy v3 (licence gate:
+  Pro valid ya Free usage_today<600, nahi to 429 free_limit; gate
+  sirf padhta hai, increment nahi; DB error par fail-open; device
+  binding yahan check nahi hoti — binding licence-verify par);
+  admin-licences (create ek submit=ek licence + full key EK BAAR,
+  list masked, revoke reason+audit, rebind, reveal+audit);
+  admin-plan-features (get/set, 14-key allowlist); licence-key
+  (user apni key apne JWT se: list masked + reveal + audit);
+  admin-approve MINIMAL (website-path hi: key generation + supersede
+  + stacking; app-path byte-identical; approve/reject/audit flow
+  waisa hi); admin-list v3 (licences select me id/device/
+  activated_at/masked last4 — full key kabhi nahi); usage-count v2
+  (JWT gate: linked=JWT+match, unlinked=device-resolve-or-counted:
+  false; seconds/talk_seconds alias fix — app `seconds` bhejta tha,
+  v1 sirf talk_seconds padhta tha isliye reports 0 add karti thi;
+  response me counted+detail); push-token-sync v2 (linked=JWT+match
+  tabhi users row claim; unlinked=device-resolve, row claim nahi —
+  fresh unlinked ka token link ke baad hi judega, ye security
+  trade hai, regression nahi); web/admin.html (Licences section:
+  create + list + revoke/rebind + masked/show/copy; Plan features
+  editor; Users section E1 fix: saari licences dikhti hain, sirf
+  aakhri nahi); web/pay.html C2 text (website-path ii se match).
+  home-sync + app/ bilkul nahi chhua gaya.
+- PREPUSH CHECKS: 10 function files brace/paren/bracket balance 0;
+  admin.html JS node --check PASS; naye element IDs ek-ek baar;
+  licence-verify ke kisi response me licence_key nahi (grep verify);
+  koi workflow file nahi; koi [skip ci] nahi; koi secret/key/
+  password read/push nahi.
+- DEPLOY CHECKLIST (ORDER — dashboard, is commit se nahi hota):
+  licence_system.sql PEHLE (uske bina naye columns nahi honge;
+  admin-list v3 tab tak licences khaali dikhayega, crash nahi) ->
+  panel tables phase1/2 (agar baaki) -> functions: licence-verify
+  v2, brain-proxy v5, tts-proxy v3, admin-licences,
+  admin-plan-features, licence-key, admin-approve minimal,
+  admin-list v3, usage-count v2, push-token-sync v2, baaki phase1/2
+  set, send-push local redeploy, home-sync Phase 8 se -> schema
+  checks (dashboard se, code se assume nahi): licences.device_id
+  nullable? (NULL-claim ke liye chahiye), (user_id,device_id)
+  unique (SQL me index hai, ban gaya ya dupes ki wajah se fail
+  hua?), payment_submissions INSERT policy, core tables RLS policy
+  list, har function ki verify_jwt setting, plans/settings columns.
+- IMAANDAAR LIMITS + COORDINATION FLAGS (Wave B / parent ke liye):
+  (1) Phase 8 client (FLORA_LICENCE_V2_CLIENT.md) bound_mismatch +
+  "15-day text hataya" par bana hai — server correction ke mutabiq
+  device_locked/device_changed bhejta hai, bound_mismatch kabhi
+  nahi. Wave B me client parsing + 15-day text wapas laana hoga,
+  nahi to locked users ko "kab khulegi" nahi dikhega.
+  (2) Unlinked (random-UUID, bina login) app verify v2 JWT gate par
+  401 degi — ye parent decision khula hai (audit D1): linked users
+  JWT bhejen (Wave B must-do), unlinked ke liye key-only path ya
+  link-required — server me koi bypass NAHI lagaya gaya hai
+  (correction ka letter mana gaya hai).
+  (3) Unlinked usage reporting tab tak counted:false rahegi jab tak
+  app countUsage me device_id na bhejne lage (Wave B ek line ka
+  change); linked path JWT se turant chalega.
+  (4) On-device feature enforcement Wave B app build se aayega —
+  server brain/tts gate is build me hai; D8 (app-direct lane) ka
+  faisla user se pending hai, server kaam us par ruka nahi hai.
+  (5) Free-cap day-boundary: server UTC day (usage-count) vs app
+  local day me ghanton ka farq ho sakta hai (audit D6) — gate
+  server UTC day par chalta hai.
+  (6) Live admin test admin unblock (app-link + is_admin) ke baad
+  hi hoga; usse pehle admin functions 403 denge by design.
+  (7) DB-leak caveat: licence_key plaintext hai (F8 user order ki
+  wajah se) — service-role-only + masked UI hi protection hai,
+  panel DB keys wali caveat jaisi hi.

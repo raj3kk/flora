@@ -18,6 +18,17 @@
 //   (global pehle, prompt truncate; akela prompt > 4000 ab bhi
 //   reject — v3 wala cost control). Table na ho to global khaali
 //   (fail-open, v3 jaisa jawab).
+// v5 (LFMS licence gate, 2026-10-29): har call par user ki
+//   licence/usage state check (service-role, JWT match ke baad,
+//   provider call se pehle — key burn nahi hogi). Pro valid
+//   (active + unexpired) -> chalne do. Free -> aaj ka usage < 600
+//   talk sec ho to chalne do, nahi to 429 free_limit (503 nahi).
+//   Usage maujooda public.usage counter se padha jaata hai
+//   (usage-count/app-reporting se bharta hai, UTC day) — ye gate
+//   sirf PADHTA hai, increment kabhi nahi karta (double-count
+//   nahi). DB error par fail-open (allow). Device binding yahan
+//   check NAHI hoti (entitlement + cap hi) — binding
+//   licence-verify (app start) par enforce hoti hai.
 // Order: Gemini first, Groq fallback, then honest error. Keys never logged.
 // Style: short-casual replies default (same instruction as app BrainClient).
 // Prompt cap: 4000 chars (lambi prompt reject, cost control).
@@ -77,6 +88,31 @@ serve(async (req) => {
     return json({ error: "user_id, device_id, prompt required" }, 400);
   }
   if (user_id !== jwtUserId) return json({ error: "user_id does not match token" }, 403);
+
+  // v5 licence gate (LFMS): provider call se pehle, key burn nahi.
+  // Pro valid (active + unexpired) -> allow. Free -> aaj ka usage
+  // (public.usage, UTC day, usage-count se bharta hai) < 600 talk
+  // sec ho to allow, nahi to 429 free_limit + imaandaar message.
+  // Gate sirf padhta hai, increment nahi karta. DB error par
+  // fail-open (allow). Device binding yahan check nahi hoti.
+  async function licenceAllowed() {
+    try {
+      const { data: rows } = await svc.from("licences")
+        .select("plan_id,status,expires_at").eq("user_id", user_id).eq("status", "active");
+      const nowMs = Date.now();
+      const hasPro = (rows || []).some((r) =>
+        r.plan_id === "pro" && (!r.expires_at || new Date(r.expires_at).getTime() >= nowMs));
+      if (hasPro) return true;
+      const day = new Date().toISOString().slice(0, 10);
+      const { data: u } = await svc.from("usage").select("talk_seconds")
+        .eq("user_id", user_id).eq("day", day).maybeSingle();
+      return (u?.talk_seconds || 0) < 600;
+    } catch (_e) { return true; }
+  }
+  if (!(await licenceAllowed())) {
+    return json({ error: "free_limit", message: "Free limit poora ho gaya hai (600 sec/day) — Pro lene par unlimited milega." }, 429);
+  }
+
   if (prompt.length > 4000) {
     return json({ error: "prompt too long (max 4000 chars)" }, 400);
   }

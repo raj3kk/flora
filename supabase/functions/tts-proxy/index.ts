@@ -6,6 +6,12 @@
 // v2 (admin panel build 2026-10-29): key resolution = env FIRST
 //   (DEEPGRAM_API_KEY dashboard secret jeetega), else provider_keys
 //   DB row ("deepgram", panel se set). Baaki logic wahi hai.
+// v3 (LFMS licence gate, 2026-10-29): brain-proxy v5 wala hi gate
+//   (Pro valid ya Free < 600 talk sec/day, nahi to 429 free_limit).
+//   Body me user_id nahi hota — JWT user hi user hai. Usage
+//   public.usage se padha jaata hai (usage-count se bharta hai);
+//   gate sirf padhta hai, increment nahi karta. DB error par
+//   fail-open. Device binding yahan check nahi hoti.
 // Text cap: 1000 chars (cost control). User ka text kabhi log nahi.
 // DEPLOY + KEYS PENDING: dashboard editor se deploy + DEEPGRAM_API_KEY
 // set karna baaki hai; app wiring (system TTS se proxy par) uske baad
@@ -43,6 +49,31 @@ serve(async (req) => {
   }
   if (text.length > 1000) {
     return json({ error: "text too long (max 1000 chars)" }, 400);
+  }
+
+  // v3 licence gate (LFMS, brain-proxy v5 jaisa): JWT user ki
+  // licence/usage state check, Deepgram call se pehle (key burn
+  // nahi). Pro valid (active + unexpired) -> allow. Free -> aaj
+  // ka usage (public.usage, UTC day) < 600 talk sec ho to allow,
+  // nahi to 429 free_limit. Gate sirf padhta hai, increment nahi
+  // karta. DB error par fail-open. Device binding yahan check
+  // nahi hoti (licence-verify par enforce hoti hai).
+  async function licenceAllowed() {
+    try {
+      const { data: rows } = await svc.from("licences")
+        .select("plan_id,status,expires_at").eq("user_id", userData.user.id).eq("status", "active");
+      const nowMs = Date.now();
+      const hasPro = (rows || []).some((r) =>
+        r.plan_id === "pro" && (!r.expires_at || new Date(r.expires_at).getTime() >= nowMs));
+      if (hasPro) return true;
+      const day = new Date().toISOString().slice(0, 10);
+      const { data: u } = await svc.from("usage").select("talk_seconds")
+        .eq("user_id", userData.user.id).eq("day", day).maybeSingle();
+      return (u?.talk_seconds || 0) < 600;
+    } catch (_e) { return true; }
+  }
+  if (!(await licenceAllowed())) {
+    return json({ error: "free_limit", message: "Free limit poora ho gaya hai (600 sec/day) — Pro lene par unlimited milega." }, 429);
   }
 
   const dgKey = await resolveKey("deepgram", "DEEPGRAM_API_KEY");

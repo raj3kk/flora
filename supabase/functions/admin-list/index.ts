@@ -11,6 +11,11 @@
 // push_tokens presence (token VALUE kabhi nahi bheji jaati — sirf
 // haan/naa + latest updated_at), usage totals (mili hui rows ka
 // jod; poora all-time tabhi jab rows 1000 ki limit me aa jayein).
+// v3 (LFMS, 2026-10-29): licences select me id + device_id +
+//   activated_at + masked key (last 4) juda — panel ko revoke/
+//   rebind + per-licence list ke liye chahiye. FULL key kabhi
+//   nahi aati (masked + last4 hi kaafi hai; full key sirf
+//   admin-licences reveal se, audit ke saath, milti hai).
 // Kabhi wapas NAHI: FCM token value, UTR, koi secret/key value,
 // kisi user ka password/hash.
 // POST {} + Authorization: Bearer <user JWT>.
@@ -52,7 +57,17 @@ Deno.serve(async (req) => {
   }
   const { data: users } = await svc.from("users").select("id,device_id,is_admin").limit(200);
   const { data: usageAll } = await svc.from("usage").select("user_id,day,talk_seconds,tool_calls").order("day", { ascending: false }).limit(1000);
-  const { data: licences } = await svc.from("licences").select("user_id,plan_id,status,expires_at").limit(200);
+  const { data: licences } = await svc.from("licences").select("id,user_id,device_id,plan_id,status,expires_at,activated_at,licence_key,revoked_reason,revoked_at,superseded_by").limit(200);
+  const licencesOut = (licences || []).map((l: any) => ({
+    id: l.id, user_id: l.user_id,
+    device_id: l.device_id, plan_id: l.plan_id, status: l.status,
+    expires_at: l.expires_at, activated_at: l.activated_at,
+    has_key: !!l.licence_key,
+    masked_key: l.licence_key ? ("FLORA-••••-••••-" + String(l.licence_key).slice(-4)) : null,
+    key_last4: l.licence_key ? String(l.licence_key).slice(-4) : null,
+    revoked_reason: l.revoked_reason || null, revoked_at: l.revoked_at || null,
+    superseded_by: l.superseded_by || null,
+  }));
   const { data: pushRows } = await svc.from("push_tokens").select("user_id,updated_at").limit(500);
   const push: Record<string, { has_token: boolean; updated_at: string | null }> = {};
   (pushRows || []).forEach((r: any) => {
@@ -74,7 +89,7 @@ Deno.serve(async (req) => {
     ok: true,
     users: users || [],
     usage: (usageAll || []).slice(0, 200),
-    licences: licences || [],
+    licences: licencesOut,
     push,
     emails,
     usage_totals: usageTotals,

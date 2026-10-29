@@ -89,18 +89,68 @@ Deno.serve(async (req) => {
   // ALTER TABLE public.licences ALTER COLUMN device_id DROP NOT NULL;
   // (ye SQL deploy doc me hai, yahan blind alter nahi hai).
   const { data: userRow } = await svc.from("users").select("device_id").eq("id", payment.user_id).maybeSingle();
-  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  // LFMS minimal edit (website-path ONLY — app-path neeche waisa hi
+  // hai): key generation + supersede + renewal stacking.
+  // Key generator admin-licences wale ka mirror hai (Deno
+  // functions file share nahi kar sakte).
+  const KEY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
+  function genKeyPart() {
+    const buf = new Uint32Array(4);
+    crypto.getRandomValues(buf);
+    let s = "";
+    for (let i = 0; i < 4; i++) s += KEY_ALPHABET[buf[i] % KEY_ALPHABET.length];
+    return s;
+  }
+  function genKey() {
+    return "FLORA-" + genKeyPart() + "-" + genKeyPart() + "-" + genKeyPart();
+  }
+  // Default expiry (app-path isi ko use karta hai): ab + 30 din.
+  // Website-path me stacking se overwrite hoga (neeche).
+  let expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   if (!userRow?.device_id) {
     const { data: existing } = await svc.from("licences").select("id").eq("user_id", payment.user_id).is("device_id", null).order("activated_at", { ascending: false }).limit(1).maybeSingle();
+    // Prior actives: stacking base + supersede list (ek hi query).
+    const { data: priors } = await svc.from("licences").select("id,expires_at").eq("user_id", payment.user_id).eq("status", "active");
+    // Renewal stacking (default rule, user correct kar sakta hai):
+    // nayi expiry = max(ab, pehli expiry) + 30 din — jaldi renew
+    // par bacha hua time overwrite nahi hota.
+    let baseMs = Date.now();
+    for (const p of (priors || [])) {
+      if (p.expires_at) baseMs = Math.max(baseMs, new Date(p.expires_at).getTime());
+    }
+    expires = new Date(baseMs + 30 * 24 * 60 * 60 * 1000).toISOString();
     let licErr = null;
+    let licenceId = existing ? existing.id : null;
     if (existing) {
+      // Reuse path: key waisi hi rehti hai (keyless row keyless
+      // hi rahegi — backward compatible; key wali row ki key nahi
+      // badalti).
       const r = await svc.from("licences").update({ plan_id: "pro", status: "active", activated_at: now, expires_at: expires }).eq("id", existing.id);
       licErr = r.error;
     } else {
-      const r = await svc.from("licences").insert({ user_id: payment.user_id, device_id: null, plan_id: "pro", status: "active", activated_at: now, expires_at: expires });
-      licErr = r.error;
+      // Insert path: unique key ke saath (collision par retry, max 5).
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const key = genKey();
+        const r = await svc.from("licences").insert({ user_id: payment.user_id, device_id: null, plan_id: "pro", status: "active", activated_at: now, expires_at: expires, licence_key: key }).select("id").single();
+        if (!r.error) { licenceId = r.data.id; break; }
+        if (r.error.code === "23505") { licErr = r.error; continue; }
+        licErr = r.error; break;
+      }
+      if (!licenceId && !licErr) licErr = { message: "key generation failed" };
     }
     if (licErr) return new Response(JSON.stringify({ error: "website-path licence failed: " + licErr.message + " — payment left pending" }), { status: 500, headers: { "Content-Type": "application/json" } });
+    // Supersede: nayi/reused row chhod kar baaki active rows ko
+    // 'superseded' karo (ek active rule — warna do devices par
+    // do active rows dono Pro pate hain, 15-day lock trigger hi
+    // nahi hota). Order: row pehle bani, tabhi supersede (insert
+    // fail hota to user ke paas kuch nahi bachta).
+    let supersededCount = 0;
+    for (const p of (priors || [])) {
+      if (p.id === licenceId) continue;
+      const r = await svc.from("licences").update({ status: "superseded", superseded_by: licenceId }).eq("id", p.id);
+      if (r.error) return new Response(JSON.stringify({ error: "licence supersede failed: " + r.error.message + " — payment left pending" }), { status: 500, headers: { "Content-Type": "application/json" } });
+      supersededCount++;
+    }
     const { error: payErr } = await svc.from("payment_submissions").update({
       status: "approved", reviewed_by: adminId, reviewed_at: now,
     }).eq("id", payment_id);
@@ -108,7 +158,7 @@ Deno.serve(async (req) => {
     await svc.from("admin_audit").insert({
       admin_user_id: adminId, action: "payment_approved_website_path",
       target_user_id: payment.user_id, before_json: payment,
-      after_json: { status: "approved", plan_id: "pro", expires_at: expires, device_id: null },
+      after_json: { status: "approved", plan_id: "pro", expires_at: expires, device_id: null, superseded_count: supersededCount },
     });
     return new Response(JSON.stringify({ ok: true, licence_activated: true, website_path: true, expires_at: expires }), { headers: { "Content-Type": "application/json" } });
   }
