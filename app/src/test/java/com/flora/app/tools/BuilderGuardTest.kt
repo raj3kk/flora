@@ -8,6 +8,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
 /**
  * B3 unit tests — sirf pure-JVM layer (guard, grant-once, PKCE).
@@ -18,6 +20,11 @@ import org.junit.Test
  * chalata hai, isliye ye tests CI par execute nahi hote — local
  * `./gradlew :app:testDebugUnitTest` se chalane ke liye hain.
  */
+// Robolectric runner: plain JUnit par org.json sirf stub hota hai —
+// parseProjects ka try/catch stub RuntimeException nigal kar null
+// deta tha (isliye AssertionError, RuntimeException nahi). Runner
+// ke neeche real org.json chalti hai.
+@RunWith(RobolectricTestRunner::class)
 class BuilderGuardTest {
 
     // Synthetic shape fixtures — repeated chars, never a real value.

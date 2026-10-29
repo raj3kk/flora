@@ -9,6 +9,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
 /**
  * B6 unit tests — sirf pure-JVM crypto/format layer.
@@ -17,6 +19,11 @@ import org.junit.Test
  * `./gradlew :app:testDebugUnitTest` se chalane ke liye hain.
  * Koi asli PIN/secret fixture me nahi — sirf synthetic PIN.
  */
+// Robolectric runner: plain JUnit par org.json sirf stub hota hai
+// (har method RuntimeException) — runner ke neeche real org.json
+// implementation chalti hai, isliye encrypt/decrypt + manifest
+// tests asli code path par execute hote hain.
+@RunWith(RobolectricTestRunner::class)
 class FloraBackupCryptoTest {
 
     private val pin = "test-pin-1234"
