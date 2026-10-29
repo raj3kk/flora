@@ -278,6 +278,68 @@ fun PermissionsScreen(onShowWizard: () -> Unit) {
             Spacer(modifier = Modifier.height(12.dp))
         }
         item {
+            // Batch 2 (F7): overlay mic ka UI path — ab sirf voice
+            // command se hi nahi, yahan se bhi milta hai. Voice
+            // commands barkaraar hain. Permission na ho to sirf
+            // imaandaar guidance, crash nahi.
+            Text("Overlay mic — kisi bhi screen par Flora ka mic button")
+            val overlayAllowed = try {
+                android.provider.Settings.canDrawOverlays(context)
+            } catch (e: Exception) {
+                false
+            }
+            Text(
+                "Overlay permission: " + if (overlayAllowed) {
+                    "mila hua ✓"
+                } else {
+                    "nahi mila — bina iske overlay nahi dikhega"
+                }
+            )
+            Row {
+                Button(onClick = {
+                    try {
+                        context.startActivity(
+                            Intent(
+                                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:" + context.packageName),
+                            )
+                        )
+                        note = "Overlay settings khul rahi hain — wahan Flora ko 'Display over other apps' do."
+                    } catch (e: Exception) {
+                        note = "Overlay settings nahi khul payi — phone ki Settings > Apps > Flora > 'Display over other apps' se do."
+                    }
+                }) { Text("Overlay permission do") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = {
+                    if (!overlayAllowed) {
+                        note = "Pehle overlay permission do, phir overlay mic chalu hoga."
+                    } else {
+                        try {
+                            context.startForegroundService(
+                                Intent(context, com.flora.app.automation.OverlayMicService::class.java)
+                            )
+                            note = "Overlay mic chalu ho gaya — ab kisi bhi screen par Flora ka mic button dikhega."
+                        } catch (e: Exception) {
+                            note = "Overlay mic chalu nahi ho paya, dobara koshish karo."
+                        }
+                    }
+                }) { Text("Overlay mic chalu karo") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = {
+                    try {
+                        context.stopService(
+                            Intent(context, com.flora.app.automation.OverlayMicService::class.java)
+                        )
+                        note = "Overlay mic band kar diya."
+                    } catch (e: Exception) {
+                        note = "Overlay mic band nahi ho paya."
+                    }
+                }) { Text("Overlay mic band karo") }
+            }
+            Text("Voice command se bhi chalta hai: 'overlay mic chalu karo' / 'overlay mic band karo'.")
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+        item {
             Text("Mic beep: system recognizer ki 'tu-ta' beep ko sunne ke dauraan mute kar diya jata hai (v2.15). Kuch phones ki apni beep isse bhi nahi rukti — wo device ki limit hai.")
             Spacer(modifier = Modifier.height(8.dp))
             Row {

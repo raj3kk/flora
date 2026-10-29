@@ -23,18 +23,32 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.flora.app.data.FloraPreferences
+import kotlinx.coroutines.launch
 
 /**
- * Setup wizard (v2.13, Flora ka apna design): app pehli baar khulte
- * hi 3 steps me setup hota hai — Welcome, Permissions, Background.
+ * Setup wizard (v2.13, Flora ka apna design; Batch 2 F1: 9 steps):
+ * app pehli baar khulte hi setup hota hai — Welcome, Permissions,
+ * Background, phir 6 dedicated steps (Keys, Website link, Licence,
+ * Default assistant, Overlay, Free-mode banner).
+ *
+ * Har naya step SKIP karne layak hai (defaults maujood hain),
+ * par step ka hona zaroori hai. "Section kholo" dabane par user
+ * Settings/Licence screen par jata hai aur wahan se "Setup
+ * wizard me wapas jao" se isi wizard me wapas aata hai — Settings
+ * me atak kar nahi reh jata (FloraApp me wizardBack banner).
+ * Settings se dobara kholne ka raasta barkaraar hai (Permissions
+ * screen > "Setup wizard dobara dekho" + pehli-baar gate).
  *
  * Step 2 ka behaviour: "Sab allow karo" dabane par Android ke
  * system dialogs ek-ek karke aate hain (ye Android ka apna flow
@@ -99,12 +113,27 @@ private val WIZARD_PERMISSIONS = listOf(
 )
 
 @Composable
-fun SetupWizard(onDone: () -> Unit) {
+fun SetupWizard(
+    onDone: () -> Unit,
+    prefs: FloraPreferences? = null,
+    onOpenSection: (String) -> Unit = {},
+) {
     val context = LocalContext.current
+    val wizardScope = rememberCoroutineScope()
     var step by remember { mutableStateOf(1) }
     var grants by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var attempted by remember { mutableStateOf(false) }
     var refresh by remember { mutableStateOf(0) }
+    // Batch 2 (F1) wizard state — launchers/callbacks se pehle.
+    var linkedEmail by remember { mutableStateOf("") }
+    var personaSel by remember { mutableStateOf("flora") }
+    var voiceSel by remember { mutableStateOf("lily") }
+    var wizardNote by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        try { linkedEmail = prefs?.linkedEmail() ?: "" } catch (e: Exception) { }
+        try { personaSel = prefs?.persona() ?: "flora" } catch (e: Exception) { }
+        try { voiceSel = prefs?.voiceSample() ?: "lily" } catch (e: Exception) { }
+    }
     // Launcher ke callback se PEHLE declare (order trap).
     var lastRequested by remember { mutableStateOf("") }
     val singleLauncher = rememberLauncherForActivityResult(
@@ -137,7 +166,7 @@ fun SetupWizard(onDone: () -> Unit) {
     LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         item {
             Text("Flora set up karo")
-            Text("Step $step / 3")
+            Text("Step $step / 9")
             Spacer(modifier = Modifier.height(8.dp))
         }
         if (step == 1) {
@@ -371,13 +400,279 @@ fun SetupWizard(onDone: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Status refresh karo") }
                 Spacer(modifier = Modifier.height(8.dp))
+                // Batch 2 (F1): step 3 se seedha step 4 (keys) — Ho gaya
+                // dabana zaroori nahi, baaki steps skip bhi ho sakte hain.
+                Button(
+                    onClick = { step = 4 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Agla step: Keys →") }
+                Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
                     Text("✓ Ho gaya")
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Koi bhi step chhoda ja sakta hai — Ho gaya dabate hi Flora khul jayegi.")
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Shuru me hi keys: Settings > Keys me apni Gemini key (AI Studio se free) aur Deepgram key (Deepgram console se) daalo — har key ke neeche link se key banao, phir 'Bhare hue keys check karo' se sahi/galat dekho, phir Save dabao. Keys sirf is phone par rehti hain.")
+                Text("Agla step (4) keys ka hai — wahan se Keys section khologe. Har step skip kar sakte ho.")
+            }
+        }
+        // Batch 2 (F1) step 4 — key setup: keys tak le jao, wapas wizard me lao.
+        if (step == 4) {
+            item {
+                Text("Apni keys jodo")
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Flora tumhari apni keys se chalti hai — Gemini key " +
+                        "(AI Studio se free) sochne ke liye, Deepgram key " +
+                        "awaaz sunne ke liye, aur Brave/SerpAPI/Maps keys " +
+                        "search ke liye. Keys sirf is phone par rehti hain, " +
+                        "kabhi server par nahi jati."
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Settings > Keys me har key ke neeche link se key " +
+                        "banao, phir 'Bhare hue keys check karo' se sahi/galat " +
+                        "dekho, phir Save dabao. Bina key ke bhi aage badh " +
+                        "sakte ho — tab sirf halki local baat hogi."
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { onOpenSection("keys") },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Keys section kholo (Settings)") }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { step = 3 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("← Peeche") }
+                TextButton(
+                    onClick = { step = 5 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Skip karo → Agla step") }
+                Text("Settings se 'Setup wizard me wapas jao' dabate hi yahin wapas aaoge.")
+            }
+        }
+        // Batch 2 (F1) step 5 — website link: status + dobara sync ka raasta.
+        if (step == 5) {
+            item {
+                Text("Website account link karo")
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    if (linkedEmail.isNotEmpty()) "Linked: $linkedEmail — website wala Pro isi app me dikhega."
+                    else "Abhi koi website account link nahi hai — website se khareeda Pro isi app me dikhane ke liye link karo."
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Link pending ho to Settings me 'Server sync dobara karo' " +
+                        "dabao. Link karne se pehle jaan lo: purani random-UUID " +
+                        "wali licence orphan ho jayegi; refresh token sirf is " +
+                        "phone par save hoga; password kabhi save nahi hota."
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { onOpenSection("link") },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Website link section kholo (Settings)") }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { step = 4 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("← Peeche") }
+                TextButton(
+                    onClick = { step = 6 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Skip karo → Agla step") }
+            }
+        }
+        // Batch 2 (F1) step 6 — licence activation: LicenceScreen ka raasta.
+        if (step == 6) {
+            item {
+                Text("Licence / Pro")
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Free me roz 10 minute baat + app me maujood saare " +
+                        "tools. Pro (₹199/month) me unlimited baat + FCM push. " +
+                        "Licence screen par status dekho, refresh karo, ya " +
+                        "admin se mili key verify karo."
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { onOpenSection("licence") },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Licence screen kholo") }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = { step = 5 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("← Peeche") }
+                TextButton(
+                    onClick = { step = 7 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Skip karo → Agla step") }
+            }
+        }
+        // Batch 2 (F1) step 7 — default assistant: persona + voice sample, yahin se.
+        if (step == 7) {
+            item {
+                Text("Flora kaisi lagegi?")
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Persona (tone) chuno — awaaz Sample 2 Lily default hai (gahri, dheemi, mellow).")
+                Spacer(modifier = Modifier.height(8.dp))
+                Row {
+                    listOf("flora" to "Flora", "saathi" to "Saathi", "guru" to "Guru", "romantic" to "Romantic").forEach { (id, label) ->
+                        Button(
+                            onClick = {
+                                personaSel = id
+                                wizardScope.launch { try { prefs?.setPersona(id) } catch (e: Exception) { } }
+                            },
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) { Text(if (personaSel == id) "✓ $label" else label) }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row {
+                    listOf("isabella" to "Sample 1", "lily" to "Sample 2 Lily", "myrtle" to "Sample 3").forEach { (id, label) ->
+                        Button(
+                            onClick = {
+                                voiceSel = id
+                                wizardScope.launch { try { prefs?.setVoiceSample(id) } catch (e: Exception) { } }
+                            },
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) { Text(if (voiceSel == id) "✓ $label" else label) }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Baad me Settings se bhi badal sakte ho.")
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { step = 6 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("← Peeche") }
+                TextButton(
+                    onClick = { step = 8 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Skip karo → Agla step") }
+            }
+        }
+        // Batch 2 (F1) step 8 — overlay: mic permission + setup, imaandaar guidance.
+        if (step == 8) {
+            item {
+                val overlayAllowed = try {
+                    android.provider.Settings.canDrawOverlays(context)
+                } catch (e: Exception) {
+                    false
+                }
+                Text("Overlay mic")
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Overlay mic se kisi bhi screen par Flora ka mic button " +
+                        "dikhta hai — dabate hi wo sunegi. Iske liye ek baar " +
+                        "Android ki 'doosri app ke upar dikhne' ki permission " +
+                        "chahiye, jo sirf tum khud de sakte ho."
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Overlay permission: " + if (overlayAllowed) "mila hua ✓" else "nahi mila — bina iske overlay nahi dikhega"
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        try {
+                            context.startActivity(
+                                Intent(
+                                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:" + context.packageName),
+                                )
+                            )
+                        } catch (e: Exception) {
+                            wizardNote = "Overlay settings nahi khul payi — phone ki Settings > Apps > Flora > 'Display over other apps' se do."
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Overlay permission do") }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        if (!overlayAllowed) {
+                            wizardNote = "Pehle upar se overlay permission do, phir overlay mic chalu hoga."
+                        } else {
+                            try {
+                                context.startForegroundService(
+                                    Intent(context, com.flora.app.automation.OverlayMicService::class.java)
+                                )
+                                wizardNote = "Overlay mic chalu ho gaya."
+                            } catch (e: Exception) {
+                                wizardNote = "Overlay mic chalu nahi ho paya — dobara koshish karo."
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Overlay mic chalu karo") }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        try {
+                            context.stopService(
+                                Intent(context, com.flora.app.automation.OverlayMicService::class.java)
+                            )
+                            wizardNote = "Overlay mic band kar diya."
+                        } catch (e: Exception) {
+                            wizardNote = "Overlay mic band nahi ho paya."
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Overlay mic band karo") }
+                if (wizardNote.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(wizardNote)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Baad me chat me bhi bol sakte ho: 'overlay mic chalu karo' / 'overlay mic band karo'.")
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { step = 7 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("← Peeche") }
+                TextButton(
+                    onClick = { step = 9 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Skip karo → Agla step") }
+            }
+        }
+        // Batch 2 (F1) step 9 — free-mode banner samjhao.
+        if (step == 9) {
+            item {
+                Text("Free mode samajh lo")
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Free mode me roz 10 minute baat milti hai, par app me " +
+                        "maujood saare tools milte hain. Limit khatam hone " +
+                        "par Flora imaandaari se bata degi — chupchaap nahi " +
+                        "rokegi. Pro me unlimited baat + FCM push milta hai."
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Chat aur baat wali screen par hamesha ye banner dikhega:")
+                Spacer(modifier = Modifier.height(4.dp))
+                if (prefs != null) {
+                    FreeRemainingText(prefs, null)
+                } else {
+                    Text("AAP FREE MODE ME HO — aaj 10 min baat milti hai.")
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { step = 8 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("← Peeche") }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
+                    Text("✓ Ho gaya — Flora kholo")
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                TextButton(
+                    onClick = { step = 1 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Shuru se dobara dekho") }
+                Text("Koi bhi step chhoda ja sakta hai — Ho gaya dabate hi Flora khul jayegi.")
             }
         }
     }
