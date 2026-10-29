@@ -27,12 +27,11 @@ interface NeuralEngine {
     fun speak(text: String, onStart: () -> Unit, onDone: () -> Unit)
 
     /**
-     * Cycle 3, F4: chal rahi neural utterance roko. Engine abhi
-     * null hai (koi implementation repo me nahi), isliye ye
-     * sirf contract hai — koi neural engine implement nahi kiya
-     * gaya hai, aur system TTS hi bolega. Engine judne par use
-     * ye method bhi implement karni hogi (warna stop kaam nahi
-     * karega — isliye default empty nahi rakha gaya).
+     * Cycle 3, F4: chal rahi neural utterance roko. Attach se pehle
+     * engine null rehta hai, tab system TTS hi bolega; engine judne
+     * par (NeuralVoiceAttach se KokoroOrtEngine) use ye method bhi
+     * implement karni hoti hai (warna stop kaam nahi karega —
+     * isliye default empty nahi rakha gaya).
      */
     fun stop()
 }

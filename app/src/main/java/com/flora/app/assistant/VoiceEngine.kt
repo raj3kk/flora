@@ -5,7 +5,9 @@ import android.speech.tts.TextToSpeech
 import java.util.Locale
 
 /**
- * System TTS only (free, on-device voices). No proprietary voice is
+ * Neural-first + system-TTS fallback (free, on-device voices). Neural engine
+ * juda ho (NeuralVoiceAttach se KokoroOrtEngine) to wahi bolega, warna ya
+ * engine fail ho to system TTS (Lily profile) bolega. No proprietary voice is
  * cloned or copied. TTS starts immediately on a streaming-style reply:
  * the UI speaks the reply as soon as it arrives.
  */

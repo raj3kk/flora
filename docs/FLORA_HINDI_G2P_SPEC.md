@@ -1,7 +1,8 @@
 # FLORA Hindi G2P Spec — Clean-Room (v0.2, 2026-10-30)
 
-**Status:** SPEC ONLY. Implementation nahi — Lane C implementation chain is spec ke baad,
-validation run 1 ke saath shuru hogi. App tree me is spec se koi code edit nahi hua hai.
+**Status:** IMPLEMENTED — Lane C implementation landed hai (KokoroOrtEngine +
+NeuralVoiceAttach + HindiG2P, is spec ke mutabiq). Ye spec ab implementation
+ka record + audit reference hai; rule change sirf §4.3 process se hoga.
 
 **Route:** CLEAN-ROOM (user decision 2026-10-30 ~00:35 IST). GPL-data route CLOSED hai —
 espeak-ng ka koi data/code/file is spec me nahi hai aur APK me kabhi ship nahi hoga
@@ -172,6 +173,13 @@ BAAD ek consonant + vowel ho (CV). Dono taraf ki shartein poori honi chahiye.
 
 ### §2.3 Conditions (sabhi binding hain)
 - **C1 — First syllable kabhi nahi:** shabd ke pehle akshara ka schwa kabhi delete nahi hota.
+- **C1-exception — Single-vowel word-final schwa (a426359a ki recording, rule change nahi):**
+  C1 ki protection sirf MEDIAL schwa par lagu hoti hai. Agar shabd ka ekmatra vowel hi
+  word-final schwa ho (single-akshara input), to wo schwa C1 se safe NAHI hai — us par
+  §5.1 default lagu hota hai (delete, jab tak §5.3 block na lage). Code
+  (`HindiG2P.kt`, `applySchwaDeletion`) first-vowel schwa ko tabhi protect karta hai jab
+  wo aakhri segment NA ho; aakhri segment hone par §5.1/§5.3 wali final branch chalti hai.
+  Examples (§1.4 nukta rows / §1.5 conjunct rows ke mutabiq): क़→q, फ़→f, क्ष→kʂ.
 - **C2 — Vowel se pehle kabhi nahi:** agar schwa ke baad vowel hai (CV nahi bana), to delete nahi.
 - **C3 — Word-final tabhi jab cluster admissible ho:** aakhri schwa tabhi delete hota hai jab
   uske hatne se bana aakhri cluster §5 ke mutabiq admissible ho; nahi to schwa rehta hai.
