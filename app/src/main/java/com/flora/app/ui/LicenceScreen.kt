@@ -186,7 +186,7 @@ fun LicenceScreen(
         Text("App me UTR save karna sirf tumhara LOCAL note hai — usse submit nahi hota, approve ka intezar us par mat karo.")
         Text("Admin se mili licence key ho to neeche key daal kar verify karo (us par bhi wahi niyam lagenge).")
         Text("Website se khareeda Pro isi app me dikhane ke liye Settings me 'Website account link' karo.")
-        Text("Device lock: ek licence ek time me ek device par chalti hai. Pehle jis device par claim hui, wahi bind rahegi. 15 din poore hone par licence naye device par transfer ho jati hai (purana device free ho jata hai); 15 din se pehle nayi device par device lock lagega (transfer ki date dikhegi). Admin panel se turant rebind bhi ho sakta hai — app khud rebind ki koshish nahi karti, faisla server ka hai.")
+        Text("Device lock: ek licence ek time me ek device par chalti hai. Pehle jis device par claim hui, wahi bind rahegi. 15 din poore hone par licence naye device par transfer ho jati hai (purana device free ho jata hai); 15 din se pehle nayi device par device lock lagega. Admin panel se turant rebind bhi ho sakta hai — app khud rebind ki koshish nahi karti, faisla server ka hai.")
         Spacer(modifier = Modifier.height(12.dp))
         Button(onClick = { refresh() }) {
             Text(if (refreshing) "Check ho raha hai…" else "Licence refresh karo")
