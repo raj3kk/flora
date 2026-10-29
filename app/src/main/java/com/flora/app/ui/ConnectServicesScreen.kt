@@ -35,6 +35,7 @@ import com.flora.app.data.BuilderAuthKind
 import com.flora.app.data.BuilderGrantOnce
 import com.flora.app.data.BuilderService
 import com.flora.app.data.FloraPreferences
+import com.flora.app.tools.BuilderAuthFailure
 import com.flora.app.tools.BuilderFailureKind
 import com.flora.app.tools.BuilderHttp
 import com.flora.app.tools.BuilderHosts
