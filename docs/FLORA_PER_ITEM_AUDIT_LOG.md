@@ -1479,3 +1479,13 @@ maujood, index bhi 200. Download page ab live hai.
   (7) DB-leak caveat: licence_key plaintext hai (F8 user order ki
   wajah se) — service-role-only + masked UI hi protection hai,
   panel DB keys wali caveat jaisi hi.
+
+- LFMS v2.1 ADDITION (licence-verify, website account card ke liye):
+  device_id ab OPTIONAL hai. device_id na mile to STATUS-ONLY view
+  milta hai (plan/status/expiry/features, sirf JWT user ka apna
+  status) — bina binding decision, bina claim, bina transfer ke
+  (koi write nahi). Website account.html ka licence card isi par
+  chalega (website par device_id hota hi nahi). device_id mile to
+  poora v2 logic (binding/claim/transfer) waisa hi chalega. JWT
+  gate + user match dono raaston par lagta hai. Key + no-device
+  par bhi status-only (claim nahi hoti).

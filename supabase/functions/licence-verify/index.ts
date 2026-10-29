@@ -1,6 +1,14 @@
 // Flora licence-verify Edge Function v2 — LFMS (server-authoritative).
-// POST { user_id, device_id, licence_key? } + Authorization: Bearer <user JWT>
+// POST { user_id, device_id?, licence_key? } + Authorization: Bearer <user JWT>
 //   -> { plan, status, valid, features[], expires_at, bound_device_short, ... }.
+// device_id OPTIONAL hai (v2.1, website account card ke liye):
+//   - device_id NA mile to STATUS-ONLY view milta hai (plan/status/
+//     expiry/features, sirf JWT user ka apna status) — BINA binding
+//     decision, BINA claim, BINA transfer ke (koi write nahi).
+//     Website par device_id hota hi nahi, isliye account.html ka
+//     licence card isi par chalega.
+//   - device_id mile to poora v2 logic (binding/claim/transfer)
+//     waisa hi chalega (neeche).
 // v1 se wahi (toda NAHI gaya):
 //   - 1-phone / 15-day change rule (standing rule): pro licence ek
 //     waqt par sirf EK device par. Naye device se check aaye aur
@@ -69,7 +77,7 @@ Deno.serve(async (req) => {
 
   const body = await req.json().catch(() => ({}));
   const { user_id, device_id, licence_key } = body;
-  if (!user_id || !device_id) return json({ error: "user_id + device_id required" }, 400);
+  if (!user_id) return json({ error: "user_id required" }, 400);
   if (user_id !== jwtUserId) return json({ error: "user_id does not match token" }, 403);
 
   const now = new Date();
@@ -83,6 +91,46 @@ Deno.serve(async (req) => {
       if (Array.isArray(data?.features)) return data.features;
     } catch (_e) { /* defaults below */ }
     return plan === "pro" ? PRO_FEATURES : FREE_FEATURES;
+  }
+
+  // --- STATUS-ONLY view (device_id na mile to): sirf padhta hai,
+  // koi claim/transfer/update NAHI karta. Website account card
+  // isi par chalega (website par device_id hota hi nahi). ---
+  async function statusOnly(row) {
+    if (row.status === "revoked") {
+      return { valid: false, plan: row.plan_id, status: "revoked", reason: row.revoked_reason || null };
+    }
+    if (row.status === "superseded") {
+      return { valid: false, plan: row.plan_id, status: "superseded" };
+    }
+    if (row.status === "expired" || isExpired(row)) {
+      return { valid: false, plan: "free", status: "expired" };
+    }
+    return { valid: true, plan: row.plan_id, status: row.plan_id === "pro" ? "active" : "free",
+      features: await featuresFor(row.plan_id), expires_at: row.expires_at || null,
+      bound_device_short: short(row.device_id) };
+  }
+  if (!device_id) {
+    if (typeof licence_key === "string" && licence_key.trim()) {
+      const key = licence_key.trim();
+      const { data: keyRow, error: keyError } = await supabase.from("licences")
+        .select("*").eq("licence_key", key).maybeSingle();
+      if (keyError) return json({ error: keyError.message }, 500);
+      if (!keyRow || keyRow.user_id !== user_id) {
+        return json({ valid: false, status: "invalid_key" });
+      }
+      return json(await statusOnly(keyRow));
+    }
+    const { data: rows, error: rowsError } = await supabase.from("licences")
+      .select("*").eq("user_id", user_id).order("activated_at", { ascending: false });
+    if (rowsError) return json({ error: rowsError.message }, 500);
+    const list = rows || [];
+    const pro = list.find((r) => r.plan_id === "pro" && r.status === "active" && !isExpired(r));
+    if (pro) return json(await statusOnly(pro));
+    const act = list.find((r) => r.status === "active" && !isExpired(r));
+    if (act) return json(await statusOnly(act));
+    if (list.length) return json(await statusOnly(list[0]));
+    return json({ valid: true, plan: "free", status: "free", features: await featuresFor("free") });
   }
 
   // Ek licence row ka device faisla (claim / match / 15-day rule).
