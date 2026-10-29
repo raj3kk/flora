@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.serialization")
+    id("com.google.devtools.ksp")
     id("com.google.gms.google-services")
 }
 
@@ -65,6 +66,17 @@ dependencies {
     // Shizuku (v2.22, G19): system permissions bina root ke, user ki
     // Shizuku app ke through — sirf jab user ne Shizuku chalaya ho.
     implementation("dev.rikka.shizuku:api:13.1.5")
+    // B4 Planner — Room (plan/task state, F02) + WorkManager
+    // (durable scheduling/resume ONLY, F03/M13 — live executor
+    // nahi). Dono AGP 8.5.2 / Kotlin 1.9.24 stack par pinned.
+    // Deliberately NAHI: lifecycle-runtime-ktx (v1.3 CI fail),
+    // Hilt (manual constructor DI hi fallback hai, F15),
+    // Retrofit (B3 OkHttp clients ka duplicate hota),
+    // Timber/App Startup/AppSearch (optional, B5 consolidation me).
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
+    implementation("androidx.work:work-runtime-ktx:2.8.1")
     // B2 unit tests — sirf test scope, production APK me nahi.
     testImplementation("junit:junit:4.13.2")
     // Google sign-in (v2.22, Phase 5, G14): sirf id_token

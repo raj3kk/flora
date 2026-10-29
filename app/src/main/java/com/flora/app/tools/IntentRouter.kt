@@ -24,6 +24,8 @@ object IntentRouter {
         data class OpenBrowser(val site: String) : Route()
         data class Research(val query: String) : Route()
         data class BrainChat(val query: String) : Route()
+        /** B4 planner route — sirf explicit plan phrases (BrainChat hijack nahi). */
+        data class Plan(val query: String) : Route()
     }
 
     private val LIVE_WORDS = listOf(
@@ -91,6 +93,15 @@ object IntentRouter {
         val hasQuestion = QUESTION_WORDS.any { lower.contains(it) } ||
             lower.endsWith("?") || tokens.intersect(QUESTION_TOKENS).isNotEmpty()
         if (hasLive && hasQuestion) return Route.Research(raw.trim())
+        // B4 planner: explicit plan phrases hi Plan route par jayengi —
+        // "plan banao / plan bana kar / plan karke karo". Baaki sab
+        // BrainChat hi rahega (har baat ko plan banana conflict hai).
+        if (lower.startsWith("plan banao") || lower.contains("plan bana kar") ||
+            lower.contains("plan bana ke") || lower.contains("plan karke karo") ||
+            lower.startsWith("plan karo")
+        ) {
+            return Route.Plan(raw.trim())
+        }
         return Route.BrainChat(raw.trim())
     }
 }

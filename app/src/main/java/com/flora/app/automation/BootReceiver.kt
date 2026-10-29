@@ -50,6 +50,13 @@ class BootReceiver : BroadcastReceiver() {
                     JobScheduler.rescheduleAll(context.applicationContext)
                 } catch (e: Exception) {
                 }
+                // B4/F16: reboot ke baad plan resume hook — sirf
+                // WorkManager reschedule (mic/wake restart upar wahi
+                // hai). Plan reschedule yahan nahi, worker me hai.
+                try {
+                    com.flora.app.planner.PlanResumeScheduler.enqueue(context.applicationContext)
+                } catch (e: Exception) {
+                }
             } catch (e: Exception) {
                 // Boot par fail: user ke agle app-open par Wake Word
                 // Settings se wapas ON ho jayega, kaam rukta nahi.

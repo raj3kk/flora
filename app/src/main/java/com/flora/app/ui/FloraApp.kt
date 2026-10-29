@@ -90,7 +90,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -126,6 +126,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.LOCK -> "PIN gate"
     Screen.PC_LINK -> "PC Link"
     Screen.BUILDER -> "Builder"
+    Screen.PLANNER -> "Planner"
 }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
@@ -265,6 +266,20 @@ fun FloraApp(
     // 30-din prune is store par NAHI chalta (long-lasting order);
     // baaki stores ka prune wahi rahega. Server par memory kabhi nahi jati.
     val chatMemoryStore = remember { com.flora.app.data.ChatMemoryStore(appContext) }
+    // B4 Planner: appContext + projectStore + chatMemoryStore ke BAAD
+    // (declaration order — engine ko ye teeno chahiye). Manual-DI
+    // factory ka shared instance (UI + PlannerService ek engine).
+    val plannerAndroidId = remember {
+        android.provider.Settings.Secure.getString(
+            appContext.contentResolver, android.provider.Settings.Secure.ANDROID_ID
+        ) ?: ""
+    }
+    val plannerEngine = remember {
+        com.flora.app.planner.PlannerEngineFactory.get(
+            appContext, prefs, licenceClient, brain, projectStore,
+            autoLogStore, chatMemoryStore, plannerAndroidId,
+        )
+    }
     val pendingTaskStore = remember { com.flora.app.data.PendingTaskStore(appContext) }
     var memoryReady by remember { mutableStateOf(false) }
     var persistedCount by remember { mutableStateOf(0) }
@@ -1221,6 +1236,11 @@ fun FloraApp(
                             // local-only hai, isliye kisi invented key
                             // se gate nahi — entitlement B5 (F2) me.
                             onClick = { screen = Screen.BUILDER; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Planner") },
+                            // B4: plan banao/dekho/chalao — BuilderScreen ke bagal me.
+                            onClick = { screen = Screen.PLANNER; menuOpen = false },
                         )
                         DropdownMenuItem(
                             text = { Text("Home") },
@@ -4159,6 +4179,7 @@ fun FloraApp(
                             "lock", "screen lock" -> Screen.LOCK
                             "pc link", "pc" -> Screen.PC_LINK
                             "builder" -> Screen.BUILDER
+                            "planner" -> Screen.PLANNER
                             else -> null
                         }
                         if (target != null) {
@@ -4626,6 +4647,16 @@ fun FloraApp(
                             busy = false
                             return@launch
                         }
+                        // B4: planner route — BrainChat hijack NAHI (har baat
+                        // plan nahi banegi, sirf explicit plan phrases yahan
+                        // aati hain). Planner screen kholo + goal prefill karo.
+                        if (route is com.flora.app.tools.IntentRouter.Route.Plan) {
+                            plannerEngine.setPendingGoal(route.query)
+                            messages = messages + ChatMsg("Flora: Plan screen khol rahi hun — wahan plan banao/dekho/chalao.", false)
+                            screen = Screen.PLANNER
+                            busy = false
+                            return@launch
+                        }
                         // B1-POLISH N4 — router FALLBACK-ONLY wiring:
                         // exact branches (app-open/voice-open) upar
                         // already return kar chuki hain; jo yahan tak
@@ -4828,6 +4859,8 @@ fun FloraApp(
                 DocsScreen(docsStore)
             } else if (screen == Screen.BUILDER) {
                 BuilderScreen(projectStore, autoLogStore)
+            } else if (screen == Screen.PLANNER) {
+                com.flora.app.planner.PlannerScreen(plannerEngine)
             } else if (screen == Screen.WHITEBOARD) {
                 WhiteboardScreen()
             } else if (screen == Screen.HOME) {

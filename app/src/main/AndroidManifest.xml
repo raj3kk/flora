@@ -132,6 +132,16 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Flora overlay mic button" />
         </service>
+        <!-- B4 planner foreground service: lamba plan background me
+             chale (notification + Auto Log hamesha visible). -->
+        <service
+            android:name="com.flora.app.planner.PlannerService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Flora planner background execution" />
+        </service>
         <!-- Default assistant (v2.22, Phase 1, G3): invoke par Flora khulti hai. -->
         <service
             android:name="com.flora.app.voice.FloraVoiceInteractionService"
