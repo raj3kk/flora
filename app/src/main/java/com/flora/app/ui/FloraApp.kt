@@ -1352,7 +1352,12 @@ fun FloraApp(
             // hamesha dikhega. Pro ko free banner kabhi nahi — plan
             // ke hisab se sahi line. "Saare tools" hissa CHHEDA NAHI
             // — wo D4 definition conflict hai, faisla pending.
-            {
+            // Batch 2 fix (CI fail 40848154337): yahan BARE { } block
+            // NAHI — statement-position par { } ek saada (non-@Composable)
+            // lambda literal hota hai, isliye uske andar Text /
+            // FreeRemainingText / Spacer calls illegal the aur body
+            // chalti hi nahi. Unwrap: content seedha Column ke
+            // @Composable content lambda me hai.
                 if (licence?.plan == "pro") {
                     Text(
                         "Pro: unlimited baat  •  Pro: ${FloraConfig.PRO_PRICE_TEXT}  •  " +
@@ -1383,7 +1388,6 @@ fun FloraApp(
                 // wala hi counter — do sach nahi).
                 FreeRemainingText(prefs, licence)
                 Spacer(modifier = Modifier.height(8.dp))
-            }
 
             if (screen == Screen.CHAT) {
                 // Due jobs (v2.22, chunk 4): alarm par flag laga tha —
