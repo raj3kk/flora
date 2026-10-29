@@ -59,6 +59,8 @@ dependencies {
     // Shizuku (v2.22, G19): system permissions bina root ke, user ki
     // Shizuku app ke through — sirf jab user ne Shizuku chalaya ho.
     implementation("dev.rikka.shizuku:api:13.1.5")
+    // B2 unit tests — sirf test scope, production APK me nahi.
+    testImplementation("junit:junit:4.13.2")
     // Google sign-in (v2.22, Phase 5, G14): sirf id_token
     // lene ke liye; Web OAuth client ID dashboard par
     // banana baaki hai (FloraConfig.GOOGLE_WEB_CLIENT_ID).
