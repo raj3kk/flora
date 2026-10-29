@@ -1,6 +1,7 @@
 package com.flora.app.data
 
 import com.flora.app.core.FloraConfig
+import com.flora.app.core.PinnedTrust
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -13,9 +14,47 @@ import java.nio.charset.StandardCharsets
 /** Server-authoritative licence result. Local free mode is the fallback. */
 data class LicenceStatus(
     val plan: String, // "free" or "pro"
-    val status: String, // "active", "expired", "local_free", "error"
+    val status: String, // "active", "expired", "local_free", "error", v2: + revoked/superseded/bound_mismatch
     val serverChecked: Boolean,
-)
+    // Licence-verify v2 (Phase 8 coordination, LFMS server):
+    // valid=false + status revoked/expired/superseded/
+    // bound_mismatch par plan kabhi "pro" nahi hota (verify()
+    // me hi free kar diya jata hai — revoke ke baad bhi Pro
+    // features chalte rahenge, ye bug nahi hone diya gaya).
+    // Purani shape (valid field na ho) par valid = (status ==
+    // "active") — backward compatible.
+    val valid: Boolean = true,
+    // v2: licence jis device par bound hai, uska short code
+    // (mismatch par user ko dikhane ke liye; personal data nahi).
+    val boundDeviceShort: String = "",
+    // v2: server ka reason (khali ho sakta hai).
+    val reason: String = "",
+    // v2: plan ke features (khali ho sakta hai).
+    val features: List<String> = emptyList(),
+    // v2: expiry timestamp (khali ho sakta hai).
+    val expiresAt: String = "",
+) {
+    /**
+     * v2 status par imaandaar Hindi message; null = koi khaas
+     * baat nahi (active / local_free / error par koi message
+     * nahi — offline behavior bilkul wahi rehta hai).
+     * Generic error kabhi nahi dikhaya jata — har status ka
+     * apna seedha message hai.
+     */
+    fun honestMessage(): String? = when (status) {
+        "revoked" ->
+            "Licence revoke ho gayi hai — Pro features band hain. Admin se sampark karo."
+        "bound_mismatch" ->
+            "Ye licence kisi aur device par lagi hai" +
+                (if (boundDeviceShort.isNotEmpty()) " (device: $boundDeviceShort)" else "") +
+                " — is phone par Pro nahi chalega. Rebind sirf admin panel se hoga, apne aap nahi."
+        "expired" ->
+            "Licence ki expiry ho gayi hai — Pro band hai, renew karo."
+        "superseded" ->
+            "Ye licence nayi licence se badal di gayi hai — nayi licence check karo."
+        else -> null
+    }
+}
 
 data class UsageResult(val counted: Boolean, val detail: String)
 
@@ -95,6 +134,25 @@ class LicenceClient(private val prefs: FloraPreferences) {
             if (next.isEmpty()) null else next
         }
 
+    // Phase 8 heartbeat ke liye: refresh token se access token
+    // (JWT) + rotated refresh token, dono memory me hi.
+    // Access token kabhi save nahi hota — caller use turant
+    // heartbeat header me bhej kar bhool jaye. Rotated refresh
+    // mile to caller use setLink se save kare (warna agla
+    // refresh purane token se fail hoga). Fail ho to null.
+    suspend fun refreshAccessToken(refreshToken: String): Pair<String, String?>? =
+        withContext(Dispatchers.IO) {
+            val key = prefs.supabaseAnonKey()
+            if (key.isEmpty() || refreshToken.isEmpty()) return@withContext null
+            val body = JSONObject().put("refresh_token", refreshToken)
+            val res = post("/auth/v1/token?grant_type=refresh_token", body, key)
+                ?: return@withContext null
+            val access = res.optString("access_token", "")
+            if (access.isEmpty()) return@withContext null
+            val next = res.optString("refresh_token", "")
+            Pair(access, if (next.isEmpty()) null else next)
+        }
+
     // verify() se aakhri jaana hua plan (memory me hi). countUsage
     // isi se decide karta hai ki server count bhejna hai ya nahi:
     // pro = unlimited, server count ki zaroorat nahi.
@@ -102,7 +160,8 @@ class LicenceClient(private val prefs: FloraPreferences) {
     private var lastPlan: String? = null
 
     private fun post(path: String, body: JSONObject, anonKey: String): JSONObject? {
-        val conn = (URL(FloraConfig.SUPABASE_URL + path).openConnection() as HttpURLConnection)
+        // G17 (Phase 8): Supabase host pin-checked connection.
+        val conn = (PinnedTrust.openConnection(URL(FloraConfig.SUPABASE_URL + path)) as HttpURLConnection)
         return try {
             conn.requestMethod = "POST"
             conn.connectTimeout = 15_000
@@ -132,10 +191,44 @@ class LicenceClient(private val prefs: FloraPreferences) {
         val body = JSONObject().put("user_id", userId).put("device_id", deviceId)
         val res = post(FloraConfig.LICENCE_FUNCTION_PATH, body, key)
             ?: return@withContext LicenceStatus("free", "error", false)
-        val plan = res.optString("plan", "free")
-        val status = res.optString("status", "active")
-        lastPlan = if (plan == "pro") "pro" else "free"
-        LicenceStatus(if (plan == "pro") "pro" else "free", status, true)
+        // Licence-verify v2 (Phase 8 coordination): response
+        // {valid, status, plan, features[], expires_at,
+        // bound_device_short, reason?}. Device binding rule:
+        // ek licence ek time me ek device par — first claim
+        // bind karta hai, auto-rebind kabhi nahi (rebind sirf
+        // admin panel se). App khud rebind ki koshish kabhi
+        // nahi karti — sirf deviceId bhejti hai, faisla server
+        // ka hai.
+        val rawStatus = res.optString("status", "active")
+        val valid = if (res.has("valid")) {
+            res.optBoolean("valid", false)
+        } else {
+            rawStatus == "active"
+        }
+        val respPlan = res.optString("plan", "free")
+        // Effective plan: Pro sirf tab jab server valid + active
+        // kahe. Revoked/expired/superseded/bound_mismatch par
+        // plan free — warna revoke ke baad bhi Pro chalta rahega.
+        val plan = if (valid && rawStatus == "active" && respPlan == "pro") "pro" else "free"
+        val featuresArr = res.optJSONArray("features")
+        val features = if (featuresArr != null) {
+            List(featuresArr.length()) { featuresArr.optString(it, "") }
+                .filter { it.isNotEmpty() }
+        } else {
+            emptyList()
+        }
+        val status = LicenceStatus(
+            plan = plan,
+            status = rawStatus,
+            serverChecked = true,
+            valid = valid,
+            boundDeviceShort = res.optString("bound_device_short", ""),
+            reason = res.optString("reason", ""),
+            features = features,
+            expiresAt = res.optString("expires_at", "")
+        )
+        lastPlan = plan
+        status
     }
 
     suspend fun countUsage(userId: String, seconds: Long): UsageResult = withContext(Dispatchers.IO) {

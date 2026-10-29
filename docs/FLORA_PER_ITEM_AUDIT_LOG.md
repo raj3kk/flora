@@ -1250,3 +1250,134 @@ maujood, index bhi 200. Download page ab live hai.
   liye app build me instructions fetch chahiye — alag app change); app-link
   ke bina heartbeats khaali rahenge (heartbeat ke liye user JWT chahiye);
   overview limits: lists limit 1000 (payments/usage), listUsers 1000 users tak.
+
+## Phase 8 — App build (2026-10-29, CI pending is entry ke waqt)
+- SCOPE: app/ tree + home-sync function/SQL ONLY. web/ aur panel/LFMS
+  functions (admin-list, admin-payments, admin-keys, admin-settings,
+  public-settings, brain-proxy, tts-proxy, licence-verify, admin-licences,
+  admin-plan-features, admin.html) CHHEDE NAHI — wo doosre builders ke
+  paas hain. Coordination file docs/FLORA_BUILD_COORDINATION.md tip par
+  mili NAHI (contents 404 + tree search 0) — padhne ki koshish ki gayi,
+  banayi nahi (kisi aur builder ka map hai); scope overlap isliye nahi hua.
+- (e) APP-LINK FIX — root cause (code se confirm, 3 hisse):
+  R1: link button sync ka result ignore karta tha + linked UI sync se
+  PEHLE set ho jati thi (token khali ho to sync hota hi nahi tha) — isliye
+  server row bane bina "Linked" dikhta tha (user ka 2026-10-29 ~09:24 wala
+  case: app me UNLINK dikha, server par row 0).
+  R2: koi confirmation + koi retry nahi tha (app-start sync tha par uska
+  result bhi ignore hota tha; restart na ho to retry kabhi nahi).
+  R3: FloraMessagingService.onNewToken userId() (random UUID) bhejta tha,
+  effectiveUserId() nahi — token refresh linked row ko kabhi repair nahi
+  karta tha.
+  FIX: prefs.linkServerConfirmed (naya pref, default false; clearLink ise
+  bhi saaf karta hai). Link button: setLink ke baad confirmed=false, sync
+  ka result dekha jata hai — ok:true par hi confirmed=true + "link ho gaya";
+  token khali ya sync fail par imaandaar pending note (koi jhootha "Linked"
+  nahi). Settings me "Link pending" + "Server sync dobara karo" button +
+  Settings kholte hi ek auto-attempt (token ho to). App-start sync ka result
+  ab dekha jata hai (linked + ok:true → confirmed=true). onNewToken ab
+  effectiveUserId() bhejta hai + success par confirmed=true. Device_id kabhi
+  invent nahi — sirf prefs.deviceId(ANDROID_ID). push-token-sync function
+  CHHEDA NAHI (scope bahar); token-less row creation zaroori ho to server
+  follow-up hai (parent ko report me diya gaya).
+  RETRO-REPAIR: is build se pehle link kar chuke users ka local state
+  linked=true + confirmed=false (naya pref default) hoga — agle app-start
+  par sync ok:true aate hi confirmed=true + users row ban jayegi (phir
+  admin flag lag sakta hai). User ko app restart karna hoga.
+- (d) HOME-SYNC: HomeSyncClient rewrite — anon key CHHODI, user JWT
+  (refreshAccessToken se, memory me hi, kabhi save nahi) + body
+  {user_id (linked uid), device_id (ANDROID_ID path), box_code};
+  unlinked ho to sync hota hi nahi (null). Function home-sync rewrite:
+  JWT gate (brain-proxy step 2 pattern: anon client getUser → 401 nahi
+  mile to; body user_id != JWT user → 403) + service-role upsert
+  home_boxes (device_id PK, user_id, box_code, updated_at).
+  SQL nayi file supabase/sql/home_sync_table.sql (create + RLS ON, koi
+  policy nahi — service-role-only by design). HomeScreen: home flag gate
+  + naya sync signature (prefs, boxCode, context) + imaandaar notes.
+  DEPLOY dashboard se (checklist parent ko di gayi) — GitHub push se
+  function deploy NAHI hota.
+- (c) G17 PINNING — implement (OkHttp CertificatePinner NAHI, wajah:
+  grep se OkHttp sirf DeepgramStreamClient me hai; Flora-domain traffic
+  HttpURLConnection par hai, CertificatePinner use cover hi nahi karta).
+  core/PinnedTrust.kt: TLS layer, default chain validation PEHLE, phir
+  leaf-ya-intermediate SPKI pin check; fail = CertificateException, kabhi
+  silent unpinned fallback nahi. Pins LIVE certs se (2026-10-29):
+  supabase leaf B9zUXavotYYIs217h2OZnCqCTp2vB/2pNC1zDijcIAo= (expiry
+  22 Jan 2027), vercel leaf xRUwi70J41GFIbtkDY38VXIAoWtbsGGG+LWfenCZh7k=
+  (expiry 27 Nov 2026), shared Google intermediate
+  47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=. Swap: LicenceClient,
+  BrainClient proxy calls, WebsitePublisher, ModelDownloader, HomeSyncClient,
+  FeatureFlags, HeartbeatClient, KokoroModelManager. NAHI chheda: direct
+  Google calls (BrainClient discovery, VisionClient), SearchTools,
+  ImageTools, DeepgramClient (Flora domain nahi). Rotation plan
+  docs/FLORA_G17_PINNING.md me (leaf rotation intermediate pin se cover;
+  intermediate badle to har release se pehle pins refresh + app update).
+- (b) FEATURE FLAGS + HEARTBEAT — contract FINAL (panel phase 2 se match):
+  POST functions/v1/feature-flags, anon Bearer, body {user_id?} optional,
+  response {flags:{talk,calls,sms,whatsapp,browser,macros,image_gen,
+  screen_vision,camera,overlay_mic,wakeword,home,routines,form_fill}}.
+  Client core/FeatureFlags.kt: missing key / fetch fail → fail-open true;
+  aakhri flags prefs me cache (offline). Enforcement: gateFeature()
+  (FloraApp) + seedha isEnabled() (Settings/HomeScreen) — calls, sms,
+  whatsapp, browser, macros, image_gen (dono branches), screen_vision
+  (lookAtScreen + Live), camera (chat + routine steps), overlay_mic (ON
+  hi; OFF kabhi gate nahi), wakeword (Switch + mic launcher service-start;
+  band karna hamesha chalega), home (HomeScreen + client andar bhi),
+  routines (poori queue), form_fill (3 branches), talk (main fall-through
+  brain + routine brain step). OFF → "Ye feature abhi band hai." + koi
+  action nahi. Settings screen kabhi gate nahi (recovery path). File Q&A
+  aur code-likho talk flag se gate nahi (explicit feature commands).
+  Heartbeat tools/HeartbeatClient.kt: foreground + licence check ke baad,
+  linked hi, JWT header, body {user_id}; 404/koi fail → silent skip;
+  sirf last_seen, koi content/location/screen data nahi. Doc:
+  docs/FLORA_FEATURE_FLAGS.md.
+- (a) NEURAL VOICE — Kokoro hf_alpha (user-final). Model download poora:
+  models/KokoroModelManager.kt (PUBLIC HF URLs hexgrad/Kokoro-82M:
+  kokoro-v1.0.onnx 325,532,387 bytes + voices-v1.0.bin 28,214,398 bytes,
+  SHA-256 verify, .part + .ok gating, progress + 3 attempts, Settings UI
+  section + Wi-Fi note; APK me bundle NAHI). Routing poora:
+  assistant/NeuralSpeaker.kt (engine hook) — VoiceEngine.speak() +
+  Call/Event announcement receivers isi se (announcements me free-talk
+  counting kabhi nahi). Sanitizer single-source (NeuralSpeaker.sanitize;
+  VoiceEngine delegate). SYSTEM TTS IS BUILD ME NAHI HATAYA (gate:
+  hatana sirf phone test pass ke baad; Lily profile barkaraar).
+  NATIVE PLAYBACK ENGINE BLOCKED WITH EVIDENCE (koi guess nahi, koi
+  cloud TTS fallback nahi): official docs me NDK source build hi hai,
+  koi verified Maven AAR nahi; ek blog ka JitPack coordinate
+  (com.github.k2-fsa:sherpa-onnx-android:1.10.0) single claim, official
+  source se unverified + us version me Kokoro support unverified; NDK
+  step Flora CI (JDK-only) me nahi chalega aur workflow API se chhooi
+  nahi ja sakti; raw ORT route ko espeak-ng + unverified model I/O
+  chahiye. Model ready hone par bhi aaj system TTS hi bolega; engine
+  judte hi NeuralSpeaker.engine set karna hi kaafi hoga. Doc:
+  docs/FLORA_NEURAL_VOICE.md (unblock raasta + limits: no resume ~354MB,
+  phone RTF unknown, chunking Phase 10 phone test ke baad).
+- LICENCE-VERIFY v2 CLIENT (coordination note se align, server LFMS
+  builder ka hai — app ne function NAHI chheda): LicenceStatus me
+  valid/bound_device_short/reason/features/expires_at + honestMessage().
+  verify(): Pro sirf valid+active+plan==pro par (revoked/expired/
+  superseded/bound_mismatch par plan free — revoke ke baad Pro chalna
+  bug hota). Purani shape backward compatible (valid na ho to
+  valid = status=="active"). Messages: revoked → "licence revoke ho
+  gayi hai"; bound_mismatch → "ye licence kisi aur device par lagi
+  hai (device: short) — rebind sirf admin panel se, apne aap nahi";
+  expired/superseded waisa hi; active/local_free/error par koi message
+  nahi. Surfaces: app-start chat message (voice nahi, greeting se
+  takrao na ho), header licence line, LicenceScreen (status line +
+  expiry + refresh note). Device binding rule: first claim bind, auto-
+  rebind kabhi nahi — app rebind ki koshish kabhi nahi karti. Purana
+  "15 din transfer" text LicenceScreen se hataya (v2 rule se takrata
+  tha). Doc: docs/FLORA_LICENCE_V2_CLIENT.md.
+- PREPUSH CHECKS: 21 kt files brace/paren/bracket balance 0; naye states
+  (neuralStatus/neuralProgress/linkConfirmedDisplay/gateFeature) ek-ek
+  baar declare, use se pehle; nullable ?: return / null-check pattern;
+  koi setter clash nahi; koi greedy sed nahi (sirf muse.edit); koi
+  workflow file nahi; koi [skip ci] nahi; koi secret/key/password
+  read/push nahi (pins = public cert hashes, HF URLs = public).
+- IMAANDAAR LIMITS: phone behaviour Phase 10 me test hoga (is build ka
+  koi phone test nahi hua); flags fail-open chalenge jab tak panel phase
+  2 server functions dashboard se deploy na hon; v2.22 APK flags ko
+  ignore karega (asar sirf is build ke baad wale APK se); home-sync +
+  heartbeat tabhi chalenge jab linked account ho (JWT chahiye);
+  G17: CA badle to app update ke saath pin refresh zaroori (fail-closed);
+  Kokoro download me resume nahi.

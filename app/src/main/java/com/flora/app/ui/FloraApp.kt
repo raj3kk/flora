@@ -351,11 +351,27 @@ fun FloraApp(
         }
     }
 
+    // Phase 8: feature flags (panel se control) — OFF ho to
+    // imaandaar message + koi action nahi. Fail-open: flags
+    // na mile ya network fail ho to sab ON (app kabhi na toote).
+    // Settings screen kabhi flag se band nahi hoti (recovery
+    // path). Ye helper sirf FloraApp ke andar (chat/router)
+    // use hota hai; SettingsScreen/HomeScreen seedha
+    // FeatureFlags.isEnabled() dekhte hain.
+    fun gateFeature(key: String): Boolean {
+        if (com.flora.app.core.FeatureFlags.isEnabled(key)) return true
+        val msg = "Ye feature abhi band hai."
+        messages = messages + ChatMsg("Flora: $msg", false)
+        voice.speak(msg)
+        return false
+    }
+
     // Phase 6: macro chalao — step-by-step bol kar + Auto Log.
     // Sensitive step par runner NeedsConfirm dega to dialog
     // dikhega (macroNeedsConfirm); Haan par wahi step se
     // resume hoga. Kabhi silent macro nahi.
     fun runMacroFrom(macro: com.flora.app.automation.Macro, fromStep: Int) {
+        if (!gateFeature("macros")) return
         runGuardedVoice {
             scope.launch {
                 val service = com.flora.app.automation.FloraAutomationService.instance
@@ -508,6 +524,17 @@ fun FloraApp(
                 ) ?: "flora-device"
                 val deviceId = prefs.deviceId(androidId)
                 licence = licenceClient.verify(userId, deviceId)
+                // Licence v2 status (Phase 8 coordination):
+                // revoked / bound_mismatch / expired / superseded
+                // ho to chat me imaandaar message (generic error
+                // kabhi nahi). Voice greeting se takrao na ho
+                // isliye sirf chat message, awaaz nahi.
+                try {
+                    licence?.honestMessage()?.let { msg ->
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                    }
+                } catch (e: Exception) {
+                }
             }
             // Licence session renew (v2.22, Phase 1): linked
             // account ho to saved refresh token se session zinda
@@ -549,13 +576,49 @@ fun FloraApp(
                                     appContext.contentResolver,
                                     Settings.Secure.ANDROID_ID
                                 ) ?: "flora-device"
-                                licenceClient.syncPushToken(
+                                // Phase 8 link fix: sync ka result ab
+                                // dekha jata hai (pehle ignore hota
+                                // tha). Linked ho aur sync safal ho
+                                // to server row confirm — isse
+                                // Settings me "Linked" sahi dikhega.
+                                // Sync fail ho to agle app-open par
+                                // phir retry (pending state rehti hai).
+                                val synced = licenceClient.syncPushToken(
                                     uid, prefs.deviceId(aid), token
                                 )
+                                if (synced && prefs.linkedUserId().isNotEmpty()) {
+                                    prefs.setLinkServerConfirmed(true)
+                                }
                             } catch (e: Exception) {
                             }
                         }
                     }
+            } catch (e: Exception) {
+            }
+            // Phase 8: feature flags + heartbeat — dono silent
+            // fail, app-start kabhi nahi rokega. Flags na mile to
+            // fail-open (sab ON); heartbeat 404/fail ho to
+            // chupchaap skip. Heartbeat sirf linked accounts
+            // ke liye (JWT chahiye); access token memory me hi.
+            try {
+                com.flora.app.core.FeatureFlags.refresh(prefs)
+            } catch (e: Exception) {
+            }
+            try {
+                val linkedUid = prefs.linkedUserId()
+                val rt = prefs.linkedRefreshToken()
+                if (linkedUid.isNotEmpty() && rt.isNotEmpty()) {
+                    val pair = licenceClient.refreshAccessToken(rt)
+                    if (pair != null) {
+                        val nextRefresh = pair.second
+                        if (!nextRefresh.isNullOrEmpty() && nextRefresh != rt) {
+                            prefs.setLink(linkedUid, prefs.linkedEmail(), nextRefresh)
+                        }
+                        com.flora.app.tools.HeartbeatClient.send(
+                            linkedUid, pair.first, prefs.supabaseAnonKey()
+                        )
+                    }
+                }
             } catch (e: Exception) {
             }
         } catch (e: Exception) {
@@ -584,7 +647,28 @@ fun FloraApp(
         val lower = cmd.lowercase().trim()
         messages = messages + ChatMsg("Flora: Routine step: $cmd", false)
         voice.speak("Step: $cmd")
+        // Phase 8: routines flag OFF ho to poori queue saaf +
+        // imaandaar message (koi step nahi chalega). Call/SMS/
+        // browser steps apne-apne flag se bhi gate hain.
+        if (!com.flora.app.core.FeatureFlags.isEnabled("routines")) {
+            voice.speak("Routines abhi band hain.")
+            routineQueue = emptyList()
+            routineRunning = false
+            return@LaunchedEffect
+        }
+        val stepBlocked = when {
+            lower.startsWith("call ") &&
+                !com.flora.app.core.FeatureFlags.isEnabled("calls") -> true
+            lower.startsWith("sms ") &&
+                !com.flora.app.core.FeatureFlags.isEnabled("sms") -> true
+            (lower.startsWith("chrome me ") || lower.startsWith("website ")) &&
+                !com.flora.app.core.FeatureFlags.isEnabled("browser") -> true
+            else -> false
+        }
         when {
+            stepBlocked -> {
+                voice.speak("Ye feature abhi band hai, step chhod diya.")
+            }
             lower.startsWith("open ") || lower.startsWith("kholo ") -> {
                 val name = cmd.substringAfter(" ").trim()
                 val matches = VerifiedAppLauncher.findByName(appContext, name)
@@ -647,13 +731,17 @@ fun FloraApp(
                 }
             }
             lower == "photo lo" || lower == "scan karo" || lower == "camera kholo" -> {
-                screen = Screen.SCAN
-                voice.speak("Scan khol raha hun.")
+                if (gateFeature("camera")) {
+                    screen = Screen.SCAN
+                    voice.speak("Scan khol raha hun.")
+                }
             }
             lower == "camera me kya dikh raha hai" || lower == "camera dekho" ||
                 lower == "camera se dekho" || lower == "camera me kya hai" -> {
-                screen = Screen.CAMERA_LOOK
-                voice.speak("Camera khol raha hun — 'Camera me kya dikh raha hai?' dabate hi dekh kar bata dungi.")
+                if (gateFeature("camera")) {
+                    screen = Screen.CAMERA_LOOK
+                    voice.speak("Camera khol raha hun — 'Camera me kya dikh raha hai?' dabate hi dekh kar bata dungi.")
+                }
             }
             lower == "live update batao" || lower == "taaza khabar batao" ||
                 lower == "realtime update batao" || lower == "aaj ki khabar batao" -> {
@@ -783,6 +871,11 @@ fun FloraApp(
                 }
             }
             else -> {
+                // Phase 8: routine ka brain step talk flag se gate
+                // hai (call/sms/browser steps upar stepBlocked se).
+                if (!com.flora.app.core.FeatureFlags.isEnabled("talk")) {
+                    voice.speak("Baat-cheet abhi band hai, step chhod diya.")
+                } else {
                 val today = java.text.SimpleDateFormat(
                     "yyyy-MM-dd", java.util.Locale.US
                 ).format(java.util.Date())
@@ -793,6 +886,7 @@ fun FloraApp(
                     val reply = brain.ask(cmd)
                     messages = messages + ChatMsg("Flora: $reply", false)
                     voice.speak(reply.take(500))
+                }
                 }
             }
         }
@@ -1084,6 +1178,10 @@ fun FloraApp(
                 )
                 licence?.let {
                     Text("Licence: ${it.plan} (${it.status})" + if (it.serverChecked) " — server se verified" else " — local mode")
+                    // Licence v2 status (Phase 8 coordination):
+                    // revoked/bound_mismatch/expired/superseded
+                    // par imaandaar message header me bhi dikhega.
+                    it.honestMessage()?.let { hm -> Text(hm) }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -1385,6 +1483,7 @@ fun FloraApp(
                 // Auto Mode execute helpers (v2.17): confirm dialog ke
                 // bajay seedha execute + Auto Log me entry + bol kar.
                 fun autoExecuteCall(number: String) {
+                    if (!gateFeature("calls")) return
                     runGuardedVoice {
                         val ok = AutoActions.placeCall(appContext, number)
                         val msg = if (ok) "Call laga di gayi: $number" else "Call nahi lagi, permission ya number check kijiye."
@@ -1397,6 +1496,7 @@ fun FloraApp(
                 }
 
                 fun autoExecuteSms(number: String, text: String) {
+                    if (!gateFeature("sms")) return
                     runGuardedVoice {
                         val ok = AutoActions.sendSms(appContext, number, text)
                         val msg = if (ok) "SMS bhej diya gaya: $number" else "SMS nahi gaya, permission ya number check kijiye."
@@ -1438,6 +1538,9 @@ fun FloraApp(
                 // ya auto flow — call/sms branches jaisa hi.
                 fun runContactAction(number: String, action: String, text: String) {
                     if (action == "whatsapp") {
+                        // Phase 8: WhatsApp flag OFF ho to wa.me
+                        // kholna bhi nahi (koi action nahi).
+                        if (!gateFeature("whatsapp")) return
                         // wa.me chat kholo, message bhara hua — Send
                         // user dabata hai (silent send kabhi nahi).
                         val digitsOnly = number.filter { it.isDigit() }
@@ -2151,6 +2254,7 @@ fun FloraApp(
                     // form ka submit confirm dialog ke baad hi hoga.
                     if (lower == "form bharo" || lower == "is form ko bharo") {
                         input = ""
+                        if (!gateFeature("form_fill")) { return }
                         scope.launch {
                             val service = com.flora.app.automation.FloraAutomationService.instance
                             if (service == null) {
@@ -2173,6 +2277,7 @@ fun FloraApp(
                     }
                     if (lower.startsWith("field ") && lower.contains(" me ") && lower.endsWith(" likho")) {
                         input = ""
+                        if (!gateFeature("form_fill")) { return }
                         val body = question.substring(6, question.length - 6).trim()
                         val meIdx = body.lowercase().lastIndexOf(" me ")
                         if (meIdx < 0) {
@@ -2218,6 +2323,7 @@ fun FloraApp(
                     }
                     if (lower == "form submit karo") {
                         input = ""
+                        if (!gateFeature("form_fill")) { return }
                         scope.launch {
                             val service = com.flora.app.automation.FloraAutomationService.instance
                             if (service == null) {
@@ -2240,6 +2346,7 @@ fun FloraApp(
                     // kabhi nahi mangegi.
                     if (lower.startsWith("image generate karo") || lower.startsWith("gemini se image generate karo")) {
                         input = ""
+                        if (!gateFeature("image_gen")) { return }
                         var rest = when {
                             lower.startsWith("gemini se image generate karo ") ->
                                 question.substring(30).trim()
@@ -2895,6 +3002,9 @@ fun FloraApp(
                     // dono isi se chalte hain.
                     fun lookAtScreen(prompt: String) {
                         scope.launch {
+                            // Phase 8: screen_vision flag OFF ho to
+                            // screenshot/vision kuch nahi.
+                            if (!gateFeature("screen_vision")) return@launch
                             // Key check PEHLE (Phase 3): bina key ke screenshot
                             // lena bekaar hai — pehle hi imaandaari se batao.
                             val key = prefs.geminiApiKey()
@@ -3015,6 +3125,9 @@ fun FloraApp(
                     // (one-shot frames hain) — user ko "video" kabhi nahi bolna.
                     fun lookAtScreenLive() {
                         scope.launch {
+                            // Phase 8: screen_vision flag OFF ho to
+                            // live frames bhi nahi.
+                            if (!gateFeature("screen_vision")) return@launch
                             val key = prefs.geminiApiKey()
                             if (key.isEmpty()) {
                                 voice.speak("Screen dekhne ke liye Settings me apni free Gemini key daaliye.")
@@ -3386,6 +3499,7 @@ fun FloraApp(
                     // step nahi rukega. "photo lo" / "sos bhejo" / "yaadein kholo".
                     if (lower == "photo lo" || lower == "scan karo" || lower == "camera kholo") {
                         input = ""
+                        if (!gateFeature("camera")) { return }
                         screen = Screen.SCAN
                         val msg = "Scan khol raha hun, Photo lo dabate hi photo save ho jayegi."
                         messages = messages + ChatMsg("Flora: $msg", false)
@@ -3565,6 +3679,9 @@ fun FloraApp(
                     // permission ke overlay nahi dikhega.
                     if (lower == "overlay mic chalu karo" || lower == "overlay button chalu karo") {
                         input = ""
+                        // Phase 8: overlay_mic flag OFF ho to service
+                        // shuru hi nahi (band karna hamesha chalega).
+                        if (!gateFeature("overlay_mic")) { return }
                         if (!android.provider.Settings.canDrawOverlays(appContext)) {
                             try {
                                 val intent = android.content.Intent(
@@ -3605,12 +3722,14 @@ fun FloraApp(
                     // link sab BrowserScreen ke through chalte hain.
                     if (lower == "browser kholo") {
                         input = ""
+                        if (!gateFeature("browser")) { return }
                         screen = Screen.BROWSER
                         voice.speak("Browser khol raha hun.")
                         return
                     }
                     if (lower.startsWith("browser me ") && lower.endsWith(" kholo")) {
                         input = ""
+                        if (!gateFeature("browser")) { return }
                         val site = question.substring(11, question.length - 6).trim()
                         if (site.isEmpty()) {
                             screen = Screen.BROWSER
@@ -4036,6 +4155,13 @@ fun FloraApp(
                         // to bata kar Gallery wala tareeka (Pollinations)
                         // fallback hai — chhupke nahi.
                         if (lower.startsWith("image banao ") || lower.startsWith("photo banao ")) {
+                            // Phase 8: image_gen flag OFF ho to koi
+                            // app kholna/generate nahi (busy reset
+                            // ke saath, warna chat atki rahegi).
+                            if (!gateFeature("image_gen")) {
+                                busy = false
+                                return@launch
+                            }
                             val prompt = question.substringAfter("banao", "").trim()
                             if (prompt.isBlank()) {
                                 val msg = "Kaisi image banau? Aise boliye: 'image banao ek sher'."
@@ -4120,6 +4246,16 @@ fun FloraApp(
                             historyBase.dropLast(1)
                         } else {
                             historyBase
+                        }
+                        // Phase 8: talk flag OFF ho to brain call
+                        // nahi (commands upar wale branches se
+                        // chalte rahenge — sirf baat-cheet band).
+                        if (!com.flora.app.core.FeatureFlags.isEnabled("talk")) {
+                            val msg = "Baat-cheet abhi band hai."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                            busy = false
+                            return@launch
                         }
                         val reply = brain.ask(personaPrefix(prefs.persona()) + question, memCtx, history)
                         messages = messages + ChatMsg(reply, false)
@@ -4588,6 +4724,10 @@ private fun SettingsScreen(
     // Voice sample state (v2.22, user selection): persona ke saath,
     // launcher se pehle. Default "lily" (Sample 2 fixed).
     var voiceSample by remember { mutableStateOf("lily") }
+    // Neural voice (Phase 8): Kokoro model download status.
+    // States launcher se pehle (order trap se bacha).
+    var neuralStatus by remember { mutableStateOf("") }
+    var neuralProgress by remember { mutableStateOf(0) }
     // Theme state (v1.9): persona ke saath, launcher se pehle.
     var theme by remember { mutableStateOf("light") }
     // Shizuku state (v2.22, G19): launcher se PEHLE declare (order trap).
@@ -4612,6 +4752,9 @@ private fun SettingsScreen(
     var linkEmail by remember { mutableStateOf("") }
     var linkPassword by remember { mutableStateOf("") }
     var linkedEmailDisplay by remember { mutableStateOf("") }
+    // Phase 8 link fix: server row confirm hui ya nahi — "Linked"
+    // UI sirf confirm hone par; warna "Link pending" + retry.
+    var linkConfirmedDisplay by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf("") }
     // Guardian PIN re-ask (Guardian enforcement build, 2026-10-29):
     // Guardian ON ho aur is session me PIN verify na hua ho, tab
@@ -4681,10 +4824,16 @@ private fun SettingsScreen(
     ) { granted ->
         if (granted) {
             scope.launch {
-                wakeEnabled = true
-                prefs.setWakeEnabled(true)
-                context.startForegroundService(Intent(context, WakeWordService::class.java))
-                wakeStatus = "Wake Word ON ho gaya — sun raha hun."
+                // Phase 8: wakeword flag OFF ho to service shuru
+                // hi nahi (band karna hamesha chalega).
+                if (!com.flora.app.core.FeatureFlags.isEnabled("wakeword")) {
+                    wakeStatus = "Wake Word abhi band hai."
+                } else {
+                    wakeEnabled = true
+                    prefs.setWakeEnabled(true)
+                    context.startForegroundService(Intent(context, WakeWordService::class.java))
+                    wakeStatus = "Wake Word ON ho gaya — sun raha hun."
+                }
             }
         } else {
             wakeStatus = "Mic permission ke bina Wake Word nahi chalega."
@@ -4755,6 +4904,7 @@ private fun SettingsScreen(
         eventAnnounce = prefs.eventAnnounce()
         persona = prefs.persona()
         voiceSample = prefs.voiceSample()
+        neuralStatus = com.flora.app.models.KokoroModelManager.statusText(context)
         theme = prefs.theme()
         // Shizuku status (v2.22, G19): system se live padha jata hai.
         shizukuStatus = ShizukuBridge.statusText()
@@ -4771,6 +4921,29 @@ private fun SettingsScreen(
         wakeThreshold = prefs.wakeThreshold()
         matchThreshold = prefs.voiceMatchThreshold()
         linkedEmailDisplay = prefs.linkedEmail()
+        linkConfirmedDisplay = prefs.linkServerConfirmed()
+        // Phase 8 link fix: Settings kholte hi pending sync ka
+        // ek auto-attempt (token ho to) — user ko button ka
+        // intezar nahi karna padega. Fail ho to pending hi
+        // rahega, agle visit par phir try hoga.
+        if (linkedEmailDisplay.isNotEmpty() && !linkConfirmedDisplay) {
+            try {
+                val aid = Settings.Secure.getString(
+                    context.contentResolver, Settings.Secure.ANDROID_ID
+                )
+                val token = prefs.fcmToken()
+                if (token.isNotEmpty()) {
+                    val ok = licenceClient.syncPushToken(
+                        prefs.linkedUserId(), prefs.deviceId(aid), token
+                    )
+                    if (ok) {
+                        prefs.setLinkServerConfirmed(true)
+                        linkConfirmedDisplay = true
+                    }
+                }
+            } catch (e: Exception) {
+            }
+        }
         // Background status (v2.12): system se live padha jata hai.
         notifGranted = ContextCompat.checkSelfPermission(
             context, Manifest.permission.POST_NOTIFICATIONS
@@ -4796,7 +4969,11 @@ private fun SettingsScreen(
                 Switch(checked = wakeEnabled, onCheckedChange = { value ->
                     scope.launch {
                         if (value) {
-                            if (!BiometricTemplates(context).hasWake()) {
+                            // Phase 8: wakeword flag OFF ho to service
+                            // shuru hi nahi (toggle UI band nahi hoti).
+                            if (!com.flora.app.core.FeatureFlags.isEnabled("wakeword")) {
+                                wakeStatus = "Wake Word abhi band hai."
+                            } else if (!BiometricTemplates(context).hasWake()) {
                                 wakeStatus = "Pehle enrol karo — neeche wale button se 3 baar 'Hey Flora' bolo."
                             } else if (ContextCompat.checkSelfPermission(
                                     context, Manifest.permission.RECORD_AUDIO
@@ -5122,12 +5299,44 @@ private fun SettingsScreen(
             Text("Website account link — website se khareeda Pro isi app me dikhane ke liye")
             Text("Link karne se pehle jaan lo: purane random-UUID wali koi licence (agar hoti) orphan ho jayegi; refresh token sirf is phone par save hoga; password change par link tootega aur dobara login karna hoga.")
             if (linkedEmailDisplay.isNotEmpty()) {
-                Text("Linked: $linkedEmailDisplay")
+                // Phase 8 link fix: "Linked" sirf tab jab server
+                // row confirm ho; warna pending + retry button.
+                // (Pehle sync hue bina hi "Linked" dikh jata tha.)
+                if (linkConfirmedDisplay) {
+                    Text("Linked: $linkedEmailDisplay")
+                } else {
+                    Text("Link pending: $linkedEmailDisplay — server sync baaki hai. App restart karte hi sync ho jayega, ya neeche wala button dabao.")
+                }
+                if (!linkConfirmedDisplay) {
+                    Button(onClick = {
+                        scope.launch {
+                            val aid = Settings.Secure.getString(
+                                context.contentResolver, Settings.Secure.ANDROID_ID
+                            )
+                            val token = prefs.fcmToken()
+                            if (token.isEmpty()) {
+                                note = "Abhi FCM token nahi mila — app restart karo, phir dobara dabao."
+                            } else {
+                                val ok = licenceClient.syncPushToken(
+                                    prefs.linkedUserId(), prefs.deviceId(aid), token
+                                )
+                                if (ok) {
+                                    prefs.setLinkServerConfirmed(true)
+                                    linkConfirmedDisplay = true
+                                    note = "Server sync ho gaya — ab website wala Pro isi app me dikhega."
+                                } else {
+                                    note = "Server sync nahi hua — thodi der baad dobara dabao."
+                                }
+                            }
+                        }
+                    }) { Text("Server sync dobara karo") }
+                }
                 Button(onClick = {
                     runGuardedSettings {
                     scope.launch {
                         prefs.clearLink()
                         linkedEmailDisplay = ""
+                        linkConfirmedDisplay = false
                         note = "Website account unlink ho gaya — ab app wapas random-UUID mode me hai."
                     }
                     }
@@ -5160,16 +5369,31 @@ private fun SettingsScreen(
                                 note = "Link fail: ${result.error}"
                             } else {
                                 prefs.setLink(result.uid, linkEmail.trim(), result.refreshToken)
+                                // Phase 8 link fix: linked UI tabhi
+                                // jab server row confirm ho. Sync
+                                // ka result ab dekha jata hai
+                                // (pehle ignore hota tha, isliye
+                                // sync hue bina hi "Linked" dikhta tha).
+                                prefs.setLinkServerConfirmed(false)
                                 linkedEmailDisplay = linkEmail.trim()
+                                linkConfirmedDisplay = false
                                 linkEmail = ""
                                 val aid = Settings.Secure.getString(
                                     context.contentResolver, Settings.Secure.ANDROID_ID
                                 )
                                 val token = prefs.fcmToken()
-                                if (token.isNotEmpty()) {
-                                    licenceClient.syncPushToken(result.uid, prefs.deviceId(aid), token)
+                                if (token.isEmpty()) {
+                                    note = "Login ho gaya, par server sync abhi baaki hai (FCM token nahi mila) — app restart karte hi sync ho jayega, ya 'Server sync dobara karo' dabao."
+                                } else {
+                                    val ok = licenceClient.syncPushToken(result.uid, prefs.deviceId(aid), token)
+                                    if (ok) {
+                                        prefs.setLinkServerConfirmed(true)
+                                        linkConfirmedDisplay = true
+                                        note = "Website account link ho gaya — ab website wala Pro isi app me dikhega."
+                                    } else {
+                                        note = "Login ho gaya, par server sync nahi hua — 'Server sync dobara karo' dabao ya app restart karo."
+                                    }
                                 }
-                                note = "Website account link ho gaya — ab website wala Pro isi app me dikhega."
                             }
                         }
                     }
@@ -5258,6 +5482,32 @@ private fun SettingsScreen(
                 }
             }
             Text("Ye setting Flora ki har awaaz par lagti hai — chat, background, Auto Mode, sab jagah — kyunki sab ek hi VoiceEngine se bolte hain. System TTS par ye pitch/rate profile lagti hai; Deepgram aane par isi style ki voice dhoondhi jayegi.")
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Neural voice — Kokoro hf_alpha (on-device, phone par hi)")
+            Text(neuralStatus.ifEmpty { "Jaanch ho rahi hai…" })
+            if (neuralProgress in 1..99) {
+                Text("Download: $neuralProgress%")
+            }
+            Button(onClick = {
+                if (com.flora.app.models.KokoroModelManager.downloading) {
+                    neuralStatus = "Download pehle se chal raha hai — percent upar dikhega."
+                } else {
+                    scope.launch {
+                        neuralProgress = 0
+                        neuralStatus = "Neural voice model download ho raha hai… (Wi-Fi par karo, ~354 MB)"
+                        val ok = com.flora.app.models.KokoroModelManager.download(context) { done, total ->
+                            if (total > 0) neuralProgress = ((done * 100) / total).toInt()
+                        }
+                        neuralProgress = 0
+                        neuralStatus = if (ok) {
+                            "Neural voice model taiyaar hai (Kokoro hf_alpha)."
+                        } else {
+                            "Download nahi ho paya — internet check karke dobara dabao."
+                        }
+                    }
+                }
+            }) { Text("Neural voice model download karo") }
+            Text("Model download hone ke baad bhi neural awaaz tabhi aayegi jab native engine jud jayega — is build me engine nahi hai (wajah docs me), isliye tab tak Lily wali system awaaz hi chalegi. Model phone par hi rehta hai, koi awaaz server par nahi jaati.")
             Spacer(modifier = Modifier.height(12.dp))
             Text("Roles — ek baar tumhare tap se (koi app ye khud nahi kar sakti)")
             Row {

@@ -36,13 +36,22 @@ class FloraMessagingService : FirebaseMessagingService() {
                 prefs.setFcmToken(token)
                 // v2.5: refreshed token bhi server ko bhejo, warna
                 // purana token push_tokens me pada reh jayega.
+                // Phase 8 link fix: pehle userId() (random UUID)
+                // bhejta tha — linked account ka users row isse
+                // kabhi nahi banta tha. Ab effectiveUserId()
+                // (linked ho to linked uid, warna random UUID).
                 val androidId = Settings.Secure.getString(
                     applicationContext.contentResolver,
                     Settings.Secure.ANDROID_ID
                 ) ?: "flora-device"
-                LicenceClient(prefs).syncPushToken(
-                    prefs.userId(), prefs.deviceId(androidId), token
+                val synced = LicenceClient(prefs).syncPushToken(
+                    prefs.effectiveUserId(), prefs.deviceId(androidId), token
                 )
+                // Link pending ho aur sync safal ho to confirm
+                // karo — isse Settings me "Linked" sahi dikhega.
+                if (synced && prefs.linkedUserId().isNotEmpty()) {
+                    prefs.setLinkServerConfirmed(true)
+                }
             } catch (e: Exception) {
                 // Token save fail: agle app-open par dobara fetch hoga.
             }

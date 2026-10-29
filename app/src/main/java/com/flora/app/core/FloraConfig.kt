@@ -37,6 +37,33 @@ object FloraConfig {
     const val LICENCE_FUNCTION_PATH = "/functions/v1/licence-verify"
     const val USAGE_FUNCTION_PATH = "/functions/v1/usage-count"
     const val PUSH_TOKEN_FUNCTION_PATH = "/functions/v1/push-token-sync"
+    const val HOME_SYNC_FUNCTION_PATH = "/functions/v1/home-sync"
+
+    // Feature flags + heartbeat (Phase 8, panel phase 2 server):
+    // flags = POST, anon key, body {user_id?}; heartbeat = POST,
+    // user JWT, body {user_id} (JWT user se match hona chahiye).
+    // Dono fail-safe hain: flags fail-open (sab ON), heartbeat
+    // silent-skip — server na bhi ho to app kabhi nahi tootegi.
+    const val FEATURE_FLAGS_PATH = "/functions/v1/feature-flags"
+    const val HEARTBEAT_PATH = "/functions/v1/heartbeat"
+
+    // Kokoro neural voice model (Phase 8, user-final: hf_alpha).
+    // PUBLIC HuggingFace URLs (hexgrad/Kokoro-82M v1.0) — APK me
+    // bundle nahi, runtime download (KokoroModelManager). SHA
+    // 2026-10-29 ke download se verify kiye gaye hain; upstream
+    // file badle to SHA mismatch par download reject hoga
+    // (fail-closed), kabhi galat model ready nahi mana jayega.
+    const val KOKORO_MODEL_URL =
+        "https://huggingface.co/hexgrad/Kokoro-82M/resolve/main/kokoro-v1.0.onnx"
+    const val KOKORO_VOICES_URL =
+        "https://huggingface.co/hexgrad/Kokoro-82M/resolve/main/voices-v1.0.bin"
+    const val KOKORO_MODEL_SHA256 =
+        "7d5df8ecf7d4b1878015a32686053fed0eebe2bc377234608764cc0ef3636a6c5"
+    const val KOKORO_VOICES_SHA256 =
+        "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
+    const val KOKORO_MODEL_SIZE = 325_532_387L
+    const val KOKORO_VOICES_SIZE = 28_214_398L
+    const val KOKORO_VOICE_ID = "hf_alpha"
 
     // Models manifest (v2.21, CEO plan M1): Flora ke apne
     // models ka server — Supabase Storage public bucket

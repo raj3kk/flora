@@ -2,6 +2,7 @@ package com.flora.app.models
 
 import android.content.Context
 import com.flora.app.core.FloraConfig
+import com.flora.app.core.PinnedTrust
 import com.flora.app.data.FloraPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -116,7 +117,9 @@ object ModelDownloader {
             val override = try { prefs.modelsManifestUrl() } catch (e: Exception) { "" }
             val url = override.ifEmpty { FloraConfig.MODELS_MANIFEST_URL }
             try {
-                val conn = URL(url).openConnection() as HttpURLConnection
+                // G17 (Phase 8): manifest URL pin-checked
+                // (Supabase host; doosre hosts par plain).
+                val conn = PinnedTrust.openConnection(URL(url)) as HttpURLConnection
                 conn.requestMethod = "GET"
                 conn.connectTimeout = 15_000
                 conn.readTimeout = 15_000
@@ -175,7 +178,9 @@ object ModelDownloader {
             }
             try {
                 val part = File(modelDir(context, model.id), "download.part")
-                val conn = URL(model.url).openConnection() as HttpURLConnection
+                // G17 (Phase 8): model URL pin-checked
+                // (Supabase bucket host; doosre hosts par plain).
+                val conn = PinnedTrust.openConnection(URL(model.url)) as HttpURLConnection
                 conn.requestMethod = "GET"
                 conn.connectTimeout = 20_000
                 conn.readTimeout = 60_000

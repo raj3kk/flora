@@ -1,6 +1,7 @@
 package com.flora.app.tools
 
 import com.flora.app.core.FloraConfig
+import com.flora.app.core.PinnedTrust
 import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -22,7 +23,7 @@ object WebsitePublisher {
     suspend fun publish(html: String, slug: String, anonKey: String): Result<String> {
         return try {
             val path = "/storage/v1/object/flora-sites/$slug/index.html?upsert=true"
-            val conn = (URL(FloraConfig.SUPABASE_URL + path).openConnection()
+            val conn = (PinnedTrust.openConnection(URL(FloraConfig.SUPABASE_URL + path))
                 as HttpURLConnection).apply {
                 requestMethod = "POST"
                 doOutput = true

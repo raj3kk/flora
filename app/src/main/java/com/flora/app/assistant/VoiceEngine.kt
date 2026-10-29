@@ -94,44 +94,43 @@ class VoiceEngine(context: Context) {
     }
 
     /**
-     * TTS safai (Phase 2 voice pipeline): bolne se pehle raw
-     * text saaf hota hai — Flora kabhi emoji ke NAAM nahi
-     * bolegi, na emoji character, na markdown, na URL, na
-     * bekaar spaces. Hindi (Devanagari) poora surakshit hai —
-     * sirf symbol/emoji ranges hat te hain. Saare voice.speak
-     * callers isi speak() se guzarte hain, isliye safai ek
-     * jagah hi kaafi hai. Saaf hone ke baad kuch na bache to
-     * kuch nahi bola jata (aur free-talk limit me bhi nahi gina jata).
+     * TTS safai (Phase 2 voice pipeline, Phase 8 me NeuralSpeaker
+     * par single-source): bolne se pehle raw text saaf hota hai —
+     * Flora kabhi emoji ke NAAM nahi bolegi, na emoji character,
+     * na markdown, na URL, na bekaar spaces. Hindi (Devanagari)
+     * poora surakshit hai — sirf symbol/emoji ranges hat te hain.
+     * Saare voice.speak callers isi speak() se guzarte hain,
+     * isliye safai ek jagah hi kaafi hai. Saaf hone ke baad
+     * kuch na bache to kuch nahi bola jata (aur free-talk
+     * limit me bhi nahi gina jata).
      */
-    fun sanitizeForSpeech(raw: String): String {
-        var s = raw.replace(Regex("\\[([^\\]]+)\\]\\([^)]+\\)"), "$1")
-        s = s.replace(Regex("https?://\\S+"), " ")
-        s = s.replace(Regex("[#*`>_|~]"), " ")
-        val sb = StringBuilder()
-        var i = 0
-        while (i < s.length) {
-            val cp = s.codePointAt(i)
-            if (!isEmojiCodePoint(cp)) sb.appendCodePoint(cp)
-            i += Character.charCount(cp)
-        }
-        return sb.toString().replace(Regex("\\s+"), " ").trim()
-    }
-
-    private fun isEmojiCodePoint(cp: Int): Boolean {
-        return cp in 0x1F000..0x1FAFF ||
-            cp in 0x2600..0x27BF ||
-            cp in 0x2B00..0x2BFF ||
-            cp in 0x2190..0x21FF ||
-            cp in 0x2300..0x23FF ||
-            cp == 0x200D ||
-            cp in 0xFE00..0xFE0F ||
-            cp == 0x20E3
-    }
+    fun sanitizeForSpeech(raw: String): String = NeuralSpeaker.sanitize(raw)
 
     fun speak(text: String) {
-        if (!ready) return
         val clean = sanitizeForSpeech(text)
         if (clean.isEmpty()) return
+        // Phase 8 neural voice: engine juda ho to wahi bolega
+        // (Kokoro hf_alpha jab engine + model dono hon) — iske
+        // liye system TTS ka ready hona zaroori nahi. Engine
+        // na ho ya fail ho to neeche system TTS (Lily profile)
+        // hi chalega — system TTS is build me hataya NAHI gaya
+        // (gate: hatana sirf phone test pass ke baad).
+        val eng = NeuralSpeaker.engine
+        if (eng != null) {
+            try {
+                eng.speak(
+                    clean,
+                    { onSpeechStart?.invoke() },
+                    { onSpeechDone?.invoke() }
+                )
+                val seconds = maxOf(1L, (clean.length / 13).toLong())
+                onSpoken?.invoke(seconds)
+                return
+            } catch (e: Exception) {
+                // Engine fail: system TTS par gir jao, awaaz na ruke.
+            }
+        }
+        if (!ready) return
         applyPersona()
         tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "flora-reply")
         val seconds = maxOf(1L, (clean.length / 13).toLong())

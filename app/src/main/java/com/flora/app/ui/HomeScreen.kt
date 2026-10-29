@@ -16,7 +16,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.flora.app.core.FeatureFlags
 import com.flora.app.data.FloraPreferences
 import com.flora.app.tools.HomeSyncClient
 import kotlinx.coroutines.launch
@@ -35,6 +37,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun HomeScreen(prefs: FloraPreferences) {
     val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
     var code by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
@@ -98,22 +101,25 @@ fun HomeScreen(prefs: FloraPreferences) {
             Text(note)
         }
         Spacer(modifier = Modifier.height(8.dp))
-        // Server sync (v2.22, Phase 5, G10): box code server
-        // tak pahunchana. Function deploy (Phase 4) hone se
-        // pehle ye hamesha fail hoga — jhootha "jud gaya"
-        // kabhi nahi dikhaya jayega.
+        // Server sync (Phase 8 rewrite): user JWT + device_id +
+        // box_code -> home-sync function service-role upsert.
+        // Function deploy hone se pehle, ya unlinked ho, ya home
+        // flag OFF ho — har case me null = imaandaar message,
+        // jhootha "jud gaya" kabhi nahi.
         Button(onClick = {
             scope.launch {
                 val c = saved
                 if (c.isEmpty()) {
                     note = "Pehle box ka code save karo, phir sync karo."
+                } else if (!FeatureFlags.isEnabled("home")) {
+                    note = "Ye feature abhi band hai."
                 } else {
                     note = "Server se sync ho raha hai..."
-                    val res = HomeSyncClient.sync(prefs, c)
+                    val res = HomeSyncClient.sync(prefs, c, ctx)
                     note = if (res != null) {
                         "Server ko code mil gaya hai. Relay control tab bhi box ke server hissa banne ke baad hi chalega."
                     } else {
-                        "Server sync nahi ho paya — function deploy (Phase 4) hone ke baad dobara karo. Code phone par surakshit hai."
+                        "Server sync nahi ho paya — website account link karo, phir function deploy hone ke baad dobara karo. Code phone par surakshit hai."
                     }
                 }
             }

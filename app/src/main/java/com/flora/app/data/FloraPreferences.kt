@@ -58,6 +58,13 @@ class FloraPreferences(private val context: Context) {
         val LINKED_USER_ID = stringPreferencesKey("linked_user_id")
         val LINKED_EMAIL = stringPreferencesKey("linked_email")
         val LINKED_REFRESH_TOKEN = stringPreferencesKey("linked_refresh_token")
+        // Phase 8 link fix: server row confirm hui ya nahi. Sirf
+        // tab true jab push-token-sync ne ok:true diya ho — isse
+        // pehle "Linked" UI kabhi nahi dikhega (pending dikhega).
+        val LINK_SERVER_CONFIRMED = booleanPreferencesKey("link_server_confirmed")
+        // Phase 8 feature flags: aakhri mili hui flags ka JSON
+        // (offline me wahi chalti hain; fail-open bhi yahi se).
+        val FEATURE_FLAGS_JSON = stringPreferencesKey("feature_flags_json")
         val CALL_TALK = booleanPreferencesKey("call_talk")
         val HOME_BOX_CODE = stringPreferencesKey("home_box_code")
         val PC_PAIR_CODE = stringPreferencesKey("pc_pair_code")
@@ -118,7 +125,24 @@ class FloraPreferences(private val context: Context) {
             it.remove(Keys.LINKED_USER_ID)
             it.remove(Keys.LINKED_EMAIL)
             it.remove(Keys.LINKED_REFRESH_TOKEN)
+            it.remove(Keys.LINK_SERVER_CONFIRMED)
         }
+    }
+
+    /** Phase 8: server ne users row banayi (sync ok:true) ya nahi. */
+    suspend fun linkServerConfirmed(): Boolean =
+        context.floraDataStore.data.map { it[Keys.LINK_SERVER_CONFIRMED] ?: false }.first()
+
+    suspend fun setLinkServerConfirmed(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.LINK_SERVER_CONFIRMED] = value }
+    }
+
+    /** Phase 8: aakhri mili hui feature flags ka JSON (khali = koi nahi). */
+    suspend fun featureFlagsJson(): String =
+        context.floraDataStore.data.map { it[Keys.FEATURE_FLAGS_JSON] ?: "" }.first()
+
+    suspend fun setFeatureFlagsJson(value: String) {
+        context.floraDataStore.edit { it[Keys.FEATURE_FLAGS_JSON] = value }
     }
 
     // User ki Settings key ho to wahi pehle chalegi; warna app ka

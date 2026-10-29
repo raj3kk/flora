@@ -3,13 +3,12 @@ package com.flora.app.automation
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.speech.tts.TextToSpeech
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.flora.app.assistant.NeuralSpeaker
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
-import java.util.Locale
 
 private val Context.eventAnnounceStore by preferencesDataStore(name = "flora_prefs")
 
@@ -39,24 +38,9 @@ class EventAnnounceReceiver : BroadcastReceiver() {
         }
         if (!enabled) return
         val appContext = context.applicationContext
-        var tts: TextToSpeech? = null
-        tts = TextToSpeech(appContext) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale("hi", "IN")
-                tts?.setOnUtteranceProgressListener(
-                    object : android.speech.tts.UtteranceProgressListener() {
-                        override fun onStart(id: String?) {}
-                        override fun onDone(id: String?) {
-                            tts?.shutdown()
-                        }
-                        @Deprecated("Deprecated in Java")
-                        override fun onError(id: String?) {
-                            tts?.shutdown()
-                        }
-                    }
-                )
-                tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "flora-event")
-            }
-        }
+        // Phase 8: shared speak path — neural engine ho to wahi,
+        // warna system TTS (pehle wala behaviour). Free-talk
+        // counting yahan kabhi nahi hoti.
+        NeuralSpeaker.speakFixed(appContext, message)
     }
 }

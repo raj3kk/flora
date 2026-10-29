@@ -1,5 +1,6 @@
 package com.flora.app.assistant
 
+import com.flora.app.core.PinnedTrust
 import com.flora.app.data.FloraPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -163,7 +164,7 @@ class BrainClient(private val prefs: FloraPreferences) {
     }
 
     private fun getCode(urlText: String, authHeader: String?): Int {
-        val conn = URL(urlText).openConnection() as HttpURLConnection
+        val conn = PinnedTrust.openConnection(URL(urlText)) as HttpURLConnection
         return try {
             conn.requestMethod = "GET"
             conn.connectTimeout = 15_000
@@ -178,7 +179,9 @@ class BrainClient(private val prefs: FloraPreferences) {
     }
 
     private fun postJson(urlText: String, body: JSONObject, authHeader: String?): PostResult {
-        val conn = URL(urlText).openConnection() as HttpURLConnection
+        // G17 (Phase 8): proxy URL pin-checked (doosre hosts par
+        // ye helper plain connection deta hai).
+        val conn = PinnedTrust.openConnection(URL(urlText)) as HttpURLConnection
         return try {
             conn.requestMethod = "POST"
             conn.connectTimeout = 20_000

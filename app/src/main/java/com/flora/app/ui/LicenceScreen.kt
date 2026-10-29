@@ -41,8 +41,9 @@ import kotlinx.coroutines.launch
  *    tabhi server par licence active hogi. App khud kabhi
  *    payment approve nahi karti (money rule).
  * Licence status yahan live server se dikhta hai; device
- * lock: ek Pro licence ek phone par — 15 din ke baad hi
- * doosre phone par transfer hoti hai.
+ * binding (v2 rule): ek licence ek time me ek device par —
+ * pehle jis device par claim hui, wahi bind rahegi;
+ * auto-rebind kabhi nahi, rebind sirf admin panel se hoga.
  */
 @Composable
 fun LicenceScreen(
@@ -71,7 +72,11 @@ fun LicenceScreen(
                 val deviceId = prefs.deviceId(androidId)
                 val status = licenceClient.verify(userId, deviceId)
                 onLicence(status)
-                note = "Licence server se check ho gayi."
+                // Licence v2: kharab status par uska imaandaar
+                // message hi note banega (generic "check ho gayi"
+                // nahi — warna user ko pata hi nahi chalega ki
+                // Pro kyon band hai).
+                note = status.honestMessage() ?: "Licence server se check ho gayi."
             } catch (e: Exception) {
                 note = "Server se check nahi ho paya — internet dekh kar dobara karo."
             }
@@ -91,6 +96,12 @@ fun LicenceScreen(
         Text("Licence / Pro — ₹199/month")
         licence?.let {
             Text("Status: ${it.plan} (${it.status})" + if (it.serverChecked) " — server se verified ✓" else " — local mode (server check nahi hua)")
+            // Licence v2 status ka imaandaar message + expiry
+            // (khali ho to kuch extra nahi dikhega).
+            it.honestMessage()?.let { hm -> Text(hm) }
+            if (it.expiresAt.isNotEmpty()) {
+                Text("Expiry: ${it.expiresAt}")
+            }
         } ?: Text("Status: pata nahi — Refresh dabao.")
         Spacer(modifier = Modifier.height(8.dp))
         Text("Licence kaise banegi (koi code type nahi karna):")
@@ -99,7 +110,7 @@ fun LicenceScreen(
         Text("3. Payment ke baad UTR yahan save karo.")
         Text("4. Admin UTR + amount + note match karke approve karega, tabhi licence active hogi.")
         Text("Website se khareeda Pro isi app me dikhane ke liye Settings me 'Website account link' karo.")
-        Text("Device lock: ek Pro licence ek phone par chalti hai. 15 din ke baad hi doosre phone par transfer hoti hai — usse pehle doosra phone free mode me rahega.")
+        Text("Device lock: ek licence ek time me ek device par chalti hai. Pehle jis device par claim hui, wahi bind rahegi — doosre phone par apne aap transfer nahi hogi; rebind sirf admin panel se hoga.")
         Spacer(modifier = Modifier.height(12.dp))
         Button(onClick = { refresh() }) {
             Text(if (refreshing) "Check ho raha hai…" else "Licence refresh karo")

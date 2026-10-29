@@ -3,14 +3,13 @@ package com.flora.app.automation
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.speech.tts.TextToSpeech
 import android.telephony.TelephonyManager
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.flora.app.assistant.NeuralSpeaker
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
-import java.util.Locale
 
 private val Context.callAnnounceStore by preferencesDataStore(name = "flora_prefs")
 
@@ -44,27 +43,10 @@ class CallAnnouncementReceiver : BroadcastReceiver() {
         val number = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
             ?: return
         val appContext = context.applicationContext
-        var tts: TextToSpeech? = null
-        tts = TextToSpeech(appContext) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale("hi", "IN")
-                tts?.setOnUtteranceProgressListener(
-                    object : android.speech.tts.UtteranceProgressListener() {
-                        override fun onStart(id: String?) {}
-                        override fun onDone(id: String?) {
-                            tts?.shutdown()
-                        }
-                        @Deprecated("Deprecated in Java")
-                        override fun onError(id: String?) {
-                            tts?.shutdown()
-                        }
-                    }
-                )
-                tts?.speak(
-                    "Call aa raha hai, number $number se.",
-                    TextToSpeech.QUEUE_FLUSH, null, "flora-call"
-                )
-            }
-        }
+        // Phase 8: shared speak path — neural engine ho to wahi,
+        // warna system TTS (pehle wala behaviour, shutdown
+        // NeuralSpeaker ke andar hota hai). Free-talk counting
+        // yahan kabhi nahi hoti.
+        NeuralSpeaker.speakFixed(appContext, "Call aa raha hai, number $number se.")
     }
 }
