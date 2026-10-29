@@ -6,11 +6,14 @@ import android.content.Context
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.flora.app.assistant.BrainClient
+import com.flora.app.automation.MacroJson
 import com.flora.app.data.AutoLogStore
 import com.flora.app.data.ChatMemoryStore
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
+import com.flora.app.data.MacroStore
 import com.flora.app.data.ProjectStore
+import com.flora.app.data.StoredMacro
 import com.flora.app.tools.BuilderFailureKind
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +26,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
@@ -89,6 +93,8 @@ class PlannerEngine(
     private val approvedSteps = mutableSetOf<String>()
     /** Transient inputs (jaise Supabase dbPassword) — sirf memory me, Room me kabhi nahi. */
     private val transientInputs = mutableMapOf<Int, Map<String, String>>()
+    /** Planner-macro delivery ka waqt (memory) — restart par resultText ke marker se recover hota hai. */
+    private val macroQueuedAtMs = mutableMapOf<String, Long>()
 
     private val stateFlow = MutableStateFlow(
         EngineState(null, PlanStatus.DRAFT, "", 0, 0, false)
@@ -217,22 +223,96 @@ class PlannerEngine(
         launchRun(planId)
     }
 
-    /** Macro adapter stop ke baad user confirm — UI step ho gaya maan kar aage badho. */
-    fun confirmMacroStep(planId: String, stepIndex: Int) {
-        engineScope.launch {
-            val plan = repository.loadPlan(planId) ?: return@launch
-            val step = plan.steps.firstOrNull { it.stepIndex == stepIndex } ?: return@launch
-            repository.updateStep(
-                step.copy(
-                    status = StepStatus.VERIFIED,
-                    resultText = "Macro user-confirm se poora mana gaya.",
-                    sideEffectId = "macro-confirmed-by-user",
-                    verifiedAtMs = System.currentTimeMillis(),
-                ),
-                planId,
-            )
-            log(planId, stepIndex, "macro user-confirm se VERIFIED")
-            launchRun(planId)
+    /**
+     * B4 follow-up P1-1 — planner-macro ka deterministic naam.
+     * Routines ke MacroStore me isi naam se save hota hai, aur
+     * FloraApp ka maujooda macro runner (runMacroFrom) Done par
+     * AutoLog me "Macro: <naam> -> ho gaya" likhta hai — wahi
+     * runner log confirm ka proof hai, user ka kehna nahi.
+     */
+    fun plannerMacroName(planId: String, stepIndex: Int): String =
+        "planner-$planId-step$stepIndex"
+
+    /**
+     * B4 follow-up P1-1 — macro step ka confirm, SIRF runner-log proof par.
+     * Purana confirmMacroStep (bina proof ke VERIFIED) HATA DIYA GAYA hai:
+     * is function ke bina proof ke VERIFIED kabhi nahi hoga — proof na mile to
+     * step BLOCKED hi rehta hai aur failure wapas milta hai (Screen dikhata hai).
+     * Proof = AutoLog me isi macro naam ka Done entry, delivery waqt ke baad ka.
+     * Delivery waqt memory map se, ya restart ke baad step ke resultText me
+     * maujood [macro-queued-at:<ms>] marker se milta hai.
+     */
+    suspend fun confirmMacroExecuted(planId: String, stepIndex: Int): Result<String> {
+        val plan = repository.loadPlan(planId) ?: return Result.failure(IllegalStateException("plan nahi mila"))
+        val step = plan.steps.firstOrNull { it.stepIndex == stepIndex }
+            ?: return Result.failure(IllegalStateException("step nahi mila"))
+        if (step.status != StepStatus.BLOCKED || step.tool != PlanTool.MACRO_UI_STEP) {
+            return Result.failure(IllegalStateException("ye step BLOCKED macro step nahi hai — is button se VERIFIED nahi hoga"))
+        }
+        val macroName = plannerMacroName(planId, stepIndex)
+        val queuedAt = macroQueuedAtMs["$planId:$stepIndex"] ?: queuedAtFromResult(step.resultText)
+        if (queuedAt == null) {
+            return Result.failure(IllegalStateException("macro delivery ka waqt nahi mila — macro Routines se dobara chalao, phir confirm dabao"))
+        }
+        val proofFound = try {
+            autoLogStore.items.first().any { (text, ts) ->
+                text == "Macro: $macroName -> ho gaya" && ts >= queuedAt
+            }
+        } catch (e: Exception) {
+            false
+        }
+        if (!proofFound) {
+            log(planId, stepIndex, "macro confirm roka gaya: runner log nahi mila ($macroName)")
+            return Result.failure(IllegalStateException("Macro runner log nahi mila — pehle Routines > Mere macros se '$macroName' Chalao + confirm se chalao, phir ye button dabao"))
+        }
+        repository.updateStep(
+            step.copy(
+                status = StepStatus.VERIFIED,
+                resultText = "Macro runner log se VERIFIED (Routines runner Done: $macroName).",
+                sideEffectId = "macro-run-log:$macroName",
+                verifiedAtMs = System.currentTimeMillis(),
+            ),
+            planId,
+        )
+        log(planId, stepIndex, "macro runner log se VERIFIED ($macroName)")
+        if (runJob?.isActive != true) launchRun(planId)
+        return Result.success("Macro runner log se VERIFIED — plan aage badh raha hai.")
+    }
+
+    private fun queuedAtFromResult(resultText: String): Long? {
+        val marker = "macro-queued-at="
+        val start = resultText.indexOf(marker)
+        if (start < 0) return null
+        val digits = resultText.substring(start + marker.length).takeWhile { it.isDigit() }
+        return digits.toLongOrNull()
+    }
+
+    /**
+     * B4 follow-up P1-1 — AdapterQueued macro JSON ko maujooda runner raaste tak
+     * pahunchana: MacroStore (REUSE, edit nahi) me Routines wale naam se save +
+     * reload se verify. Koi naya accessibility-drive path nahi banaya gaya —
+     * chalana Routines screen ke confirm dialog + FloraApp ke runMacroFrom se hi hoga.
+     * Save ya reload-verify fail ho to false (step BLOCKED hi rahega, VERIFIED nahi).
+     */
+    private suspend fun deliverPlannerMacro(planId: String, step: StoredStep, outcome: PlannerTools.StepOutcome.AdapterQueued): Boolean {
+        if (outcome.macroJson.isBlank()) return false
+        val parsed = try {
+            MacroJson.parse(outcome.macroJson)
+        } catch (e: Exception) {
+            null
+        } ?: return false
+        if (parsed.steps.isEmpty()) return false
+        val macroName = plannerMacroName(planId, step.stepIndex)
+        return try {
+            val existing = MacroStore.load(appContext)
+            val updated = existing.filter { it.name != macroName } + StoredMacro(macroName, outcome.macroJson)
+            MacroStore.save(appContext, updated)
+            val reloaded = MacroStore.load(appContext)
+            val ok = reloaded.any { it.name == macroName && it.json == outcome.macroJson }
+            if (ok) macroQueuedAtMs["$planId:${step.stepIndex}"] = System.currentTimeMillis()
+            ok
+        } catch (e: Exception) {
+            false
         }
     }
 
@@ -256,8 +336,31 @@ class PlannerEngine(
             }
             if (transientPart.isNotEmpty()) transientInputs[index] = transientPart
             val storedPart = changes.filterKeys { key -> key !in transientPart.keys }
+            // B4 follow-up P1-2 / P2(c): input badla to purana status nahi rahega.
+            // VERIFIED step ka input chupchaap badal kar VERIFIED nahi rehne diya jayega,
+            // aur BLOCKED/FAILED step dobara try ke liye PENDING hoga — warna
+            // (a) VERIFIED + sideEffectId wala step M1 pre-check se dobara kabhi nahi chalta,
+            // (b) BLOCKED step runLoop ke PENDING filter me kabhi wapas nahi aata.
+            // Status reset par sideEffectId + verifiedAtMs bhi saaf (nahi to M1 Done maan lega).
+            // SKIPPED/PENDING/RUNNING par ye reset nahi lagta (skip user ka faisla hai).
             steps = steps.map { step ->
-                if (step.stepIndex == index) step.copy(input = step.input + storedPart) else step
+                if (step.stepIndex == index) {
+                    val reset = if (step.status == StepStatus.VERIFIED ||
+                        step.status == StepStatus.BLOCKED || step.status == StepStatus.FAILED
+                    ) {
+                        step.copy(
+                            status = StepStatus.PENDING,
+                            resultText = "input amend hua — dobara verify hoga (purana status hata)",
+                            sideEffectId = "",
+                            verifiedAtMs = 0L,
+                        )
+                    } else {
+                        step
+                    }
+                    reset.copy(input = reset.input + storedPart)
+                } else {
+                    step
+                }
             }
         }
         if (skipIndices.isNotEmpty()) {
@@ -289,7 +392,8 @@ class PlannerEngine(
         val newVersion = plan.version + 1
         repository.updatePlanMeta(
             planId, version = newVersion,
-            historyNote = "v$newVersion: amend (skip=$skipIndices, reorder=${newOrder != null})",
+            // History me sirf step index (koi input value / password kabhi nahi).
+            historyNote = "v$newVersion: amend (skip=$skipIndices, inputSteps=${inputChanges.keys.sorted()}, reorder=${newOrder != null})",
         )
         log(planId, -1, "plan amend hua -> v$newVersion")
         val updated = repository.loadPlan(planId) ?: return Result.failure(IllegalStateException("plan load nahi hua"))
@@ -497,9 +601,20 @@ class PlannerEngine(
                     return StepRunResult.Stopped(outcome.stop, outcome.reason)
                 }
                 is PlannerTools.StepOutcome.AdapterQueued -> {
-                    repository.updateStep(step.copy(status = StepStatus.BLOCKED, attempts = attempts, resultText = outcome.note), planId)
-                    log(planId, step.stepIndex, "macro adapter queued: ${outcome.note}")
-                    return StepRunResult.Stopped(PlanStop.GENUINE_BLOCK, outcome.note)
+                    // B4 follow-up P1-1: macro JSON ko Routines runner raaste tak pahunchayo;
+                    // deliver na ho to bhi step BLOCKED hi rahega — VERIFIED kabhi nahi.
+                    val delivered = deliverPlannerMacro(planId, step, outcome)
+                    val macroName = plannerMacroName(planId, step.stepIndex)
+                    val queuedAt = macroQueuedAtMs["$planId:${step.stepIndex}"] ?: System.currentTimeMillis()
+                    val deliveryText = if (delivered) {
+                        "Macro Routines me save hua '$macroName' — Routines > Mere macros se Chalao + confirm se chalao, " +
+                            "phir yahan runner-log confirm dabao. Planner ne khud accessibility nahi chalaya. [macro-queued-at:$queuedAt]"
+                    } else {
+                        "Macro deliver nahi hua (Routines save/verify fail) — step BLOCKED hai, VERIFIED nahi. Dobara Chalao par phir try hoga."
+                    }
+                    repository.updateStep(step.copy(status = StepStatus.BLOCKED, attempts = attempts, resultText = deliveryText), planId)
+                    log(planId, step.stepIndex, "macro adapter ${if (delivered) "delivered" else "delivery-failed"}: $macroName")
+                    return StepRunResult.Stopped(PlanStop.GENUINE_BLOCK, deliveryText)
                 }
                 is PlannerTools.StepOutcome.Failure -> {
                     lastKind = outcome.kind

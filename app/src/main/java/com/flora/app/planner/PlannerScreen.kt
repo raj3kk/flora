@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -50,6 +51,9 @@ fun PlannerScreen(engine: PlannerEngine) {
     var goal by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
     var plans by remember { mutableStateOf(listOf<StoredPlan>()) }
+    // B4 follow-up P1-2: har Supabase step ka transient password field (stepIndex -> text).
+    // Ye state sirf UI me hai — amend ke baad turant saaf hoti hai, Room me kabhi nahi jati.
+    var dbPasswords by remember { mutableStateOf(mapOf<Int, String>()) }
 
     LaunchedEffect(pendingGoal) {
         if (pendingGoal.isNotBlank()) goal = pendingGoal
@@ -170,13 +174,65 @@ fun PlannerScreen(engine: PlannerEngine) {
                     }
                 }
                 if (step.status == StepStatus.BLOCKED && step.tool == PlanTool.MACRO_UI_STEP) {
+                    // B4 follow-up P1-1: purana "Macro ho gaya" attestation button HATA DIYA.
+                    // Ye button sirf tab VERIFIED karta hai jab Routines runner ka Done log
+                    // mile — bina log ke step BLOCKED hi rehta hai (engine me fail-closed).
+                    Text(text = "Macro Routines me save hai ('${engine.plannerMacroName(plan.planId, step.stepIndex)}') — Routines screen par Mere macros se Chalao + confirm se chalao, phir yahan dabao.")
                     Row {
                         OutlinedButton(
                             onClick = {
-                                engine.confirmMacroStep(plan.planId, step.stepIndex)
+                                scope.launch {
+                                    val confirmed = engine.confirmMacroExecuted(plan.planId, step.stepIndex)
+                                    message = confirmed.fold(
+                                        { ok -> ok },
+                                        { err -> "Confirm nahi hua: ${err.message ?: "runner log nahi mila"}" },
+                                    )
+                                    plans = engine.listPlans()
+                                }
                             }
                         ) {
-                            Text(text = "Macro ho gaya, aage badho")
+                            Text(text = "Macro chal gaya — runner log se confirm karo")
+                        }
+                    }
+                }
+                if (step.tool == PlanTool.SUPABASE_CREATE_PROJECT && step.status == StepStatus.BLOCKED) {
+                    // B4 follow-up P1-2: Blocked message "plan amend se ek baar do" kehta tha,
+                    // par amend ka sirf skip button tha — ab input-change UI amendPlan se wired hai.
+                    // Password yahan se seedha transient amend payload me jata hai (memory only,
+                    // Room me kabhi nahi); amend BLOCKED step ko PENDING karta hai (engine P2(c)
+                    // reset), phir Resume/Chalao se dobara try hoga.
+                    val dbPassword = dbPasswords[step.stepIndex] ?: ""
+                    OutlinedTextField(
+                        value = dbPassword,
+                        onValueChange = { typed -> dbPasswords = dbPasswords + (step.stepIndex to typed) },
+                        label = { Text(text = "Database password (sirf is call ke liye)") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(text = "Ye password sirf memory me rahega, Room me kabhi save nahi hoga; app restart par dobara dena hoga. Amend ke baad step PENDING hoga — phir Resume/Chalao dabao.")
+                    Row {
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    if (dbPassword.isBlank()) {
+                                        message = "Database password khali hai — pehle password likho."
+                                    } else {
+                                        val amended = engine.amendPlan(
+                                            plan.planId,
+                                            inputChanges = mapOf(step.stepIndex to mapOf("dbPassword" to dbPassword)),
+                                        )
+                                        if (amended.isSuccess) {
+                                            dbPasswords = dbPasswords - step.stepIndex
+                                            plans = engine.listPlans()
+                                            message = "Database password transient diya gaya — Room me save nahi hua. Ab Resume/Chalao dabao."
+                                        } else {
+                                            message = "Amend nahi hua: ${amended.exceptionOrNull()?.message ?: "unknown"}"
+                                        }
+                                    }
+                                }
+                            }
+                        ) {
+                            Text(text = "Password dekar amend karo")
                         }
                     }
                 }

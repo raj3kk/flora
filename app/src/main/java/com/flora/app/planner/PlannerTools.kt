@@ -118,8 +118,12 @@ class PlannerTools(
         }
         return StepOutcome.AdapterQueued(
             jsonText,
-            "Macro taiyaar hai — FloraApp ke macro runner se chalega; " +
-                "planner accessibility drive nahi karta. Chal jaane par 'Macro ho gaya' se confirm karo.",
+            // B4 follow-up P1-1: ye note sirf fallback hai — engine delivery text ise
+            // overwrite karta hai. "Macro ho gaya" wali bina-proof attestation hata di gayi:
+            // VERIFIED sirf Routines runner ke Done log se hoga.
+            "Macro taiyaar hai — planner ise Routines ke macro list me save karega; " +
+                "wahan Chalao + confirm se chalega, phir planner me runner-log confirm dabao. " +
+                "Planner khud accessibility drive nahi karta.",
         )
     }
 
