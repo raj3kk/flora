@@ -281,7 +281,8 @@ class GoalOrchestrator(
                 logGoal(goal.goalId, "-", "sub-plan fail (plan nahi bana): ${sub.subGoal}")
                 continue
             }
-            val plan = created.getOrNull() ?: run {
+            val plan = created.getOrNull()
+            if (plan == null) {
                 sub.status = GoalSubStatus.FAILED
                 sub.detail = "plan nahi bana (khali result)"
                 emit()
