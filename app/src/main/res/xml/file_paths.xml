@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- B2 Builder export: sirf cacheDir ka builder_exports folder
+     share-sheet ke liye khulta hai; koi shared folder nahi. -->
+<paths>
+    <cache-path name="builder_exports" path="builder_exports/" />
+</paths>

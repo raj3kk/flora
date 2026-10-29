@@ -37,6 +37,7 @@ import com.flora.app.automation.FloraAutomationService
 import com.flora.app.automation.ScreenCapture
 import com.flora.app.automation.ShizukuBridge
 import com.flora.app.data.AutoLogStore
+import com.flora.app.data.ProjectStore
 import com.flora.app.tools.ImageTools
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -88,7 +89,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -123,6 +124,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     // skip ho jata hai) — ab imaandaar naam "PIN gate".
     Screen.LOCK -> "PIN gate"
     Screen.PC_LINK -> "PC Link"
+    Screen.BUILDER -> "Builder"
 }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
@@ -253,6 +255,9 @@ fun FloraApp(
     val bargeIn = remember { com.flora.app.voice.BargeInController(appContext) }
     // appContext ke BAAD (declaration order — pehle wali galti se CI fail hua tha).
     val autoLogStore = remember { AutoLogStore(appContext) }
+    // B2 Builder: projectStore autoLogStore ke BAAD (declaration
+    // order — BuilderScreen call site isse neeche hai).
+    val projectStore = remember { ProjectStore(appContext) }
     // Long memory (Phase 2B, user order 2026-10-29 02:59): baat-cheet +
     // pending kaam phone par hi encrypted save rahenge — restart par
     // bhi khatam nahi honge (in-session-only history ki kami ka fix).
@@ -1208,6 +1213,13 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Whiteboard") },
                             onClick = { screen = Screen.WHITEBOARD; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Builder") },
+                            // B2 ungated (coordinator ruling): builder
+                            // local-only hai, isliye kisi invented key
+                            // se gate nahi — entitlement B5 (F2) me.
+                            onClick = { screen = Screen.BUILDER; menuOpen = false },
                         )
                         DropdownMenuItem(
                             text = { Text("Home") },
@@ -4133,6 +4145,7 @@ fun FloraApp(
                             "sos" -> Screen.SOS
                             "lock", "screen lock" -> Screen.LOCK
                             "pc link", "pc" -> Screen.PC_LINK
+                            "builder" -> Screen.BUILDER
                             else -> null
                         }
                         if (target != null) {
@@ -4800,6 +4813,8 @@ fun FloraApp(
                 FaceScreen()
             } else if (screen == Screen.DOCS) {
                 DocsScreen(docsStore)
+            } else if (screen == Screen.BUILDER) {
+                BuilderScreen(projectStore, autoLogStore)
             } else if (screen == Screen.WHITEBOARD) {
                 WhiteboardScreen()
             } else if (screen == Screen.HOME) {

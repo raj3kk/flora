@@ -162,6 +162,18 @@
                 <action android:name="android.speech.RecognitionService" />
             </intent-filter>
         </service>
+        <!-- B2 Builder export (FileProvider): staged ZIP sirf
+             cacheDir se, user ke tap par share sheet se jata hai —
+             koi silent send/upload nahi. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <!-- Live wallpaper (v2.22, Phase 5, G9): sirf drawing. -->
         <service
             android:name="com.flora.app.automation.FloraWallpaperService"

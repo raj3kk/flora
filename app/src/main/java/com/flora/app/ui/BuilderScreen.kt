@@ -1,0 +1,403 @@
+package com.flora.app.ui
+
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.FileProvider
+import com.flora.app.data.AutoLogStore
+import com.flora.app.data.ProjectMeta
+import com.flora.app.data.ProjectStore
+import com.flora.app.data.extractFirstTextEntry
+import kotlinx.coroutines.launch
+import java.io.File
+
+/**
+ * B2 Builder core — project editor + single-file preview + export + pick (2026-10-29).
+ *
+ * Coordinator ruling (binding) — preview option (a) ONLY: ek file ka
+ * HTML preview isi screen ke apne WebView me (loadDataWithBaseURL).
+ * Koi local server nahi, koi NanoHTTPD/Ktor nahi. Multi-file preview
+ * (poora project ek saath) is build me NAHI hai — ye limit screen
+ * par saaf likhi hai, aur multi-file preview ka faisla baad me
+ * (licence-verify-first NanoHTTPD route ko apni approval chahiye).
+ *
+ * B1 browser se alag: ye WebView apna hai — BrowserController ka
+ * singleton, uska pay lock, aur B1 ke read/fill/classify raaste
+ * yahan kabhi nahi chhuaye jate (B2-09).
+ *
+ * Voice (B2-05): naya STT library nahi — system speech recognizer
+ * (hi-IN), WhiteboardScreen wale pattern par apna launcher. Bola
+ * hua text focused file ke editor me judta hai, phir wahi save
+ * raasta chalta hai jo typed text ka hai (wahi encryption, wahi
+ * version snapshot, wahi Auto Log). MainActivity ka mic launcher
+ * chat-bound hai (uske result ko FloraApp chat me leta hai), isliye
+ * builder ka apna launcher hai — wahi system recognizer, wahi bhasha.
+ *
+ * Errors (B2-12): chat/voice jaisi satah par sirf saaf-saadhi baat
+ * (kya hua, aage kya karein); technical detail sirf Auto Log me,
+ * aur usme bhi kabhi file content, path, key ya token nahi.
+ * Ungated (coordinator ruling, B2-11): builder local-only hai —
+ * koi server cost/network content nahi — isliye kisi invented
+ * plan-features key/quota se gate nahi kiya gaya. Entitlement
+ * B5 (F2) me aayega.
+ */
+@Composable
+fun BuilderScreen(projectStore: ProjectStore, autoLogStore: AutoLogStore) {
+    val appContext = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var projects by remember { mutableStateOf<List<ProjectMeta>>(emptyList()) }
+    var selectedProjectId by remember { mutableStateOf<String?>(null) }
+    var selectedFileName by remember { mutableStateOf<String?>(null) }
+    var editorText by remember { mutableStateOf("") }
+    var newProjectName by remember { mutableStateOf("") }
+    var newFileName by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+
+    val selectedProject = projects.firstOrNull { it.id == selectedProjectId }
+    val selectedFile = selectedProject?.files?.firstOrNull { it.name == selectedFileName }
+    val isHtmlFile = (selectedFileName ?: "").lowercase().endsWith(".html") ||
+        (selectedFileName ?: "").lowercase().endsWith(".htm")
+
+    // Save raasta — typed text ho ya bola hua text, yahi ek raasta
+    // hai (wahi encryption, version snapshot, Auto Log).
+    val saveCurrent: () -> Unit = {
+        val pid = selectedProjectId
+        val fname = selectedFileName
+        if (pid == null || fname == null) {
+            note = "Pehle koi project aur file chuno, phir save karo."
+        } else {
+            val textToSave = editorText
+            scope.launch {
+                val result = projectStore.saveProjectFile(pid, fname, textToSave)
+                if (result.isSuccess) {
+                    projects = projectStore.listProjects()
+                    try {
+                        autoLogStore.add("Builder: file save hui ($fname)")
+                    } catch (e: Exception) {
+                    }
+                    note = "Save ho gaya."
+                } else {
+                    val kind = result.exceptionOrNull()?.javaClass?.simpleName ?: "error"
+                    try {
+                        autoLogStore.add("Builder technical: save failed ($kind)")
+                    } catch (e: Exception) {
+                    }
+                    note = "Save nahi ho paya — dobara koshish karo."
+                }
+            }
+        }
+    }
+
+    // Voice launcher — saare states + saveCurrent isse PEHLE declare
+    // hain (declaration-order trap se bachne ke liye).
+    val speechLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull() ?: ""
+            if (spoken.isBlank()) {
+                note = "Kuch sunai nahi diya — dobara bolo."
+            } else if (selectedFileName == null || selectedProjectId == null) {
+                note = "Pehle koi project aur file chuno, phir bolo."
+            } else {
+                editorText = if (editorText.isBlank()) spoken else editorText + "\n" + spoken
+                saveCurrent()
+                note = "Bola hua text jud gaya aur save ho gaya."
+            }
+        } else {
+            note = "Voice sun nahi paya — dobara koshish karo."
+        }
+    }
+
+    // Single-file pick (B2-10, E2): GetContent — persistable URI
+    // permission isme nahi hai (wo B5 ka kaam hai, yahan nahi).
+    val pickLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri == null) {
+            note = "Koi file chuni nahi gayi."
+        } else {
+            scope.launch {
+                try {
+                    val pickedName = uri.lastPathSegment
+                        ?.substringAfterLast('/')
+                        ?.take(100)
+                        ?.ifBlank { null } ?: "picked.txt"
+                    val stream = appContext.contentResolver.openInputStream(uri)
+                    if (stream == null) {
+                        note = "Ye file khul nahi payi — doosri file chuno."
+                    } else {
+                        val bytes = stream.use { it.readBytes() }
+                        if (bytes.size > 1_000_000) {
+                            note = "Ye file bahut badi hai — chhoti file chuno."
+                        } else if (pickedName.lowercase().endsWith(".zip")) {
+                            val extracted = extractFirstTextEntry(bytes)
+                            if (extracted == null) {
+                                note = "Is zip me koi text file nahi mili."
+                            } else {
+                                val pid = selectedProjectId ?: projectStore.createProject("Mera project").id
+                                val saved = projectStore.saveProjectFile(pid, extracted.name, extracted.content)
+                                if (saved.isSuccess) {
+                                    projects = projectStore.listProjects()
+                                    selectedProjectId = pid
+                                    selectedFileName = extracted.name
+                                    editorText = extracted.content
+                                    try {
+                                        autoLogStore.add("Builder: zip se file li gayi (${extracted.name})")
+                                    } catch (e: Exception) {
+                                    }
+                                    note = "Zip se file mil gayi aur editor me khul gayi."
+                                } else {
+                                    note = "Zip wali file save nahi ho payi — dobara koshish karo."
+                                }
+                            }
+                        } else if (bytes.contains(0.toByte())) {
+                            note = "Ye file text jaisi nahi lagi — text ya zip file chuno."
+                        } else {
+                            val content = String(bytes, Charsets.UTF_8)
+                            val pid = selectedProjectId ?: projectStore.createProject("Mera project").id
+                            val saved = projectStore.saveProjectFile(pid, pickedName, content)
+                            if (saved.isSuccess) {
+                                projects = projectStore.listProjects()
+                                selectedProjectId = pid
+                                selectedFileName = pickedName
+                                editorText = content
+                                try {
+                                    autoLogStore.add("Builder: file chuni gayi ($pickedName)")
+                                } catch (e: Exception) {
+                                }
+                                note = "File mil gayi aur editor me khul gayi."
+                            } else {
+                                note = "Chuni hui file save nahi ho payi — dobara koshish karo."
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    note = "File padhte waqt kuch gadbad hui — dobara koshish karo."
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        try {
+            projects = projectStore.listProjects()
+        } catch (e: Exception) {
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)
+    ) {
+        Text("Builder — project banao, code likho ya bolo, preview dekho.")
+        Spacer(modifier = Modifier.height(4.dp))
+        Text("Projects sirf is phone par encrypted save hote hain — file manager se nahi khulenge.")
+        Spacer(modifier = Modifier.height(4.dp))
+        Text("Preview abhi sirf ek file ka dikhta hai — poora project ek saath preview karna baad me aayega.")
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = newProjectName, onValueChange = { newProjectName = it },
+            label = { Text("Naye project ka naam") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(onClick = {
+            scope.launch {
+                val created = projectStore.createProject(newProjectName)
+                projects = projectStore.listProjects()
+                selectedProjectId = created.id
+                selectedFileName = null
+                editorText = ""
+                newProjectName = ""
+                try {
+                    autoLogStore.add("Builder: project bana (${created.name})")
+                } catch (e: Exception) {
+                }
+                note = "Project ban gaya."
+            }
+        }) { Text("Naya project banao") }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text("Projects:")
+        for (project in projects) {
+            Row(modifier = Modifier.padding(top = 4.dp)) {
+                Button(onClick = {
+                    selectedProjectId = project.id
+                    selectedFileName = null
+                    editorText = ""
+                }) { Text(if (selectedProjectId == project.id) "✓ ${project.name}" else project.name) }
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        if (selectedProject != null) {
+            OutlinedTextField(
+                value = newFileName, onValueChange = { newFileName = it },
+                label = { Text("Nayi file ka naam (jaise index.html)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = {
+                val fname = newFileName.trim()
+                if (fname.isBlank()) {
+                    note = "Pehle file ka naam likho."
+                } else {
+                    scope.launch {
+                        val saved = projectStore.saveProjectFile(selectedProject.id, fname, "")
+                        if (saved.isSuccess) {
+                            projects = projectStore.listProjects()
+                            selectedFileName = fname
+                            editorText = ""
+                            newFileName = ""
+                            try {
+                                autoLogStore.add("Builder: nayi file bani ($fname)")
+                            } catch (e: Exception) {
+                            }
+                            note = "File ban gayi — ab isme likho ya bolo."
+                        } else {
+                            note = "File ban nahi payi — dobara koshish karo."
+                        }
+                    }
+                }
+            }) { Text("Nayi file banao") }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Files:")
+            for (file in selectedProject.files) {
+                Row(modifier = Modifier.padding(top = 4.dp)) {
+                    Button(onClick = {
+                        scope.launch {
+                            val content = projectStore.readProjectFile(selectedProject.id, file.id)
+                            if (content.isSuccess) {
+                                selectedFileName = file.name
+                                editorText = content.getOrNull() ?: ""
+                                note = "File khul gayi."
+                            } else {
+                                note = "Ye file khul nahi payi — shayad isme kuch gadbad hai."
+                            }
+                        }
+                    }) { Text(if (selectedFileName == file.name) "✓ ${file.name}" else file.name) }
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(onClick = { pickLauncher.launch("*/*") }) { Text("File chuno (text ya zip)") }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        if (selectedFile != null) {
+            OutlinedTextField(
+                value = editorText, onValueChange = { editorText = it },
+                label = { Text(selectedFile.name) },
+                textStyle = TextStyle(fontFamily = FontFamily.Monospace),
+                modifier = Modifier.fillMaxWidth().height(280.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row {
+                Button(onClick = { saveCurrent() }, modifier = Modifier.padding(end = 4.dp)) { Text("Save karo") }
+                Button(onClick = {
+                    try {
+                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+                            putExtra(RecognizerIntent.EXTRA_PROMPT, "Bolo — jo code me jodna hai")
+                        }
+                        speechLauncher.launch(intent)
+                    } catch (e: Exception) {
+                        note = "Voice recognition is phone par nahi khul paya — text likh kar save karo."
+                    }
+                }, modifier = Modifier.padding(end = 4.dp)) { Text("🎤 Bolo aur jodo") }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Preview (sirf is file ka):")
+            Spacer(modifier = Modifier.height(4.dp))
+            if (isHtmlFile) {
+                AndroidView(
+                    factory = { ctx ->
+                        WebView(ctx).apply {
+                            settings.javaScriptEnabled = true
+                            webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(
+                                    view: WebView?,
+                                    request: WebResourceRequest?
+                                ): Boolean {
+                                    // Local-only preview: bahar ka link kabhi nahi khulta.
+                                    return true
+                                }
+                            }
+                        }
+                    },
+                    update = { webView ->
+                        webView.loadDataWithBaseURL(null, editorText, "text/html", "utf-8", null)
+                    },
+                    modifier = Modifier.fillMaxWidth().height(320.dp)
+                )
+            } else {
+                Text(editorText)
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(onClick = {
+                val proj = selectedProject ?: return@Button
+                scope.launch {
+                    try {
+                        val dir = File(appContext.cacheDir, "builder_exports")
+                        if (!dir.exists()) dir.mkdirs()
+                        val outFile = File(dir, "${proj.name}-${System.currentTimeMillis()}.zip")
+                        val result = projectStore.exportProjectZip(proj.id, outFile)
+                        if (result.isSuccess) {
+                            val uri = FileProvider.getUriForFile(
+                                appContext,
+                                appContext.packageName + ".fileprovider",
+                                outFile
+                            )
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "application/zip"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            appContext.startActivity(Intent.createChooser(send, "Project share karo"))
+                            try {
+                                autoLogStore.add("Builder: project export share sheet khola (${proj.name})")
+                            } catch (e: Exception) {
+                            }
+                            note = "Share sheet khul gaya — tum chuno kahan bhejna hai."
+                        } else {
+                            note = "Export nahi ho paya — dobara koshish karo."
+                        }
+                    } catch (e: Exception) {
+                        note = "Export nahi ho paya — dobara koshish karo."
+                    }
+                }
+            }) { Text("Share karo (ZIP)") }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(note)
+    }
+}
