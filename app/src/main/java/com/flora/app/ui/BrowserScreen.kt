@@ -83,6 +83,10 @@ fun BrowserScreen(voice: VoiceEngine, searchTools: com.flora.app.tools.SearchToo
     var pendingDownload by remember { mutableStateOf<Triple<String, String, String>?>(null) }
     var showHistory by remember { mutableStateOf(false) }
     val sessionHistory = remember { mutableStateListOf<String>() }
+    // B1-POLISH N1 — detectFields se mili list yahan dikhti hai
+    // (chat se "browser fields dikhao" par), taaki user field
+    // ka exact label dekh kar phir fill bol sake.
+    var detectedFields by remember { mutableStateOf<List<BrowserController.WebFormField>?>(null) }
     // Cycle 2, APP-C1-021 (/pay entry lock): LicenceScreen se
     // website-submit payment ke liye /pay par aaye to ye browser
     // sirf pay-host (Flora website) tak lock rehta hai — /pay
@@ -124,6 +128,9 @@ fun BrowserScreen(voice: VoiceEngine, searchTools: com.flora.app.tools.SearchToo
      * B1 G6/G7 — browser-fail se research-lane fallback. Wall page
      * ka content kabhi sunaya nahi jata; lane fail ho to imaandaar
      * message (brain-proxy lane FloraApp fallback me hai).
+     * B1-POLISH N6 — lane jawab ke saath source bhi bataya jata
+     * hai (Tavily jab lane me "Source: Tavily" ho, warna
+     * DuckDuckGo) — FloraApp wale research path ki tarah.
      */
     fun researchFallback(query: String, failMsg: String) {
         val tools = searchTools
@@ -136,22 +143,47 @@ fun BrowserScreen(voice: VoiceEngine, searchTools: com.flora.app.tools.SearchToo
             if (res.isBlank() || com.flora.app.tools.IntentRouter.isLaneFailure(res)) {
                 voice.speak("$failMsg Live source se jawab nahi mila.")
             } else {
-                voice.speak("Browser se page nahi mila, research lane se: ${res.take(600)}")
+                val source = if (res.contains("Source: Tavily")) "Tavily" else "DuckDuckGo"
+                val clean = res.substringBefore("\n\nSource:").trim()
+                voice.speak("Browser se page nahi mila, research lane ($source) se: ${clean.take(600)}")
             }
         }
     }
 
-    fun handleReadText(text: String?, fallbackQuery: String) {
+    /**
+     * B1-POLISH N6 — wall research query: wall page ki pehli
+     * line (aksar sirf title/"Login") NAHI — page title +
+     * URL (host + path) se saarthak query banao, login/captcha
+     * jaise shabd hatakar. Khali pade to host, phir poora URL.
+     */
+    fun buildWallQuery(title: String, url: String): String {
+        val stop = setOf(
+            "login", "log", "in", "sign", "signin", "signup", "captcha",
+            "verify", "verification", "human", "please", "account",
+            "continue", "to", "view", "page",
+        )
+        val words = title.split(Regex("[^A-Za-z0-9]+"))
+            .filter { it.isNotBlank() && it.lowercase() !in stop }
+        val host = try { Uri.parse(url).host.orEmpty().removePrefix("www.") } catch (e: Exception) { "" }
+        val hostWords = host.split(".").filter { it.isNotBlank() && it.lowercase() !in setOf("com", "org", "net", "in", "www") }
+        val pathWords = try {
+            Uri.parse(url).path.orEmpty().split(Regex("[^A-Za-z0-9]+"))
+                .filter { it.isNotBlank() && it.lowercase() !in stop }
+        } catch (e: Exception) { emptyList() }
+        val q = (words + hostWords + pathWords).joinToString(" ").take(120).trim()
+        return q.ifEmpty { host.ifEmpty { url } }
+    }
+
+    fun handleReadText(text: String?, pageTitle: String, pageUrl: String, hasLoginForm: Boolean) {
         if (text == null) {
-            researchFallback(fallbackQuery, "Page abhi khula nahi hai, thodi der baad dobara bolo.")
+            researchFallback(buildWallQuery(pageTitle, pageUrl), "Page abhi khula nahi hai, thodi der baad dobara bolo.")
             return
         }
-        val cls = BrowserController.classifyPageText(text)
+        val cls = BrowserController.classifyPageText(text, hasLoginForm)
         if (cls != BrowserController.PageClass.Content) {
             // Wall ko content ki tarah mat dikhao/sunao — sirf wajah + research lane.
             voice.speak("Ye page ${BrowserController.wallReason(cls)} — isliye use content ki tarah nahi dikha raha.")
-            val topic = text.lineSequence().firstOrNull()?.take(120).orEmpty()
-            if (topic.isNotBlank()) researchFallback(topic, "Research lane se bhi jawab nahi mila.")
+            researchFallback(buildWallQuery(pageTitle, pageUrl), "Research lane se bhi jawab nahi mila.")
             return
         }
         voice.speak(text.take(600))
@@ -194,9 +226,8 @@ fun BrowserScreen(voice: VoiceEngine, searchTools: com.flora.app.tools.SearchToo
                 }
                 // Naya page load hone ka waqt do, phir padho.
                 delay(3000)
-                BrowserController.readText { text ->
-                    val host = try { Uri.parse(url).host.orEmpty() } catch (e: Exception) { "" }
-                    handleReadText(text, host.ifEmpty { url })
+                BrowserController.readPageInfo { info ->
+                    handleReadText(info.text, info.title, url, info.hasLoginForm)
                 }
                 return@LaunchedEffect
             }
@@ -226,6 +257,11 @@ fun BrowserScreen(voice: VoiceEngine, searchTools: com.flora.app.tools.SearchToo
                             "Ye password field hai — isme main nahi likhungi, tum khud bharo."
                         is BrowserController.WebFillOutcome.NotFound ->
                             "Field '${parts[0]}' is page par nahi mila."
+                        // B1-POLISH N2 — ambiguous: candidates dikhao,
+                        // exact label dobara bolne ko kaho, andaza nahi.
+                        is BrowserController.WebFillOutcome.Ambiguous ->
+                            "Ek se zyada field mile: ${outcome.candidates.joinToString(", ")}. " +
+                                "Poora exact label boliye, jaise field ka poora naam."
                         BrowserController.WebFillOutcome.NoWebView ->
                             "Browser khula nahi hai — pehle page kholo."
                     }
@@ -233,6 +269,31 @@ fun BrowserScreen(voice: VoiceEngine, searchTools: com.flora.app.tools.SearchToo
                 }
             } else {
                 voice.speak("Browser fill ka format samajh nahi aaya.")
+            }
+            return@LaunchedEffect
+        }
+        // B1-POLISH N1 — fields discovery ab user tak pahunchti
+        // hai: chat se "browser fields dikhao" par ye action
+        // list sunata + screen par dikhata hai (read-only, isliye
+        // pay-lock me bhi chalta hai — fill ki tarah). Password
+        // field sirf naam se bataya jata hai, kabhi bhara nahi.
+        if (action == "fields") {
+            BrowserController.detectFields { list ->
+                if (list.isNullOrEmpty()) {
+                    voice.speak("Is page par koi form field nahi mila.")
+                } else {
+                    detectedFields = list
+                    val shown = list.take(8)
+                    val desc = shown.mapIndexed { i, f ->
+                        "${i + 1}. ${f.label}" +
+                            if (f.isPassword) " (password field — khud bharna)" else ""
+                    }.joinToString(", ")
+                    val extra = if (list.size > 8) " Aur ${list.size - 8} field hain." else ""
+                    voice.speak(
+                        "Is page par ${list.size} field hain: $desc.$extra " +
+                            "Bharne ke liye bolo: 'browser me field <naam> me <value> likho'."
+                    )
+                }
             }
             return@LaunchedEffect
         }
@@ -247,9 +308,8 @@ fun BrowserScreen(voice: VoiceEngine, searchTools: com.flora.app.tools.SearchToo
                 BrowserController.reload()
                 voice.speak("Page dobara load kar raha hun.")
             }
-            "read" -> BrowserController.readText { text ->
-                val host = try { Uri.parse(currentUrl).host.orEmpty() } catch (e: Exception) { "" }
-                handleReadText(text, host.ifEmpty { currentUrl })
+            "read" -> BrowserController.readPageInfo { info ->
+                handleReadText(info.text, info.title, currentUrl, info.hasLoginForm)
             }
             "links" -> BrowserController.links { list ->
                 if (list.isNullOrEmpty()) {
@@ -368,6 +428,20 @@ fun BrowserScreen(voice: VoiceEngine, searchTools: com.flora.app.tools.SearchToo
                 }
             }
         }
+        // B1-POLISH N1 — fields list screen par bhi dikhe.
+        val fieldsList = detectedFields
+        if (fieldsList != null) {
+            Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+                Text("Is page ke fields (${fieldsList.size}):")
+                fieldsList.take(10).forEach { f ->
+                    Text(
+                        "• ${f.label}" +
+                            if (f.isPassword) " (password — khud bharna)" else ""
+                    )
+                }
+                TextButton(onClick = { detectedFields = null }) { Text("Fields list band karo") }
+            }
+        }
         AndroidView(
             factory = { ctx ->
                 WebView(ctx).apply {
@@ -418,7 +492,13 @@ fun BrowserScreen(voice: VoiceEngine, searchTools: com.flora.app.tools.SearchToo
                             if (url != null) {
                                 currentUrl = url
                                 urlBar = url
-                                BrowserController.saveState(url)
+                                // B1-POLISH N7: lock me saveState NAHI —
+                                // warna unlock ke baad restore aakhri
+                                // pay-host page dikhata, pre-lock page
+                                // nahi. Lock escape nahi hai — sirf
+                                // state ki asangat theek ki gayi hai;
+                                // lock ka koi aur vyavhaar nahi badla.
+                                if (!payLockedState.value) BrowserController.saveState(url)
                             }
                             pageError = null
                             queuedNotice = false
