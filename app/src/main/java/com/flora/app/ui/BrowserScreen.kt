@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -44,6 +45,7 @@ import com.flora.app.core.FloraConfig
 import com.flora.app.tools.BrowserController
 import com.flora.app.tools.BrowserNav
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * In-app browser screen (v2.22, Phase 5, G7) — Maya ke
@@ -66,8 +68,9 @@ import kotlinx.coroutines.delay
  *   load-fail par visible error/notice, chupchaap blank nahi.
  */
 @Composable
-fun BrowserScreen(voice: VoiceEngine) {
+fun BrowserScreen(voice: VoiceEngine, searchTools: com.flora.app.tools.SearchTools? = null) {
     val context = LocalContext.current
+    val browserScope = rememberCoroutineScope()
     var urlBar by remember { mutableStateOf("") }
     var currentUrl by remember { mutableStateOf("") }
     var progress by remember { mutableStateOf(0) }
@@ -87,17 +90,71 @@ fun BrowserScreen(voice: VoiceEngine) {
     // sirf uske baad ka escape band hai: URL bar, back/forward/
     // reload buttons aur history-tap chhup jate hain, voice se
     // aaya bahar ka URL load nahi hota, aur page ke andar ke
-    // link bhi bahar ke host par nahi khulte. Screen chhodte hi
-    // ye lock khatam (state composition ke saath jata hai) —
-    // normal browser entry par ye lock lagta hi nahi.
-    val payLockedState = remember { mutableStateOf(false) }
+    // link bhi bahar ke host par nahi khulte.
+    // B1 G9: lock ab screen dispose par reset NAHI hota —
+    // BrowserController.payLocked me persist hota hai aur screen
+    // dobara khulne par pay entry page hi restore hota hai.
+    // Lock sirf "Payment ho gaya — browser unlock karo" button
+    // se hat-ta hai. upi:// jaisa non-http scheme exception
+    // barkaraar hai (payment flow ka designed exception).
+    // B1 G9: lock ab composition ke saath nahi marta — BrowserController
+    // me persist hota hai (payLocked/payEntryUrl); screen dobara khule
+    // to wahi lock wapas lagta hai, lastUrl restore unlocked page nahi dikhata.
+    val payLockedState = remember { mutableStateOf(BrowserController.payLocked) }
     val payHost = remember { Uri.parse(FloraConfig.WEBSITE_URL).host }
     fun isPayEntry(url: String): Boolean {
         val u = try { Uri.parse(url) } catch (e: Exception) { return false }
-        return u.host == payHost && u.path == "/pay"
+        // B1 G9: "/pay/" trailing slash bhi pay entry hai.
+        return u.host == payHost && u.path?.trimEnd('/') == "/pay"
     }
     fun isPayHostUrl(url: String): Boolean {
         return try { Uri.parse(url).host == payHost } catch (e: Exception) { false }
+    }
+    // B1 G9: lock lagana/hatana — state + persistent flag dono saath.
+    fun lockPay(url: String) {
+        payLockedState.value = true
+        BrowserController.setPayLock(url)
+    }
+    fun unlockPay() {
+        payLockedState.value = false
+        BrowserController.clearPayLock()
+    }
+
+    /**
+     * B1 G6/G7 — browser-fail se research-lane fallback. Wall page
+     * ka content kabhi sunaya nahi jata; lane fail ho to imaandaar
+     * message (brain-proxy lane FloraApp fallback me hai).
+     */
+    fun researchFallback(query: String, failMsg: String) {
+        val tools = searchTools
+        if (tools == null || query.isBlank()) {
+            voice.speak(failMsg)
+            return
+        }
+        browserScope.launch {
+            val res = try { tools.search(query) } catch (e: Exception) { "" }
+            if (res.isBlank() || com.flora.app.tools.IntentRouter.isLaneFailure(res)) {
+                voice.speak("$failMsg Live source se jawab nahi mila.")
+            } else {
+                voice.speak("Browser se page nahi mila, research lane se: ${res.take(600)}")
+            }
+        }
+    }
+
+    fun handleReadText(text: String?, fallbackQuery: String) {
+        if (text == null) {
+            researchFallback(fallbackQuery, "Page abhi khula nahi hai, thodi der baad dobara bolo.")
+            return
+        }
+        val cls = BrowserController.classifyPageText(text)
+        if (cls != BrowserController.PageClass.Content) {
+            // Wall ko content ki tarah mat dikhao/sunao — sirf wajah + research lane.
+            voice.speak("Ye page ${BrowserController.wallReason(cls)} — isliye use content ki tarah nahi dikha raha.")
+            val topic = text.lineSequence().firstOrNull()?.take(120).orEmpty()
+            if (topic.isNotBlank()) researchFallback(topic, "Research lane se bhi jawab nahi mila.")
+            return
+        }
+        voice.speak(text.take(600))
     }
 
     // Chat se aaya kaam (url kholo / wapas / aage / reload /
@@ -111,7 +168,10 @@ fun BrowserScreen(voice: VoiceEngine) {
         if (url != null) {
             // APP-C1-021: /pay entry par lock lagao; lock ke
             // baad bahar ke host ka URL (voice se bhi) nahi khulega.
-            if (isPayEntry(url)) payLockedState.value = true
+            // B1 G9: lock entry-route se azaad hai — ye branch,
+            // URL-bar "Jao", history-tap aur onPageStarted sab
+            // lock lagate hain.
+            if (isPayEntry(url)) lockPay(url)
             if (payLockedState.value && !isPayHostUrl(url)) {
                 voice.speak("Payment page se bahar nahi ja sakte — sirf Flora ki site khuli hai.")
                 return@LaunchedEffect
@@ -135,11 +195,8 @@ fun BrowserScreen(voice: VoiceEngine) {
                 // Naya page load hone ka waqt do, phir padho.
                 delay(3000)
                 BrowserController.readText { text ->
-                    if (text == null) {
-                        voice.speak("Page abhi khula nahi hai, thodi der baad dobara bolo.")
-                    } else {
-                        voice.speak(text.take(600))
-                    }
+                    val host = try { Uri.parse(url).host.orEmpty() } catch (e: Exception) { "" }
+                    handleReadText(text, host.ifEmpty { url })
                 }
                 return@LaunchedEffect
             }
@@ -148,11 +205,35 @@ fun BrowserScreen(voice: VoiceEngine) {
         // pay-host se bahar nahi nikla ja sakta (history me
         // lock se pehle ka page ho sakta hai). Read/links
         // read-only hain, isliye wahi rehte hain.
+        // B1 G9: Reload bhi lock me blocked actions me hai.
         if (payLockedState.value &&
-            (action == "back" || action == "forward" ||
+            (action == "back" || action == "forward" || action == "reload" ||
                 (action != null && action.startsWith("link:")))
         ) {
             voice.speak("Payment page se bahar nahi ja sakte — sirf Flora ki site khuli hai.")
+            return@LaunchedEffect
+        }
+        // B1 G1: browser form-fill action ("fill:<label>\u0001<value>").
+        // Password guard BrowserController.fillWebField me hai.
+        if (action != null && action.startsWith("fill:")) {
+            val parts = action.removePrefix("fill:").split("\u0001")
+            if (parts.size == 2) {
+                BrowserController.fillWebField(parts[0], parts[1]) { outcome ->
+                    val msg = when (outcome) {
+                        is BrowserController.WebFillOutcome.Filled ->
+                            "Field '${outcome.label}' me likh diya hai."
+                        is BrowserController.WebFillOutcome.PasswordRefused ->
+                            "Ye password field hai — isme main nahi likhungi, tum khud bharo."
+                        is BrowserController.WebFillOutcome.NotFound ->
+                            "Field '${parts[0]}' is page par nahi mila."
+                        BrowserController.WebFillOutcome.NoWebView ->
+                            "Browser khula nahi hai — pehle page kholo."
+                    }
+                    voice.speak(msg)
+                }
+            } else {
+                voice.speak("Browser fill ka format samajh nahi aaya.")
+            }
             return@LaunchedEffect
         }
         when (action) {
@@ -167,11 +248,8 @@ fun BrowserScreen(voice: VoiceEngine) {
                 voice.speak("Page dobara load kar raha hun.")
             }
             "read" -> BrowserController.readText { text ->
-                if (text == null) {
-                    voice.speak("Pehle koi page kholo, phir dobara bolo.")
-                } else {
-                    voice.speak(text.take(600))
-                }
+                val host = try { Uri.parse(currentUrl).host.orEmpty() } catch (e: Exception) { "" }
+                handleReadText(text, host.ifEmpty { currentUrl })
             }
             "links" -> BrowserController.links { list ->
                 if (list.isNullOrEmpty()) {
@@ -198,6 +276,12 @@ fun BrowserScreen(voice: VoiceEngine) {
                 "Payment page — sirf Flora ki site khuli hai. URL bar aur bahar ke links band hain.",
                 modifier = Modifier.fillMaxWidth().padding(8.dp),
             )
+            // B1 G9: lock se bahar nikalne ka ek saaf raasta —
+            // payment poora hone par user khud unlock karega.
+            Button(onClick = {
+                unlockPay()
+                voice.speak("Browser unlock kar diya hai.")
+            }) { Text("Payment ho gaya — browser unlock karo") }
         } else {
             Row(modifier = Modifier.fillMaxWidth()) {
                 TextField(
@@ -209,6 +293,8 @@ fun BrowserScreen(voice: VoiceEngine) {
                 )
                 Button(onClick = {
                     val url = BrowserController.normalize(urlBar)
+                    // B1 G9: manual URL-bar "Jao" path par bhi /pay lock lage.
+                    if (isPayEntry(url)) lockPay(url)
                     urlBar = url
                     currentUrl = url
                     pageError = null
@@ -245,15 +331,35 @@ fun BrowserScreen(voice: VoiceEngine) {
                 Text("Page nahi khula: $pageError")
                 Spacer(modifier = Modifier.height(4.dp))
                 Button(onClick = {
-                    pageError = null
-                    BrowserController.reload()
+                    // B1 G9: lock me error-page reload bhi blocked hai
+                    // (wahi page dobara load karna bhi lock ka hissa
+                    // nahi — unlock karke hi dobara koshish hogi).
+                    if (payLockedState.value) {
+                        voice.speak("Payment page lock me reload band hai — payment poora ho to unlock karo.")
+                    } else {
+                        pageError = null
+                        BrowserController.reload()
+                    }
                 }) { Text("Dobara koshish karo") }
+                // B1 G6 (page-error path): load-fail par bhi
+                // research-lane fallback ka raasta — wall/read
+                // path ke alawa, error page par bhi lane se
+                // live jawab maanga ja sakta hai (query = fail
+                // hua URL; lane fail ho to imaandaar message).
+                if (searchTools != null && currentUrl.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Button(onClick = {
+                        researchFallback(currentUrl, "Page nahi khula.")
+                    }) { Text("Research lane se dhoondho") }
+                }
             }
         }
         if (showHistory && !payLockedState.value) {
             LazyColumn(modifier = Modifier.fillMaxWidth().weight(0.3f)) {
                 items(sessionHistory.reversed()) { h ->
                     TextButton(onClick = {
+                        // B1 G9: history se /pay khule to bhi lock lage.
+                        if (isPayEntry(h)) lockPay(h)
                         urlBar = h
                         currentUrl = h
                         pageError = null
@@ -295,6 +401,9 @@ fun BrowserScreen(voice: VoiceEngine) {
 
                         override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                             super.onPageStarted(view, url, favicon)
+                            // B1 G9: redirect/link se /pay par pahunche
+                            // to bhi lock lage (entry-route se azaad).
+                            if (url != null && isPayEntry(url)) lockPay(url)
                             // Defence-in-depth: koi navigation lock
                             // ko chhupa kar bahar le jaye to use roko
                             // aur pay page par wapas lao.
@@ -354,23 +463,32 @@ fun BrowserScreen(voice: VoiceEngine) {
                         pendingDownload = Triple(url, userAgent, contentDisposition)
                     })
                     BrowserController.webView = this
-                    // WebView taiyaar: queued URL ho to kholo; pending
-                    // voice URL ho to effect use kholega (isliye skip);
-                    // warna aakhri page restore karo; warna pehli baar
-                    // homepage — blank kabhi nahi.
-                    val queued = BrowserController.flushQueued()
-                    if (queued == null && BrowserNav.pendingUrl == null) {
-                        val restore = BrowserController.lastUrl
-                        if (restore != null) {
-                            loadUrl(restore)
-                        } else {
-                            loadUrl(BrowserController.HOMEPAGE)
+                    // WebView taiyaar: B1 G9 — lock persist ho to
+                    // pay entry page hi restore hoga, kabhi
+                    // unlocked page nahi (queued/restore iske baad).
+                    if (BrowserController.payLocked && BrowserController.payEntryUrl != null) {
+                        loadUrl(BrowserController.payEntryUrl!!)
+                    } else {
+                        // WebView taiyaar: queued URL ho to kholo; pending
+                        // voice URL ho to effect use kholega (isliye skip);
+                        // warna aakhri page restore karo; warna pehli baar
+                        // homepage — blank kabhi nahi.
+                        val queued = BrowserController.flushQueued()
+                        if (queued == null && BrowserNav.pendingUrl == null) {
+                            val restore = BrowserController.lastUrl
+                            if (restore != null) {
+                                loadUrl(restore)
+                            } else {
+                                loadUrl(BrowserController.HOMEPAGE)
+                            }
                         }
                     }
                 }
             },
             onRelease = {
-                BrowserController.saveState(currentUrl)
+                // B1 G9: lock me currentUrl save nahi hoga, taaki
+                // lastUrl restore kabhi unlocked page na dikhaye.
+                if (!payLockedState.value) BrowserController.saveState(currentUrl)
                 if (BrowserController.webView == it) BrowserController.webView = null
                 it.destroy()
             },
