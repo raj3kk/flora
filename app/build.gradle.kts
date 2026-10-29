@@ -55,6 +55,12 @@ dependencies {
     // Logging Interceptor B2 me jaanboojh kar NAHI jode gaye.
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // B3-07 Logging Interceptor — version OkHttp se EXACT match
+    // (4.12.0) hona hi compatibility rule hai; 4.12.0 Kotlin
+    // 1.9.24 stack par canonical hai (B2 ke 1.7.3 serialization
+    // wale sabak ke mutabiq version bump nahi kiya gaya).
+    // Level.HEADERS + redactHeader hi use hota hai — BODY kabhi nahi.
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("com.google.firebase:firebase-messaging:24.0.0")
     // Shizuku (v2.22, G19): system permissions bina root ke, user ki
     // Shizuku app ke through — sirf jab user ne Shizuku chalaya ho.

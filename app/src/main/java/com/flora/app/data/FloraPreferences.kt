@@ -687,4 +687,189 @@ class FloraPreferences(private val context: Context) {
             prefs[Keys.TALK_SECONDS] = used + seconds
         }
     }
+
+    // B3 builder-service tokens (B3-04): GitHub/Vercel/user-Supabase
+    // ke token SIRF in slots se jaate hain — licence/link slots
+    // kabhi reuse nahi hote, website-account link state kabhi
+    // builder token nahi banta. Token + refresh token hamesha
+    // readSecret/writeSecret se (KeyStore AES/GCM, fail-closed:
+    // encrypt fail par kuch nahi likha jata, plaintext fallback
+    // kabhi nahi). Metadata (connected flag, expiry, auth kind,
+    // user-project base URL/ref) plain prefs hain — inme koi
+    // token value kabhi nahi hoti. Access token kabhi save nahi
+    // hota (OAuth access token memory me hi rehta hai; jo save
+    // hota hai wo lambi-avaadhi token/refresh token hai).
+    // Reinstall/data-clear par KeyStore ciphertext nahi khulta —
+    // tab connected flag bhi saath me mit jata hai aur user ko
+    // dobara grant karna hota hai (R-B3-6, expected behaviour).
+    private object BuilderKeys {
+        val GITHUB_TOKEN = stringPreferencesKey("builder_github_token")
+        val GITHUB_REFRESH = stringPreferencesKey("builder_github_refresh")
+        val GITHUB_CONNECTED = booleanPreferencesKey("builder_github_connected")
+        val GITHUB_EXPIRES = longPreferencesKey("builder_github_expires_ms")
+        val GITHUB_AUTH_KIND = stringPreferencesKey("builder_github_auth_kind")
+        val VERCEL_TOKEN = stringPreferencesKey("builder_vercel_token")
+        // Kabhi likha nahi jata — Vercel token ka refresh token
+        // hota hi nahi; key sirf mapping ko poora rakhne ke liye hai.
+        val VERCEL_REFRESH = stringPreferencesKey("builder_vercel_refresh_unused")
+        val VERCEL_CONNECTED = booleanPreferencesKey("builder_vercel_connected")
+        val VERCEL_EXPIRES = longPreferencesKey("builder_vercel_expires_ms")
+        val VERCEL_AUTH_KIND = stringPreferencesKey("builder_vercel_auth_kind")
+        val SUPABASE_TOKEN = stringPreferencesKey("builder_supabase_token")
+        val SUPABASE_REFRESH = stringPreferencesKey("builder_supabase_refresh")
+        val SUPABASE_CONNECTED = booleanPreferencesKey("builder_supabase_connected")
+        val SUPABASE_EXPIRES = longPreferencesKey("builder_supabase_expires_ms")
+        val SUPABASE_AUTH_KIND = stringPreferencesKey("builder_supabase_auth_kind")
+        val SUPABASE_BASE_URL = stringPreferencesKey("builder_supabase_base_url")
+        val SUPABASE_PROJECT_REF = stringPreferencesKey("builder_supabase_project_ref")
+        // R-B3-9 clipboard opt-out: sirf chhoti setting, kabhi
+        // token slot nahi, kabhi plaintext token nahi. Default
+        // true = save ke baad clipboard auto-clear hota hai.
+        val CLIPBOARD_AUTO_CLEAR = booleanPreferencesKey("builder_clipboard_autoclear")
+    }
+
+    private fun builderTokenKey(service: BuilderService): Preferences.Key<String> =
+        when (service) {
+            BuilderService.GITHUB -> BuilderKeys.GITHUB_TOKEN
+            BuilderService.VERCEL -> BuilderKeys.VERCEL_TOKEN
+            BuilderService.SUPABASE -> BuilderKeys.SUPABASE_TOKEN
+        }
+
+    private fun builderRefreshKey(service: BuilderService): Preferences.Key<String> =
+        when (service) {
+            BuilderService.GITHUB -> BuilderKeys.GITHUB_REFRESH
+            BuilderService.VERCEL -> BuilderKeys.VERCEL_REFRESH
+            BuilderService.SUPABASE -> BuilderKeys.SUPABASE_REFRESH
+        }
+
+    private fun builderConnectedKey(service: BuilderService): Preferences.Key<Boolean> =
+        when (service) {
+            BuilderService.GITHUB -> BuilderKeys.GITHUB_CONNECTED
+            BuilderService.VERCEL -> BuilderKeys.VERCEL_CONNECTED
+            BuilderService.SUPABASE -> BuilderKeys.SUPABASE_CONNECTED
+        }
+
+    private fun builderExpiresKey(service: BuilderService): Preferences.Key<Long> =
+        when (service) {
+            BuilderService.GITHUB -> BuilderKeys.GITHUB_EXPIRES
+            BuilderService.VERCEL -> BuilderKeys.VERCEL_EXPIRES
+            BuilderService.SUPABASE -> BuilderKeys.SUPABASE_EXPIRES
+        }
+
+    private fun builderAuthKindKey(service: BuilderService): Preferences.Key<String> =
+        when (service) {
+            BuilderService.GITHUB -> BuilderKeys.GITHUB_AUTH_KIND
+            BuilderService.VERCEL -> BuilderKeys.VERCEL_AUTH_KIND
+            BuilderService.SUPABASE -> BuilderKeys.SUPABASE_AUTH_KIND
+        }
+
+    suspend fun builderToken(service: BuilderService): String =
+        readSecret(builderTokenKey(service))
+
+    suspend fun builderRefreshToken(service: BuilderService): String {
+        // Vercel token ka koi refresh token nahi hota — isliye
+        // yahan hamesha khali (client layer me NotRefreshable).
+        if (service == BuilderService.VERCEL) return ""
+        return readSecret(builderRefreshKey(service))
+    }
+
+    suspend fun builderConnected(service: BuilderService): Boolean =
+        context.floraDataStore.data.map { it[builderConnectedKey(service)] ?: false }.first()
+
+    suspend fun builderExpiresAtMs(service: BuilderService): Long =
+        context.floraDataStore.data.map { it[builderExpiresKey(service)] ?: 0L }.first()
+
+    suspend fun builderAuthKind(service: BuilderService): BuilderAuthKind? {
+        val raw = context.floraDataStore.data.map { it[builderAuthKindKey(service)] ?: "" }.first()
+        return when (raw) {
+            "oauth" -> BuilderAuthKind.OAUTH
+            "pat" -> BuilderAuthKind.PAT
+            else -> null
+        }
+    }
+
+    /** Supabase: user ke apne project ka base URL (khali = abhi set nahi). */
+    suspend fun builderBaseUrl(service: BuilderService): String {
+        if (service != BuilderService.SUPABASE) return ""
+        return context.floraDataStore.data.map { it[BuilderKeys.SUPABASE_BASE_URL] ?: "" }.first()
+    }
+
+    /** Supabase project ref (khali = abhi set nahi). */
+    suspend fun builderProjectRef(service: BuilderService): String {
+        if (service != BuilderService.SUPABASE) return ""
+        return context.floraDataStore.data.map { it[BuilderKeys.SUPABASE_PROJECT_REF] ?: "" }.first()
+    }
+
+    suspend fun builderConnection(service: BuilderService): BuilderConnection {
+        val token = builderToken(service)
+        return BuilderConnection(
+            service = service,
+            connected = builderConnected(service),
+            hasToken = token.isNotEmpty(),
+            authKind = builderAuthKind(service),
+            expiresAtMs = builderExpiresAtMs(service),
+            baseUrl = builderBaseUrl(service),
+            projectRef = builderProjectRef(service)
+        )
+    }
+
+    /**
+     * Builder token save — fail-closed: token encrypt na ho to
+     * false aur connected flag kabhi set nahi hota (aadha grant
+     * "connected" dikha kar chhodna galat hoga). Refresh token
+     * diya gaya ho aur uska encrypt fail ho to bhi poora save
+     * fail hota hai (setLink wala pattern). Khali token = save
+     * nahi, disconnectBuilder() use karo.
+     */
+    suspend fun setBuilderToken(
+        service: BuilderService,
+        token: String,
+        authKind: BuilderAuthKind,
+        refreshToken: String = "",
+        expiresAtMs: Long = 0L,
+        baseUrl: String = "",
+        projectRef: String = ""
+    ): Boolean {
+        if (token.isEmpty()) return false
+        if (!writeSecret(builderTokenKey(service), token)) return false
+        if (service != BuilderService.VERCEL) {
+            if (!writeSecret(builderRefreshKey(service), refreshToken)) return false
+        }
+        context.floraDataStore.edit {
+            it[builderConnectedKey(service)] = true
+            it[builderExpiresKey(service)] = expiresAtMs
+            it[builderAuthKindKey(service)] =
+                if (authKind == BuilderAuthKind.OAUTH) "oauth" else "pat"
+            if (service == BuilderService.SUPABASE) {
+                if (baseUrl.isEmpty()) it.remove(BuilderKeys.SUPABASE_BASE_URL)
+                else it[BuilderKeys.SUPABASE_BASE_URL] = baseUrl
+                if (projectRef.isEmpty()) it.remove(BuilderKeys.SUPABASE_PROJECT_REF)
+                else it[BuilderKeys.SUPABASE_PROJECT_REF] = projectRef
+            }
+        }
+        return true
+    }
+
+    /** Disconnect/revoke (B3-04): token + refresh + flag + metadata sab hat jate hain. */
+    suspend fun disconnectBuilder(service: BuilderService) {
+        context.floraDataStore.edit {
+            it.remove(builderTokenKey(service))
+            if (service != BuilderService.VERCEL) it.remove(builderRefreshKey(service))
+            it.remove(builderConnectedKey(service))
+            it.remove(builderExpiresKey(service))
+            it.remove(builderAuthKindKey(service))
+            if (service == BuilderService.SUPABASE) {
+                it.remove(BuilderKeys.SUPABASE_BASE_URL)
+                it.remove(BuilderKeys.SUPABASE_PROJECT_REF)
+            }
+        }
+    }
+
+    /** Clipboard auto-clear opt-out (R-B3-9): default true. */
+    suspend fun builderClipboardAutoClear(): Boolean =
+        context.floraDataStore.data.map { it[BuilderKeys.CLIPBOARD_AUTO_CLEAR] ?: true }.first()
+
+    suspend fun setBuilderClipboardAutoClear(value: Boolean) {
+        context.floraDataStore.edit { it[BuilderKeys.CLIPBOARD_AUTO_CLEAR] = value }
+    }
 }
