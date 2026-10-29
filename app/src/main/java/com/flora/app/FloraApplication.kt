@@ -1,6 +1,7 @@
 package com.flora.app
 
 import android.app.Application
+import com.flora.app.models.NeuralVoiceAttach
 import com.flora.app.planner.FloraToolsStartup
 
 /**
@@ -20,6 +21,11 @@ class FloraApplication : Application() {
         // isi ensure ko call karta hai (double-plant guard andar
         // hai); crash handler uske baad lagta hai, pehle jaisa hi.
         FloraToolsStartup.ensureInitialized(this)
+        // Lane C: neural voice attach — async, onCreate ko
+        // kabhi block nahi karta (attach khud IO-scope me
+        // chalta hai; fail ho to engine null hi rehta hai aur
+        // system TTS barkaraar rehta hai).
+        NeuralVoiceAttach.attach(this)
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             try {

@@ -29,16 +29,26 @@ Hindi female voice, on-device, Apache-2.0 weights.
   `VoiceEngine.speak()` (main chat + saare voice.speak),
   `CallAnnouncementReceiver`, `EventAnnounceReceiver`.
   Engine judte hi teenon apne aap neural ho jayenge.
+- Engine (Lane C, ORT route): `KokoroOrtEngine` —
+  onnxruntime-android 1.28.0 (Maven Central, MIT), CPU-only,
+  raw ONNX: input_ids/style/speed tensors, 24 kHz mono PCM16
+  AudioTrack playback. Attach `NeuralVoiceAttach` se hota hai
+  (app-start par async + Settings download-success par
+  re-attach), guard = `.ok` + dono file ki EXACT size; fail
+  par engine null hi rehta hai (system TTS fallback). G2P
+  clean-room HindiG2P se (Worker 1, GPL data/code kabhi nahi).
+  Tensor naam P1-1 rule se runtime par dump + role-match hote
+  hain (mismatch = fail-closed, guess par run kabhi nahi).
 - Sanitizer barkaraar (Phase 2 wala, ab `NeuralSpeaker.sanitize`
   par single-source; `VoiceEngine.sanitizeForSpeech` delegate karta
   hai) — emoji/markdown/URL kabhi nahi bola jayega.
 - Announcement raaston me free-talk counting kabhi nahi hoti
   (engine aane par bhi wahi rahega).
 
-## Kya BLOCKED hai (evidence ke saath) — native playback engine
-Native engine = sherpa-onnx ka `OfflineTts` (Kokoro pipeline:
-phonemizer + acoustic model + vocoder, ek suspending call).
-Ye is build me **JUDA NAHI HAI**, wajah:
+## Kya BLOCKED tha — sherpa-onnx route (SUPERSEDED, Lane C)
+Sherpa-onnx ka `OfflineTts` route is build me **kabhi juda
+nahi** — ye block ab ORT route se bypass ho gaya hai, par
+history sachchi rahe isliye wajah yahan barkaraar hai:
 1. **Koi verified Gradle artifact nahi mila.** Official
    sherpa-onnx docs Android ke liye NDK source build batate
    hain (`build-android.sh` per ABI → `libsherpa-onnx-jni.so` +
@@ -54,15 +64,20 @@ Ye is build me **JUDA NAHI HAI**, wajah:
    JDK-only `assembleDebug` hai; NDK step ke liye CI workflow
    badalna padega — workflow files API se chhooi nahi ja sakti
    (token me `workflows` scope nahi; sirf GitHub web UI).
-3. **Raw ONNX Runtime route bhi guess par tikta hai:** usme
+3. **Raw ONNX Runtime route pehle guess par tikta tha:** usme
    espeak-ng phonemization + Kokoro model ka exact input/output
-   spec chahiye — dono verify nahi hue. Guess karke ship karna
-   mana hai.
+   spec chahiye — dono verify nahi hue the. Lane C me ye
+   dono verify ho gaye: model spec (opset 17, style [1,256],
+   speed [1], input_ids dynamic, NPZ hf_alpha.npy 510x256)
+   verified base se, aur G2P clean-room HindiG2P spec se
+   (espeak-ng ka koi data/code nahi). Isliye ORT route ab
+   guess par nahi tikta — aur phir bhi tensor naam runtime
+   par dump + role-match hote hain (P1-1 fail-closed).
 
-Isliye: **cloud TTS par chupchaap kabhi nahi jaya gaya.**
-Model ready hone par bhi aaj system TTS (Lily profile) hi
-bolega. Engine judte hi `NeuralSpeaker.engine` set karna hi
-kaafi hoga — koi caller dobara chhedna nahi padega.
+Isliye, pehle ki tarah: **cloud TTS par chupchaap kabhi nahi
+jaya gaya.** ORT engine judne ke baad bhi system TTS (Lily
+profile) fallback ke roop me barkaraar hai — hatana sirf
+phone test + user approval ke baad (gate neeche).
 
 ## Gate (standing rule, barkaraar)
 System TTS **is build me hataya NAHI gaya**. Hatana sirf tab
@@ -71,15 +86,21 @@ jab (a) neural sample user se approve ho (DONE 2026-10-29
 Lily profile (pitch 0.95 / rate 0.88) har jagah fixed hai.
 
 ## Unblock karne ka raasta (Phase 9/10 follow-up)
-1. Sherpa-onnx AAR coordinate official source (repo release ya
-   Maven Central) se verify karo, ya NDK build ko CI me web UI
-   se jodo (workflow edit) — jo pehle verify ho.
-2. `OfflineTts` API (voice = hf_alpha, sid/language) phone par
-   verify karo, sentence-chunking ke saath (lambi replies
-   ek call me nahi — phone par RTF > 1 ho sakta hai).
-3. `NeuralSpeaker.engine` ko us implementation se set karo.
-4. Phone test: sample suno → user approve → tabhi system TTS
-   hatane ka faisla (alag user order se).
+1. ~~Sherpa-onnx AAR / NDK build~~ — SUPERSEDED: ORT route
+   (Lane C) se engine code me jud gaya hai
+   (`KokoroOrtEngine` + `NeuralVoiceAttach` + dep
+   onnxruntime-android 1.28.0). CI compile iska proof hoga
+   (is VM me JDK/Gradle build nahi hai).
+2. ~~`OfflineTts` API phone par verify karo~~ — SUPERSEDED:
+   raw ORT inference + token-chunking (≤509 tokens/chunk)
+   code me hai; lambi replies ki sentence-split tuning phone
+   test ke baad hogi.
+3. ~~`NeuralSpeaker.engine` set karo~~ — DONE (attach helper
+   se, fail-closed).
+4. Phone test (ABHI BAAKI): sample suno → user approve →
+   tabhi system TTS hatane ka faisla (alag user order se).
+   Attach fail ho to bhi Lily hi bolegi — ye fallback test
+   me bhi verify karna hai.
 
 ## Honest limits
 - Download me resume nahi hai — dobara try poori file phir

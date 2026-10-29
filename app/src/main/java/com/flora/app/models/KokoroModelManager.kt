@@ -32,15 +32,16 @@ import java.security.MessageDigest
  * voices-v1.0.bin} + .ok marker (dono file verify hone par hi
  * likha jata hai). Ready = .ok + dono file maujood.
  *
- * HONEST LIMIT (is build me): download + readiness + VoiceEngine
- * routing poora hai, par native playback engine (sherpa-onnx
- * OfflineTts) is build me JUDA NAHI HAI — wajah docs me
- * (docs/FLORA_NEURAL_VOICE.md): koi verified Gradle AAR
- * coordinate nahi mila, NDK source build Flora CI (JDK-only)
- * me nahi chalega. Isliye model ready hone par bhi aaj
- * system TTS (Lily) hi bolega; engine judte hi NeuralSpeaker
- * ke ek hook se har jagah neural awaaz aa jayegi. Cloud TTS
- * par chupchaap kabhi nahi jaya jayega.
+ * ENGINE (Lane C, ORT route): sherpa-onnx route ab istemal
+ * nahi hota — wajah docs me (docs/FLORA_NEURAL_VOICE.md).
+ * Engine ab KokoroOrtEngine hai (onnxruntime-android, CPU-only,
+ * phone par hi): model ready hote hi NeuralVoiceAttach usko
+ * NeuralSpeaker.engine par set karta hai (app-start par async
+ * + Settings download-success par re-attach). Attach fail ho
+ * to engine null hi rehta hai aur system TTS (Lily) hi bolega
+ * — awaaz kabhi nahi rukegi. Cloud TTS par chupchaap kabhi
+ * nahi jaya jayega. (Is file me sirf ye comment badla hai;
+ * download logic bilkul wahi hai.)
  */
 object KokoroModelManager {
 

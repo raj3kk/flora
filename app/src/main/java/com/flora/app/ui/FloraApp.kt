@@ -6362,15 +6362,19 @@ private fun SettingsScreen(
                             if (total > 0) neuralProgress = ((done * 100) / total).toInt()
                         }
                         neuralProgress = 0
-                        neuralStatus = if (ok) {
-                            "Neural voice model taiyaar hai (Kokoro hf_alpha)."
+                        if (ok) {
+                            // Lane C: download-success par hi
+                            // re-attach (fail ho to engine null
+                            // hi rehta hai, Lily hi bolegi).
+                            com.flora.app.models.NeuralVoiceAttach.attach(context)
+                            neuralStatus = "Neural voice model taiyaar hai (Kokoro hf_alpha). Neural engine jud raha hai — agle bolne se neural awaaz aayegi (attach fail ho to Lily hi bolegi)."
                         } else {
-                            "Download nahi ho paya — internet check karke dobara dabao."
+                            neuralStatus = "Download nahi ho paya — internet check karke dobara dabao."
                         }
                     }
                 }
             }) { Text("Neural voice model download karo") }
-            Text("Model download hone ke baad bhi neural awaaz tabhi aayegi jab native engine jud jayega — is build me engine nahi hai (wajah docs me), isliye tab tak Lily wali system awaaz hi chalegi. Model phone par hi rehta hai, koi awaaz server par nahi jaati.")
+            Text("Model taiyaar hone par neural engine (onnxruntime, phone par hi) jud jata hai aur uske baad Kokoro hf_alpha bolega; attach fail ho to Lily wali system awaaz hi chalegi — awaaz kabhi nahi rukegi. Model phone par hi rehta hai, koi awaaz server par nahi jaati.")
             Spacer(modifier = Modifier.height(12.dp))
             Text("Roles — ek baar tumhare tap se (koi app ye khud nahi kar sakti)")
             Row {
