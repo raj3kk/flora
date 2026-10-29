@@ -6395,13 +6395,29 @@ private fun SettingsScreen(
                             // re-attach (fail ho to engine null
                             // hi rehta hai, Lily hi bolegi).
                             com.flora.app.models.NeuralVoiceAttach.attach(context)
-                            neuralStatus = "Neural voice model taiyaar hai (Kokoro hf_alpha). Neural engine jud raha hai — agle bolne se neural awaaz aayegi (attach fail ho to Lily hi bolegi)."
+                            neuralStatus = "Neural voice model taiyaar hai (Kokoro hf_alpha). Neural engine jud raha hai — \"Neural engine status jaancho\" button se sachha status dekho (attach fail ho to Lily hi bolegi)."
                         } else {
                             neuralStatus = "Download nahi ho paya — internet check karke dobara dabao."
                         }
                     }
                 }
             }) { Text("Neural voice model download karo") }
+            Button(onClick = {
+                // Lane C Step 1 (pre-audit GAP-2): attach async
+                // hai, isliye download-success ke baad status
+                // line kabhi khud sachhi nahi hoti thi. Ye
+                // button dabane par hi isAttached() dobara
+                // padha jata hai — polling nahi, sirf re-read;
+                // juda nahi hai to attach() dobara try hota hai
+                // (attach khud idempotent + guarded hai) aur
+                // agle tap par sachha status dikhega.
+                if (com.flora.app.models.NeuralVoiceAttach.isAttached()) {
+                    neuralStatus = "Neural engine jud gaya — ab Kokoro hf_alpha bolega."
+                } else {
+                    com.flora.app.models.NeuralVoiceAttach.attach(context)
+                    neuralStatus = "Neural engine abhi juda nahi hai — dobara judne ki koshish ho rahi hai. Kuch der baad ye button phir dabao: jud gaya to \"jud gaya\" dikhega, nahi juda to Lily hi bolegi."
+                }
+            }) { Text("Neural engine status jaancho") }
             Text("Model taiyaar hone par neural engine (onnxruntime, phone par hi) jud jata hai aur uske baad Kokoro hf_alpha bolega; attach fail ho to Lily wali system awaaz hi chalegi — awaaz kabhi nahi rukegi. Model phone par hi rehta hai, koi awaaz server par nahi jaati.")
             Spacer(modifier = Modifier.height(12.dp))
             Text("Roles — ek baar tumhare tap se (koi app ye khud nahi kar sakti)")
