@@ -23,17 +23,8 @@ jobs:
         with:
           name: flora-debug-apk
           path: app/build/outputs/apk/debug/*.apk
-      - name: Upload direct APK to Supabase Storage
-        continue-on-error: true
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          APK=$(ls app/build/outputs/apk/debug/*.apk | head -n 1)
-          echo "Uploading $APK to flora-apk/flora-latest.apk"
-          curl -sS -X POST "$SUPABASE_URL/storage/v1/object/flora-apk/flora-latest.apk?upsert=true" \
-            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-            -H "Content-Type: application/vnd.android.package-archive" \
-            --data-binary @"$APK" | head -c 500
-          echo
+      - name: Run unit tests
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: 8.7
+          arguments: :app:testDebugUnitTest
