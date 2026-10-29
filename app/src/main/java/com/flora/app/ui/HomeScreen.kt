@@ -75,6 +75,10 @@ fun HomeScreen(prefs: FloraPreferences) {
                 scope.launch {
                     try {
                         prefs.setHomeBoxCode(c)
+                        // Cycle 1, APP-C1-009: naya code abhi sync
+                        // nahi hua — awaaz wala jawab "sync baaki
+                        // hai" isi flag se bolega.
+                        prefs.setHomeServerSynced(false)
                         saved = c
                         code = ""
                         note = "Code phone par save ho gaya. Server sync (S4) aate hi control chalega — tab tak awaaz se light/pankha nahi chalega."
@@ -89,6 +93,7 @@ fun HomeScreen(prefs: FloraPreferences) {
             scope.launch {
                 try {
                     prefs.setHomeBoxCode("")
+                    prefs.setHomeServerSynced(false)
                     saved = ""
                     note = "Box hata diya gaya."
                 } catch (e: Exception) {
@@ -116,6 +121,13 @@ fun HomeScreen(prefs: FloraPreferences) {
                 } else {
                     note = "Server se sync ho raha hai..."
                     val res = HomeSyncClient.sync(prefs, c, ctx)
+                    // Cycle 1, APP-C1-009: safal sync par flag —
+                    // awaaz wala jawab ab "sync baaki hai" nahi
+                    // kahega. Fail par flag waisa hi (purana safal
+                    // sync server row ko nahi mitata).
+                    if (res != null) {
+                        try { prefs.setHomeServerSynced(true) } catch (e: Exception) { }
+                    }
                     note = if (res != null) {
                         "Server ko code mil gaya hai. Relay control tab bhi box ke server hissa banne ke baad hi chalega."
                     } else {

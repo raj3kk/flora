@@ -825,7 +825,9 @@ fun FloraApp(
                             messages = messages + ChatMsg("Flora: Website publish ho gayi — $url", false)
                             voice.speak("Website publish ho gayi hai, link chat me de diya hai.")
                         } else {
-                            voice.speak("Publish nahi ho paya. ${result.exceptionOrNull()?.message ?: "dobara koshish karo."}")
+                            // Cycle 1, APP-C1-006: raw exception TTS
+                            // me kabhi nahi — sirf warm Hindi line.
+                            voice.speak("Arre, website publish nahi ho payi — thodi der baad dobara koshish karo.")
                         }
                     } catch (e: Exception) {
                         voice.speak("Publish me dikkat aayi, dobara koshish karo.")
@@ -1063,7 +1065,16 @@ fun FloraApp(
                         )
                         DropdownMenuItem(
                             text = { Text("Camera dekho") },
-                            onClick = { screen = Screen.CAMERA_LOOK; menuOpen = false },
+                            // Cycle 1, APP-C1-004: menu se bhi wahi
+                            // gateFeature check jo chat commands par
+                            // hai — OFF feature menu se nahi khulega.
+                            // Blocked ho to menu khula rehta hai
+                            // (gateFeature wajah bol + likh deta hai).
+                            onClick = {
+                                if (gateFeature("camera")) {
+                                    screen = Screen.CAMERA_LOOK; menuOpen = false
+                                }
+                            },
                         )
                         DropdownMenuItem(
                             text = { Text("Tools") },
@@ -1087,7 +1098,14 @@ fun FloraApp(
                         )
                         DropdownMenuItem(
                             text = { Text("Live Screen") },
-                            onClick = { screen = Screen.LIVE; menuOpen = false },
+                            // Cycle 1, APP-C1-004: menu se bhi wahi
+                            // screen_vision gate jo chat commands par
+                            // hai (FloraApp:3032/3155 wali key).
+                            onClick = {
+                                if (gateFeature("screen_vision")) {
+                                    screen = Screen.LIVE; menuOpen = false
+                                }
+                            },
                         )
                         DropdownMenuItem(
                             text = { Text("Models") },
@@ -1099,7 +1117,13 @@ fun FloraApp(
                         )
                         DropdownMenuItem(
                             text = { Text("Browser") },
-                            onClick = { screen = Screen.BROWSER; menuOpen = false },
+                            // Cycle 1, APP-C1-004: menu se bhi wahi
+                            // browser gate jo chat commands par hai.
+                            onClick = {
+                                if (gateFeature("browser")) {
+                                    screen = Screen.BROWSER; menuOpen = false
+                                }
+                            },
                         )
                         DropdownMenuItem(
                             text = { Text("PC Link") },
@@ -1199,7 +1223,15 @@ fun FloraApp(
                         "Support: ${FloraConfig.SUPPORT_EMAIL}"
                 )
                 licence?.let {
-                    Text("Licence: ${it.plan} (${it.status})" + if (it.serverChecked) " — server se verified" else " — local mode")
+                    // Cycle 1, APP-C1-008: raw enum kabhi nahi
+                    // ("free (error)" / "free (local_free)" jaisa
+                    // kuch nahi) — sirf warm plan wording; khaas
+                    // status ka imaandaar message neeche
+                    // honestMessage() se waisa hi aata hai.
+                    Text(
+                        "Licence: " + if (it.plan == "pro") "Pro" else "Free" +
+                            if (it.serverChecked) " — server se verified" else " — local mode"
+                    )
                     // Licence v2 status (Phase 8 coordination):
                     // revoked/bound_mismatch/expired/superseded
                     // par imaandaar message header me bhi dikhega.
@@ -2051,10 +2083,22 @@ fun FloraApp(
                         input = ""
                         scope.launch {
                             val code = try { prefs.homeBoxCode() } catch (e: Exception) { "" }
+                            // Cycle 1, APP-C1-009: sync ki haalat
+                            // check karke bolo — sync ho gaya ho to
+                            // "sync baaki hai" kabhi mat kaho. Flag
+                            // HomeScreen ke "Server se sync karo"
+                            // button se lagta hai (Push 1 me prefs
+                            // me joda gaya homeServerSynced).
+                            // Control ka na hona alag baat hai —
+                            // relay control ka server hissa abhi
+                            // baaki hai, wo hissa teeno me sahi hai.
+                            val synced = try { prefs.homeServerSynced() } catch (e: Exception) { false }
                             val msg = if (code.isEmpty()) {
-                                "Ghar ka control abhi nahi chalega — pehle Menu me Home screen se box ka code jodo. Uske baad bhi server sync (S4) aane par hi on/off chalega."
+                                "Ghar ka control abhi nahi chalega — pehle Menu me Home screen se box ka code jodo aur server se sync karo. Uske baad bhi awaaz se on/off tabhi chalega jab relay control ka server hissa aa jaye."
+                            } else if (synced) {
+                                "Box juda hua hai aur server se sync bhi ho gaya hai, par awaaz se light/pankha abhi nahi chalega — relay control ka server hissa abhi baaki hai."
                             } else {
-                                "Box juda hua hai, par server sync abhi baaki hai — isliye light/pankha abhi awaaz se nahi chalega. Sync aate hi chalega."
+                                "Box juda hua hai, par server sync abhi baaki hai — isliye light/pankha abhi awaaz se nahi chalega. Home screen se sync karo; uske baad bhi relay control ka server hissa aane par hi on/off chalega."
                             }
                             messages = messages + ChatMsg("Flora: $msg", false)
                             voice.speak(msg)
@@ -4130,7 +4174,9 @@ fun FloraApp(
                                     messages = messages + ChatMsg("Flora: Website publish ho gayi — $url", false)
                                     voice.speak("Website publish ho gayi hai, link chat me de diya hai.")
                                 } else {
-                                    voice.speak("Publish nahi ho paya. ${result.exceptionOrNull()?.message ?: "dobara koshish karo."}")
+                                    // Cycle 1, APP-C1-006: raw exception TTS
+                                    // me kabhi nahi — sirf warm Hindi line.
+                                    voice.speak("Arre, website publish nahi ho payi — thodi der baad dobara koshish karo.")
                                 }
                             } catch (e: Exception) {
                                 voice.speak("Publish me dikkat aayi, dobara koshish karo.")
@@ -4904,7 +4950,9 @@ private fun SettingsScreen(
                     scope.launch {
                         val res = licenceClient.linkWithGoogleIdToken(idToken)
                         if (res.error.isNotEmpty()) {
-                            note = "Google link fail: ${res.error}"
+                            // Cycle 1, APP-C1-007: raw server error
+                            // note me nahi — sirf warm Hindi message.
+                            note = "Google se link nahi ho paya, dobara koshish karo."
                         } else {
                             prefs.setLink(res.uid, account?.email ?: "", res.refreshToken)
                             linkedEmailDisplay = account?.email ?: ""
@@ -5399,7 +5447,9 @@ private fun SettingsScreen(
                             )
                             linkPassword = ""
                             if (result.error.isNotEmpty()) {
-                                note = "Link fail: ${result.error}"
+                                // Cycle 1, APP-C1-007: raw server error
+                                // note me nahi — sirf warm Hindi message.
+                                note = "Account link nahi ho paya — email aur password dobara check karke koshish karo."
                             } else {
                                 prefs.setLink(result.uid, linkEmail.trim(), result.refreshToken)
                                 // Phase 8 link fix: linked UI tabhi
