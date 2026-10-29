@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -232,9 +233,13 @@ fun LicenceScreen(
             }
         }) { Text("UTR save karo (local note)") }
         Spacer(modifier = Modifier.height(8.dp))
+        // Batch 2 (F8): licence-key input masked — Settings ke
+        // API-key fields jaisa. Saved key ka user-initiated
+        // Dikhao/Chhupao/Copy display chheda nahi gaya hai.
         OutlinedTextField(
             value = licenceKeyInput, onValueChange = { licenceKeyInput = it },
             label = { Text("Licence key (FLORA-XXXX-XXXX-XXXX)") },
+            visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(8.dp))
@@ -260,7 +265,14 @@ fun LicenceScreen(
             Text(note)
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Text("Free me: 10 minute/day baat + app me maujood saare tools. Pro me: unlimited baat + FCM push. Live wallpaper / conversation mode abhi available nahi hain — Pro me hone ka daava nahi kiya jata.")
+        // Batch 2 (F10): live-wallpaper stale daava theek — ye
+        // isi version me system chooser se lagta hai (Terms
+        // LegalScreens + FloraWallpaperService + FloraApp chooser
+        // intent). "Conversation mode" naam ka alag feature define
+        // nahi hai, isliye wo vague hissa hata diya gaya hai.
+        // "Saare tools" hissa CHHEDA NAHI — wo D4 definition
+        // conflict hai, faisla pending (audit-log me darj).
+        Text("Free me: 10 minute/day baat + app me maujood saare tools. Pro me: unlimited baat + FCM push. Live wallpaper system chooser se lagta hai (isi version me maujood hai).")
     }
 }
 

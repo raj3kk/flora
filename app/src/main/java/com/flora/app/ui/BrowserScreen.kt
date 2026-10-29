@@ -280,6 +280,11 @@ fun BrowserScreen(voice: VoiceEngine, searchTools: com.flora.app.tools.SearchToo
         if (action == "fields") {
             BrowserController.detectFields { list ->
                 if (list.isNullOrEmpty()) {
+                    // Batch 2 (F11/R1): khali list par purani list
+                    // bhi saaf — warna purane page ki list naye
+                    // page par dikhti rehti jabki awaaz "koi field
+                    // nahi" kehti hai.
+                    detectedFields = null
                     voice.speak("Is page par koi form field nahi mila.")
                 } else {
                     detectedFields = list
@@ -490,6 +495,10 @@ fun BrowserScreen(voice: VoiceEngine, searchTools: com.flora.app.tools.SearchToo
                                 return
                             }
                             if (url != null) {
+                                // Batch 2 (F11/R1): page badalte hi
+                                // purani fields list saaf — naye page
+                                // ki list sirf naye detect par aayegi.
+                                detectedFields = null
                                 currentUrl = url
                                 urlBar = url
                                 // B1-POLISH N7: lock me saveState NAHI —
