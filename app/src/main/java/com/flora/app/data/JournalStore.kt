@@ -49,7 +49,7 @@ class JournalStore(private val context: Context) {
         list.forEach { e ->
             arr.put(JSONObject().put("mood", e.mood).put("text", e.text).put("ts", e.ts))
         }
-        context.journalDataStore.edit { it[key] = MemoryCrypto.encodeStored(arr.toString()) }
+        context.journalDataStore.edit { val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) it[key] = enc }
     }
 
     suspend fun add(mood: String, text: String) {

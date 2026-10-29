@@ -44,7 +44,7 @@ class DocsStore(private val context: Context) {
     private suspend fun save(list: List<FloraDoc>) {
         val arr = JSONArray()
         list.forEach { arr.put(JSONObject().put("title", it.title).put("body", it.body)) }
-        context.docsDataStore.edit { it[key] = MemoryCrypto.encodeStored(arr.toString()) }
+        context.docsDataStore.edit { val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) it[key] = enc }
     }
 
     suspend fun add(title: String, body: String) {

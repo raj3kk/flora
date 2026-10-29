@@ -47,7 +47,7 @@ class SosStore(private val context: Context) {
         list.forEach {
             arr.put(JSONObject().put("name", it.name).put("number", it.number))
         }
-        context.sosDataStore.edit { it[key] = MemoryCrypto.encodeStored(arr.toString()) }
+        context.sosDataStore.edit { val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) it[key] = enc }
     }
 
     /** Returns false when the list is already full (max 3) or input is blank. */

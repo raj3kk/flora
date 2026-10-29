@@ -55,7 +55,7 @@ object JobChainStore {
             obj.put("routines", nameArr)
             arr.put(obj)
         }
-        context.chainStore.edit { it[KEY] = MemoryCrypto.encodeStored(arr.toString()) }
+        context.chainStore.edit { val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) it[KEY] = enc }
     }
 
     suspend fun upsert(context: Context, chain: JobChain) {

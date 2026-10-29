@@ -22,8 +22,15 @@ import javax.crypto.spec.GCMParameterSpec
  * - App-private storage pehle se sirf Flora ki thi; ye uske
  *   upar doosri parat hai — file copy hone par bhi content
  *   safe rahe.
- * - Encrypt fail ho to caller plain fallback lega (data kabhi
- *   lose nahi hoga); decrypt fail = purana plain data (migration).
+ * - Cycle 3, F3 (fail-closed): encrypt fail par caller ko
+ *   plaintext fallback KABHI nahi milta — encodeStored null
+ *   deta hai aur store us turn ko likhta hi nahi (purana
+ *   encrypted data waisa hi rehta hai, plaintext kabhi file
+ *   me nahi jata). Data lose hone se encryption ka jhootha
+ *   daava zyada khatarnak hai, isliye fail = no-write.
+ *   Decrypt fail = purana plain data (LEGACY MIGRATION READ
+ *   ONLY — purana plaintext padhna migration ke liye chahiye;
+ *   naya plaintext kabhi nahi likha jata).
  */
 object MemoryCrypto {
     private const val ALIAS = "flora_data_key"
@@ -82,10 +89,14 @@ object MemoryCrypto {
 
     /**
      * Stores ka shared encode/decode (sweep 2026-10-29) — pehle yehi
-     * do one-liner har store me private duplicate the. Ciphertext ko
-     * plain me badlo; fail ho to raw (purana plain). Plain ko
-     * ciphertext me badlo; fail ho to plain (data safe).
+     * do one-liner har store me private duplicate the.
+     * decodeStored: ciphertext ko plain me badlo; fail ho to raw
+     * (purana plain) — YE SIRF LEGACY-MIGRATION READ HAI.
+     * encodeStored (Cycle 3, F3): plain ko ciphertext me badlo;
+     * encrypt fail ho to NULL (plaintext fallback HATA DIYA
+     * gaya hai). Saare stores null par likhte hi nahi — naya
+     * plaintext kabhi file me nahi jata.
      */
     fun decodeStored(raw: String): String = decrypt(raw) ?: raw
-    fun encodeStored(json: String): String = encrypt(json) ?: json
+    fun encodeStored(json: String): String? = encrypt(json)
 }

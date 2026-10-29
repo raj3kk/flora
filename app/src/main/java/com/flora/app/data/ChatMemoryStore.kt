@@ -78,7 +78,7 @@ class ChatMemoryStore(private val context: Context) {
                     .put("ts", turn.ts)
             )
         }
-        context.chatMemoryDataStore.edit { it[key] = MemoryCrypto.encodeStored(arr.toString()) }
+        context.chatMemoryDataStore.edit { val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) it[key] = enc }
     }
 
     suspend fun loadAll(): List<StoredTurn> {

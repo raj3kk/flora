@@ -52,6 +52,6 @@ object RoutineStore {
             obj.put("commands", cmdArr)
             arr.put(obj)
         }
-        context.routineStore.edit { it[KEY] = MemoryCrypto.encodeStored(arr.toString()) }
+        context.routineStore.edit { val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) it[KEY] = enc }
     }
 }

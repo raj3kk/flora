@@ -243,6 +243,35 @@ class BackgroundMicService : Service() {
     ) {
         val question = text.trim()
         if (question.isEmpty()) return
+        // Cycle 3, F1 (d): background Q&A / screen-vision /
+        // image raaste sab isi handleHeard se jaate hain — Face
+        // Lock ON aur session unlock na ho to background me
+        // KOI jawab nahi (brain.ask / vision bhi nahi). Service
+        // FloraApp ka chatUnlocked state dekh nahi sakti,
+        // isliye prefs wala unlock session (setFaceLockUnlock)
+        // hi sach hai. Locked ho to app aage la kar PIN maango
+        // (command pending queue NAHI kiya — warna foreground
+        // me bina lock check ke chal jata) + imaandaar message.
+        val faceLocked = try {
+            prefs.faceLock() && !prefs.isFaceLockUnlocked()
+        } catch (e: Exception) {
+            false
+        }
+        if (faceLocked) {
+            voice?.speak("Chat lock hai — pehle app khol kar PIN daal kar unlock karo, phir dobara bolo.")
+            try {
+                val launch = Intent(this, MainActivity::class.java).apply {
+                    addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    )
+                }
+                startActivity(launch)
+            } catch (e: Exception) {
+            }
+            return
+        }
         val lower = question.lowercase()
         // Command background se execute nahi — app aage lao,
         // confirmation wahi hogi (rule kabhi nahi toota).

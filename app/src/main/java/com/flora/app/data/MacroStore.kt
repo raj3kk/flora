@@ -49,6 +49,6 @@ object MacroStore {
             obj.put("json", m.json)
             arr.put(obj)
         }
-        context.macroStore.edit { it[KEY] = MemoryCrypto.encodeStored(arr.toString()) }
+        context.macroStore.edit { val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) it[KEY] = enc }
     }
 }

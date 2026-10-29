@@ -65,7 +65,7 @@ object NotificationStore {
             )
         }
         try {
-            context.notifStore.edit { prefs -> prefs[KEY] = MemoryCrypto.encodeStored(arr.toString()) }
+            context.notifStore.edit { prefs -> val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) prefs[KEY] = enc }
         } catch (e: Exception) {
         }
     }

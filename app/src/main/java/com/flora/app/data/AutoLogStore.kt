@@ -58,7 +58,7 @@ class AutoLogStore(private val context: Context) {
         list.takeLast(500).forEach { (t, ts) ->
             arr.put(JSONObject().put("text", t).put("ts", ts))
         }
-        context.autoLogDataStore.edit { it[key] = MemoryCrypto.encodeStored(arr.toString()) }
+        context.autoLogDataStore.edit { val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) it[key] = enc }
     }
 
     suspend fun clear() {
@@ -76,6 +76,6 @@ class AutoLogStore(private val context: Context) {
             }
         } catch (e: Exception) {
         }
-        context.autoLogDataStore.edit { it[key] = MemoryCrypto.encodeStored(kept.toString()) }
+        context.autoLogDataStore.edit { val enc = MemoryCrypto.encodeStored(kept.toString()); if (enc != null) it[key] = enc }
     }
 }

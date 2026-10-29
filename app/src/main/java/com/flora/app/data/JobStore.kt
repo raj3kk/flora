@@ -54,7 +54,7 @@ object JobStore {
                     .put("enabled", j.enabled)
             )
         }
-        context.jobStore.edit { it[KEY] = MemoryCrypto.encodeStored(arr.toString()) }
+        context.jobStore.edit { val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) it[KEY] = enc }
     }
 
     suspend fun upsert(context: Context, job: Job) {

@@ -3,6 +3,7 @@ package com.flora.app.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import com.flora.app.core.FloraConfig
+import com.flora.app.security.GuardianGate
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -41,6 +42,14 @@ class FloraPreferences(private val context: Context) {
         val PIN_ENABLED = booleanPreferencesKey("pin_enabled")
         val GUARDIAN_MODE = booleanPreferencesKey("guardian_mode")
         val FACE_LOCK = booleanPreferencesKey("face_lock")
+        // Cycle 3, F1 (d): Face Lock unlock session ka prefs
+        // nishaan — sirf BackgroundMicService ke liye, kyunki
+        // service FloraApp ka composition state (chatUnlocked)
+        // dekh hi nahi sakti. FloraApp unlock par ise set karta
+        // hai (timeout tak valid), timeout/app-start par clear
+        // karta hai. Ye toggle (FACE_LOCK) nahi hai — sirf
+        // "is waqt unlock hai ya nahi" ka waqt-nishaan hai.
+        val FACE_LOCK_UNLOCKED_UNTIL = longPreferencesKey("face_lock_unlocked_until_ms")
         val ADMIN_UPI_VPA = stringPreferencesKey("admin_upi_vpa")
         val LAST_UTR = stringPreferencesKey("last_utr")
         val LICENCE_KEY = stringPreferencesKey("licence_key")
@@ -114,8 +123,11 @@ class FloraPreferences(private val context: Context) {
      *   kar caller ko mat do. Khali = maujooda missing-key UI
      *   ka re-enter signal hai. Koi key value kabhi log nahi
      *   hoti (yahan sirf shape check hota hai, value nahi).
-     * - writeSecret: encrypt karke save karo; encrypt fail ho to
-     *   plaintext fallback (data safe); khali ho to key hata do.
+     * - writeSecret (Cycle 3, F3 — fail-closed): encrypt karke
+     *   save karo; encrypt fail ho to KUCH NAHI likha jata
+     *   (plaintext fallback HATA DIYA gaya hai) aur false
+     *   wapas aata hai — purani saved value waisi hi rehti
+     *   hai. Khali ho to key hata do.
      * KeyStore key isi phone + isi app se bandhi hai — naye
      * phone/restore par purana ciphertext nahi khulega (PIN
      * vault jaisa hi niyam); tab user ko key dobara daalni hogi.
@@ -169,17 +181,27 @@ class FloraPreferences(private val context: Context) {
         }
     }
 
-    private suspend fun writeSecret(key: Preferences.Key<String>, value: String) {
+    /**
+     * Cycle 3, F3: fail-closed write. Encrypt fail ho to false
+     * (kuch nahi likha, purani value waisi hi). Saare setters
+     * isi se jaate hain, isliye koi secret kabhi plaintext
+     * DataStore me nahi jata. Caller jo return value dekhe
+     * (jaise setLink) wahi user ko imaandaar fail message de
+     * sakta hai; baaki setters ka vyavhaar (Unit call) waisa
+     * hi hai, sirf plaintext likhna band hua hai.
+     */
+    private suspend fun writeSecret(key: Preferences.Key<String>, value: String): Boolean {
         if (value.isEmpty()) {
             context.floraDataStore.edit { it.remove(key) }
-            return
+            return true
         }
         val stored = try {
             MemoryCrypto.encrypt(value)
         } catch (e: Exception) {
             null
-        } ?: value
+        } ?: return false
         context.floraDataStore.edit { it[key] = stored }
+        return true
     }
 
     /** APP-C1-009: Home server sync hua ya nahi (plain flag). */
@@ -227,11 +249,22 @@ class FloraPreferences(private val context: Context) {
         return if (linked.isNotEmpty()) linked else userId()
     }
 
-    suspend fun setLink(uid: String, email: String, refreshToken: String) {
+    /**
+     * Cycle 3, F3: fail-closed link save. Refresh token encrypt
+     * na ho to POORA link save nahi hota (uid/email bhi nahi —
+     * aadha link "linked" dikha kar token ke bina chhod dena
+     * galat hoga) aur false wapas aata hai; caller tab
+     * imaandaar "save nahi ho paya, dobara koshish karo"
+     * message dega. Refresh-renew callers return value ignore
+     * karte hain (waisa hi) — token save na ho to purana token
+     * waisa hi rehta hai, agla renew dobara koshish karega.
+     * Khali token = token hatao (purana vyavhaar waisa hi).
+     */
+    suspend fun setLink(uid: String, email: String, refreshToken: String): Boolean {
         // APP-C1-005: refresh token encrypted save hota hai.
         val encRefresh = if (refreshToken.isEmpty()) "" else
             (try { MemoryCrypto.encrypt(refreshToken) } catch (e: Exception) { null }
-                ?: refreshToken)
+                ?: return false)
         context.floraDataStore.edit {
             it[Keys.LINKED_USER_ID] = uid
             it[Keys.LINKED_EMAIL] = email
@@ -243,6 +276,7 @@ class FloraPreferences(private val context: Context) {
             // ye flag false hota hai.
             it[Keys.HOME_SERVER_SYNCED] = false
         }
+        return true
     }
 
     suspend fun clearLink() {
@@ -490,6 +524,32 @@ class FloraPreferences(private val context: Context) {
     /** Face Lock toggle: OFF by default. ON = Chat PIN verify ke bina nahi khulega. */
     suspend fun faceLock(): Boolean =
         context.floraDataStore.data.map { it[Keys.FACE_LOCK] ?: false }.first()
+
+    /**
+     * Cycle 3, F1 (d/e): Face Lock unlock session (prefs side).
+     * Unlock par FloraApp setFaceLockUnlock() bulata hai —
+     * tab tak valid jab tak FACE_LOCK_SESSION_TIMEOUT_MS na
+     * beete (GuardianGate me alag constant, EK HI JAGAH).
+     * BackgroundMicService isi ko padh kar tay karta hai ki
+     * background jawab de ya PIN maange. App-start par
+     * MainActivity ise clear karta hai (naya session = locked).
+     */
+    suspend fun faceLockUnlockedUntil(): Long =
+        context.floraDataStore.data.map { it[Keys.FACE_LOCK_UNLOCKED_UNTIL] ?: 0L }.first()
+
+    suspend fun isFaceLockUnlocked(): Boolean =
+        faceLockUnlockedUntil() > System.currentTimeMillis()
+
+    suspend fun setFaceLockUnlock() {
+        context.floraDataStore.edit {
+            it[Keys.FACE_LOCK_UNLOCKED_UNTIL] =
+                System.currentTimeMillis() + GuardianGate.FACE_LOCK_SESSION_TIMEOUT_MS
+        }
+    }
+
+    suspend fun clearFaceLockUnlock() {
+        context.floraDataStore.edit { it.remove(Keys.FACE_LOCK_UNLOCKED_UNTIL) }
+    }
 
     suspend fun setFaceLock(value: Boolean) {
         context.floraDataStore.edit { it[Keys.FACE_LOCK] = value }

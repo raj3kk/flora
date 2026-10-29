@@ -56,7 +56,7 @@ class PendingTaskStore(private val context: Context) {
         list.forEach { text ->
             arr.put(JSONObject().put("t", text).put("ts", System.currentTimeMillis()))
         }
-        context.pendingTaskDataStore.edit { it[key] = MemoryCrypto.encodeStored(arr.toString()) }
+        context.pendingTaskDataStore.edit { val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) it[key] = enc }
     }
 
     suspend fun loadAll(): List<String> {

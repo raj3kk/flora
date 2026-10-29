@@ -72,13 +72,13 @@ class MemoriesStore(private val context: Context) {
             if (ts != null) arr.put(JSONObject().put("text", text).put("ts", ts))
             else arr.put(text)
         }
-        context.memoriesDataStore.edit { it[key] = MemoryCrypto.encodeStored(arr.toString()) }
+        context.memoriesDataStore.edit { val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) it[key] = enc }
     }
 
     private suspend fun save(list: List<String>) {
         val arr = JSONArray()
         list.forEach { arr.put(it) }
-        context.memoriesDataStore.edit { it[key] = MemoryCrypto.encodeStored(arr.toString()) }
+        context.memoriesDataStore.edit { val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) it[key] = enc }
     }
 
     suspend fun add(text: String) {

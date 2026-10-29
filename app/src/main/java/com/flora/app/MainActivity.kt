@@ -230,6 +230,13 @@ class MainActivity : ComponentActivity() {
             } catch (e: Exception) {
             }
         }
+        // Cycle 3, F1 (e): naya app session hamesha locked
+        // shuru hota hai — pichhle session ka Face Lock unlock
+        // restart/rotate par aage nahi badhega. PIN dialog
+        // hamesha reachable hai (anti-lockout waisa hi).
+        talkScope.launch {
+            try { prefs.clearFaceLockUnlock() } catch (e: Exception) { }
+        }
         // Background wake (v2.14): "Hey Flora" se app aage aayi ho to
         // isi session ke liye sunna shuru karo — mute bhi ho to bhi,
         // kyunki wake khud "ab baat karo" ka ishara hai. 2s delay
