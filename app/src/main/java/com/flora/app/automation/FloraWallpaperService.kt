@@ -1,11 +1,16 @@
 package com.flora.app.automation
 
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.app.WallpaperManager
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.os.Handler
 import android.os.Looper
 import android.service.wallpaper.WallpaperService
+import android.util.Log
 import android.view.SurfaceHolder
 import kotlin.math.sin
 
@@ -16,6 +21,38 @@ import kotlin.math.sin
  * Lagana user ke haath me hai (system live-wallpaper
  * chooser se) — app chhupke wallpaper nahi badal sakti.
  */
+/**
+ * Live-wallpaper chooser — EK raasta (Phase 9, A2):
+ * voice branch ("live wallpaper lagao") aur Settings row
+ * dono yahi intent kholte hain, taaki drift na ho. User
+ * khud chooser me Flora wallpaper chunta hai — app
+ * chhupke wallpaper kabhi nahi badalti. Fail par false
+ * (caller user ko batayega + yahan Log bhi hai).
+ */
+object WallpaperChooser {
+    fun open(context: Context): Boolean {
+        return try {
+            val intent = Intent(
+                WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER
+            ).apply {
+                putExtra(
+                    WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                    ComponentName(
+                        context.applicationContext,
+                        FloraWallpaperService::class.java
+                    )
+                )
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.applicationContext.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            Log.w("FloraWallpaper", "live wallpaper chooser nahi khula", e)
+            false
+        }
+    }
+}
+
 class FloraWallpaperService : WallpaperService() {
 
     override fun onCreateEngine(): Engine = FloraEngine()
@@ -67,11 +104,17 @@ class FloraWallpaperService : WallpaperService() {
                 paint.color = Color.WHITE
                 canvas.drawCircle(cx - base * 0.3f, cy - base * 0.3f, base * 0.18f, paint)
             } catch (e: Exception) {
+                // Phase 9, A2: pehle ye catch khaali tha (chupchaap
+                // frame chhoot jata tha) — ab Log par flag hai.
+                Log.w("FloraWallpaper", "frame draw nahi hua", e)
             } finally {
                 if (canvas != null) {
                     try {
                         holder.unlockCanvasAndPost(canvas)
                     } catch (e: Exception) {
+                        // Phase 9, A2: pehle ye catch khaali tha —
+                        // ab Log par flag hai.
+                        Log.w("FloraWallpaper", "canvas unlock nahi hua", e)
                     }
                 }
             }

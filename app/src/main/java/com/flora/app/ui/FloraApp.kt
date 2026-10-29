@@ -315,6 +315,12 @@ fun FloraApp(
             autoLogStore, chatMemoryStore, plannerAndroidId,
         )
     }
+    // Phase 9, A2 (G12): goal orchestrator — PlannerEngine ke
+    // UPAR wala layer (goal -> alag-alag sub-plans). Engine +
+    // autoLogStore dono isse pehle declare hain (order trap se bacha).
+    val goalOrchestrator = remember {
+        com.flora.app.planner.GoalOrchestrator(plannerEngine, autoLogStore)
+    }
     val pendingTaskStore = remember { com.flora.app.data.PendingTaskStore(appContext) }
     var memoryReady by remember { mutableStateOf(false) }
     var persistedCount by remember { mutableStateOf(0) }
@@ -4550,30 +4556,24 @@ fun FloraApp(
                     // Live wallpaper (v2.22, Phase 5, G9): system
                     // chooser khulta hai, user khud Flora
                     // wallpaper chunta hai — chhupke nahi lagta.
+                    // Intent WallpaperChooser me hai (Settings row
+                    // wahi raasta kholti hai — Phase 9, A2).
                     if (lower == "live wallpaper lagao") {
                         input = ""
-                        try {
-                            val intent = android.content.Intent(
-                                android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER
-                            ).apply {
-                                putExtra(
-                                    android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
-                                    android.content.ComponentName(
-                                        appContext,
-                                        com.flora.app.automation.FloraWallpaperService::class.java
-                                    )
-                                )
-                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            appContext.startActivity(intent)
+                        val opened = com.flora.app.automation.WallpaperChooser.open(appContext)
+                        if (opened) {
                             voice.speak("Live wallpaper chooser khol raha hun — wahan Flora wallpaper chun lo.")
-                        } catch (e: Exception) {
+                        } else {
                             voice.speak("Live wallpaper chooser nahi khul paya.")
                         }
                         return
                     }
-                    // Job chains (v2.22, Phase 5, G12): ek naam
-                    // ke neeche kai routines. Chalana Auto Mode
+                    // Job chains (v2.22, Phase 5): ek naam
+                    // ke neeche kai routines. (Pehle is comment
+                    // par galat G12 label tha — G12 number ab
+                    // sub-agent orchestrator ka hai, Phase 9 A2.
+                    // Naam/commands/behaviour bilkul wahi hain.)
+                    // Chalana Auto Mode
                     // ON par hi bina poochhe hota hai, warna
                     // Routines screen khulti hai.
                     if (lower.startsWith("chain banao ")) {
@@ -5190,7 +5190,8 @@ fun FloraApp(
             } else if (screen == Screen.PLANNER) {
                 // B4-DOCTOR: PlannerScreen se doctor button sirf
                 // navigation hai — fix wiring DoctorScreen me hi.
-                com.flora.app.planner.PlannerScreen(plannerEngine) { screen = Screen.DOCTOR }
+                // Phase 9, A2: G12 orchestrator section isi screen me.
+                com.flora.app.planner.PlannerScreen(plannerEngine, goalOrchestrator) { screen = Screen.DOCTOR }
             } else if (screen == Screen.DOCTOR) {
                 com.flora.app.doctor.DoctorScreen(projectStore, autoLogStore, plannerEngine)
             } else if (screen == Screen.WHITEBOARD) {
@@ -6132,6 +6133,17 @@ private fun SettingsScreen(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = { onShowPermissions() }) { Text("Permissions dobara dekho") }
+            // Phase 9, A2 (R-A2-5): Live wallpaper — Settings row,
+            // wahi chooser intent jo voice branch kholta hai
+            // (WallpaperChooser, ek raasta). Koi dedicated
+            // wallpaper settings screen nahi ban rahi, isliye
+            // wallpaper_service.xml se settingsActivity hata di
+            // gayi hai. Fixed brand orb hi dikhega (R-A2-6) —
+            // koi state/data feed nahi (R-A2-1).
+            Button(onClick = {
+                val opened = com.flora.app.automation.WallpaperChooser.open(context)
+                if (!opened) note = "Live wallpaper chooser nahi khul paya."
+            }) { Text("Live wallpaper") }
             if (bgNote.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(bgNote)

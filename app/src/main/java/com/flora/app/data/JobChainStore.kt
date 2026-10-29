@@ -12,8 +12,11 @@ import org.json.JSONObject
 private val Context.chainStore by preferencesDataStore(name = "flora_chains")
 
 /**
- * Job chain (v2.22, Phase 5, G12 orchestrator) — ek naam
- * ke neeche kai routines ka kram. Chain "chain chalao
+ * Job chain (v2.22, Phase 5) — ek naam
+ * ke neeche kai routines ka kram. (Pehle is comment par
+ * galat G12 label tha — G12 number ab sub-agent
+ * orchestrator ka hai, Phase 9 A2. Behaviour wahi hai.)
+ * Chain "chain chalao
  * <naam>" se chalti hai (Auto Mode ON ho tabhi bina
  * poochhe; warna Routines screen par khulti hai).
  * Data encrypted hai (MemoriesStore pattern) — routines

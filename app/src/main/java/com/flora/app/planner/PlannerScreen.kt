@@ -43,7 +43,11 @@ import kotlinx.coroutines.launch
  * seekh: signature + call site dono check).
  */
 @Composable
-fun PlannerScreen(engine: PlannerEngine, onOpenDoctor: () -> Unit = {}) {
+fun PlannerScreen(
+    engine: PlannerEngine,
+    orchestrator: GoalOrchestrator? = null,
+    onOpenDoctor: () -> Unit = {},
+) {
     val state by engine.state.collectAsState()
     val pendingGoal by engine.pendingGoal.collectAsState()
     val scope = rememberCoroutineScope()
@@ -51,6 +55,15 @@ fun PlannerScreen(engine: PlannerEngine, onOpenDoctor: () -> Unit = {}) {
     var goal by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
     var plans by remember { mutableStateOf(listOf<StoredPlan>()) }
+    // Phase 9, A2 (G12): orchestrator section ke states — launcher/
+    // callback vars use se pehle declare (order trap se bacha).
+    val goalsFlow = remember(orchestrator) {
+        orchestrator?.goals ?: kotlinx.coroutines.flow.MutableStateFlow(emptyList<GoalRun>())
+    }
+    val goals by goalsFlow.collectAsState()
+    var orchGoal by remember { mutableStateOf("") }
+    var orchSubs by remember { mutableStateOf("") }
+    var orchApproveSteps by remember { mutableStateOf(mapOf<String, Int>()) }
     // B4 follow-up P1-2: har Supabase step ka transient password field (stepIndex -> text).
     // Ye state sirf UI me hai — amend ke baad turant saaf hoti hai, Room me kabhi nahi jati.
     var dbPasswords by remember { mutableStateOf(mapOf<Int, String>()) }
@@ -274,6 +287,132 @@ fun PlannerScreen(engine: PlannerEngine, onOpenDoctor: () -> Unit = {}) {
         Text(text = "Pichhle plans:")
         for (old in plans) {
             Text(text = "- ${old.goal} (v${old.version}, ${old.status})")
+        }
+        // Phase 9, A2 (G12) — goal orchestrator: ek goal ke
+        // INDEPENDENT sub-goals alag-alag sub-plans me chalte
+        // hain (har sub-plan apna planId, apne steps, apne
+        // stops). Dependent kaam yahan mat todo — wo ek hi
+        // single plan me rahega (upar wala 'Plan banao').
+        // Fail = isolate (siblings chalte rahenge), goal roko =
+        // sab rukenge, approval per-sub-plan alag hai.
+        if (orchestrator != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(text = "Goal orchestrator (G12) — goal ko sub-plans me chalao")
+            Text(text = "Sirf independent sub-goals yahan do (ek-doosre par nirbhar kaam nahi). Max 5 sub-plans; usse zyada hon to single plan banao.")
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = orchGoal,
+                onValueChange = { newGoal -> orchGoal = newGoal },
+                label = { Text(text = "Goal (poora kaam, ek line)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = orchSubs,
+                onValueChange = { newSubs -> orchSubs = newSubs },
+                label = { Text(text = "Sub-goals (comma se alag karo, max 5)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row {
+                Button(
+                    onClick = {
+                        val subs = orchSubs.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                        when (val res = orchestrator.createGoal(orchGoal.trim(), subs)) {
+                            is GoalCreation.Created -> {
+                                message = "Goal ban gaya (${res.run.subPlans.size} sub-plans) — ab 'Goal chalao' dabao."
+                            }
+                            is GoalCreation.NeedsSinglePlan -> {
+                                message = res.reason
+                            }
+                            is GoalCreation.Invalid -> {
+                                message = "Goal nahi bana: ${res.reason}"
+                            }
+                        }
+                    }
+                ) {
+                    Text(text = "Goal banao")
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            for (run in goals) {
+                Text(text = "Goal: ${run.goal} [${run.status}]")
+                Text(text = run.report)
+                for (sub in run.subPlans) {
+                    val planPart = if (sub.planId.isNotBlank()) " [plan ${sub.planId}]" else ""
+                    Text(text = "- ${sub.subGoal} [${sub.status}]$planPart")
+                    if (sub.detail.isNotBlank()) {
+                        Text(text = "   ${sub.detail}")
+                    }
+                    if (sub.status == GoalSubStatus.WAITING_APPROVAL && sub.planId.isNotBlank()) {
+                        val apStep = orchApproveSteps[sub.planId]
+                        if (apStep == null) {
+                            Row {
+                                OutlinedButton(
+                                    onClick = {
+                                        scope.launch {
+                                            val p = engine.loadPlan(sub.planId)
+                                            val st = p?.steps?.firstOrNull {
+                                                it.status == StepStatus.PENDING && (it.spend || it.irreversible)
+                                            }
+                                            if (st != null) {
+                                                orchApproveSteps = orchApproveSteps + (sub.planId to st.stepIndex)
+                                            } else {
+                                                message = "Is sub-plan ka ruka hua step spend/irreversible approval wala nahi lag raha — plan kholo aur Resume dekho."
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Text(text = "Approval step dhoondo")
+                                }
+                            }
+                        } else {
+                            Row {
+                                OutlinedButton(
+                                    onClick = {
+                                        orchestrator.approveSubPlan(run.goalId, sub.planId, apStep)
+                                        orchApproveSteps = orchApproveSteps - sub.planId
+                                        message = "Sub-plan approval di gayi — sirf ye sub-plan aage badhega."
+                                    }
+                                ) {
+                                    Text(text = "Confirm karke ye sub-plan aage badhao (step ${apStep + 1})")
+                                }
+                            }
+                        }
+                    }
+                }
+                Row {
+                    Button(
+                        onClick = {
+                            if (!orchestrator.startGoal(run.goalId)) {
+                                message = "Ye goal pehle se chal raha hai ya poora ho chuka hai."
+                            } else {
+                                message = "Goal chal raha hai — sub-plans ek-ek karke chalenge."
+                            }
+                        }
+                    ) {
+                        Text(text = "Goal chalao")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            orchestrator.stopGoal(run.goalId)
+                            message = "Goal roka gaya — chal raha sub-plan rukega, baaki shuru nahi honge."
+                        }
+                    ) {
+                        Text(text = "Goal roko")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            orchestrator.refreshGoal(run.goalId)
+                        }
+                    ) {
+                        Text(text = "Refresh")
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
     }
 }

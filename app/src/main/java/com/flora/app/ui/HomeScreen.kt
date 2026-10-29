@@ -30,9 +30,11 @@ import kotlinx.coroutines.launch
  * board 10A se kam. India me green wire EARTH hoti hai (phase
  * nahi) — is baat par kabhi samjhauta nahi.
  *
- * IMAANDARI: server sync (S4) abhi baaki hai — code save hona
- * control nahi hai. Awaaz se light/pankha tabhi chalega jab
- * server sync ban jayega; tab tak screen sirf taiyaari hai.
+ * IMAANDARI: box registration sync MAUJOOD hai ("Server se
+ * sync karo" button se box code server tak jata hai) — code
+ * save hona control nahi hai. Relay on/off ka server hissa
+ * abhi baaki hai, isliye awaaz se light/pankha abhi nahi
+ * chalega; tab tak screen sirf taiyaari + registration hai.
  */
 @Composable
 fun HomeScreen(prefs: FloraPreferences) {
@@ -81,7 +83,7 @@ fun HomeScreen(prefs: FloraPreferences) {
                         prefs.setHomeServerSynced(false)
                         saved = c
                         code = ""
-                        note = "Code phone par save ho gaya. Server sync (S4) aate hi control chalega — tab tak awaaz se light/pankha nahi chalega."
+                        note = "Code phone par save ho gaya. 'Server se sync karo' se registration sync karo — relay control ka server hissa aane tak awaaz se light/pankha nahi chalega."
                     } catch (e: Exception) {
                         note = "Code save nahi ho paya."
                     }
@@ -138,9 +140,11 @@ fun HomeScreen(prefs: FloraPreferences) {
         }) { Text("Server se sync karo") }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            "Note: ye screen control nahi hai. Asli on/off server sync " +
-                "(S4) ke baad aayega — uske bina koi relay nahi chalega, " +
-                "aur chhupke se kuch on/off kabhi nahi hoga."
+            "Note: ye screen control nahi hai. Box registration " +
+                "sync maujood hai, par asli on/off relay control " +
+                "ke server hisse ke baad aayega — uske bina koi " +
+                "relay nahi chalega, aur chhupke se kuch on/off " +
+                "kabhi nahi hoga."
         )
     }
 }
