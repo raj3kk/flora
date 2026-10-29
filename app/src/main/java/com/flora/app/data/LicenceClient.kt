@@ -91,9 +91,8 @@ data class LicenceStatus(
     // v2: expiry timestamp (khali ho sakta hai).
     val expiresAt: String = "",
     // Wave B: server ka device lock (15 din se pehle nayi
-    // device par) + transfer ki date (khali ho sakta hai).
+    // device par).
     val deviceLocked: Boolean = false,
-    val deviceChangeAvailableAt: String = "",
 ) {
     /**
      * v2 status par imaandaar Hindi message; null = koi khaas
@@ -115,7 +114,6 @@ data class LicenceStatus(
             "Ye licence nayi licence se badal di gayi hai — nayi licence check karo."
         "device_locked" ->
             "Device lock hai — ye licence abhi kisi aur device par chal rahi hai." +
-                (if (deviceChangeAvailableAt.isNotEmpty()) " Transfer ${deviceChangeAvailableAt.take(10)} ko hoga." else "") +
                 " Admin se turant rebind bhi kara sakte ho."
         else -> null
     }
@@ -299,8 +297,8 @@ class LicenceClient(private val prefs: FloraPreferences) {
     // Licence-verify v2 response parser (verify + verifyWithKey
     // dono isi se — ek hi parsing, do jagah nahi).
     // Response: {valid, status, plan, features[], expires_at,
-    // bound_device_short, reason?, device_locked,
-    // device_change_available_at}. Device binding rule: ek
+    // bound_device_short, reason?, device_locked}.
+    // Device binding rule: ek
     // licence ek time me ek device par — first claim bind karta
     // hai; 15 din poore par server transfer karta hai (purana
     // device free); 15 din se pehle device_locked; admin rebind
@@ -340,8 +338,7 @@ class LicenceClient(private val prefs: FloraPreferences) {
             reason = res.optString("reason", ""),
             features = features,
             expiresAt = res.optString("expires_at", ""),
-            deviceLocked = res.optBoolean("device_locked", false),
-            deviceChangeAvailableAt = res.optString("device_change_available_at", "")
+            deviceLocked = res.optBoolean("device_locked", false)
         )
         // v1 shape: status "free" + device_locked flag — use
         // device_locked status banao taaki honestMessage chale.
