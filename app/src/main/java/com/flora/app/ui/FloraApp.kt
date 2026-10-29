@@ -822,17 +822,14 @@ fun FloraApp(
                 if (site.isBlank()) {
                     voice.speak("Website nahi khul payi, step chhod diya.")
                 } else {
-                    runGuardedVoice {
-                    when (VerifiedAppLauncher.openWebsiteVerified(appContext, site)) {
-                        VerifiedAppLauncher.OpenResult.NotVisible,
-                        VerifiedAppLauncher.OpenResult.NoLaunchIntent -> {
-                            voice.speak("Website nahi khul payi, step chhod diya.")
-                        }
-                        else -> {
-                            voice.speak("$site khol raha hun.")
-                        }
-                    }
-                    }
+                    // B1 G11: routine ka website step ab Flora
+                    // browser se ek raasta hai (external browser
+                    // nahi) — G16 fallback ke saath unify. Browser
+                    // flag gate stepBlocked me upar ho chuka hai.
+                    val url = com.flora.app.tools.BrowserController.normalize(site)
+                    com.flora.app.tools.BrowserNav.request(url = url)
+                    screen = Screen.BROWSER
+                    voice.speak("$site Flora browser me khol raha hun.")
                 }
             }
             lower.startsWith("gaana bajao ") || lower.startsWith("gaana chalao ") -> {
@@ -3658,6 +3655,13 @@ fun FloraApp(
                         return
                     }
                     // Voice: "chrome me <site> kholo" / "website kholo <site>".
+                    // B1 G11 (jaanboojh kar alag rakha): ye
+                    // seedha voice-open branch maujooda verified
+                    // external-open path par hi rahega ("chrome me"
+                    // me user ne Chrome ka naam liya hai) — routine
+                    // step aur G16 fallback Flora browser se unify
+                    // hue hain, is branch ka vyavhaar B1 me chupchaap
+                    // nahi badla gaya.
                     if (lower.startsWith("chrome me ") || lower.startsWith("website kholo ") ||
                         lower.startsWith("website ")
                     ) {
@@ -4244,12 +4248,17 @@ fun FloraApp(
                                         }
                                     }
                                     else -> {
-                                        when (VerifiedAppLauncher.openWebsiteVerified(appContext, fallback)) {
-                                            VerifiedAppLauncher.OpenResult.Opened,
-                                            VerifiedAppLauncher.OpenResult.AlreadyOpen -> "$appName khol diya."
-                                            VerifiedAppLauncher.OpenResult.FiredUnverified -> "$appName khol raha hun — browser me khul raha hai."
-                                            else -> "$appName nahi khul paya."
-                                        }
+                                        // B1 G11: app na mile to fallback
+                                        // ab Flora browser hai (external
+                                        // browser nahi) — routine step ke
+                                        // saath unify. Note: voice se
+                                        // "chrome me <site> kholo" alag
+                                        // hai — wahan user ne Chrome ka
+                                        // naam liya hai, isliye wo raasta
+                                        // jaanboojh kar external hi rahega.
+                                        com.flora.app.tools.BrowserNav.request(url = fallback)
+                                        screen = Screen.BROWSER
+                                        "$appName Flora browser me khol raha hun."
                                     }
                                 }
                                 messages = messages + ChatMsg("Flora: $msg", false)
@@ -4328,6 +4337,30 @@ fun FloraApp(
                                 val fail = "Live update me dikkat aayi, dobara koshish karo."
                                 messages = messages + ChatMsg("Flora: $fail", false)
                                 voice.speak(fail)
+                            }
+                        }
+                        return
+                    }
+                    // B1 G1: browser form-fill (chat se) — "browser me
+                    // field <label> me <value> likho". Password guard
+                    // BrowserController.fillWebField me hai; ye branch
+                    // sirf BrowserNav fill action bhejti hai.
+                    if (lower.startsWith("browser me field ") && lower.endsWith(" likho")) {
+                        input = ""
+                        if (!gateFeature("browser")) { return }
+                        val body = question.substring(17, question.length - 6).trim()
+                        val meIdx = body.lowercase().lastIndexOf(" me ")
+                        if (meIdx < 0) {
+                            voice.speak("Aise boliye: 'browser me field naam me Priyadarshi likho'.")
+                        } else {
+                            val fLabel = body.substring(0, meIdx).trim()
+                            val fValue = body.substring(meIdx + 4).trim()
+                            if (fLabel.isEmpty() || fValue.isEmpty()) {
+                                voice.speak("Aise boliye: 'browser me field naam me Priyadarshi likho'.")
+                            } else {
+                                com.flora.app.tools.BrowserNav.request(action = "fill:$fLabel\u0001$fValue")
+                                screen = Screen.BROWSER
+                                voice.speak("Browser me field bhar raha hun.")
                             }
                         }
                         return
@@ -4441,6 +4474,27 @@ fun FloraApp(
                             val msg = "Baat-cheet abhi band hai."
                             messages = messages + ChatMsg("Flora: $msg", false)
                             voice.speak(msg)
+                            busy = false
+                            return@launch
+                        }
+                        // B1 G5/G7: live sawal par pehle research
+                        // lane (Tavily + DuckDuckGo) — brain.ask
+                        // bina live source ke jawab na de. Lane
+                        // fail ho to brain-proxy imaandaar prefix
+                        // ke saath (lane-fail -> brain-proxy).
+                        val route = com.flora.app.tools.IntentRouter.route(question)
+                        if (route is com.flora.app.tools.IntentRouter.Route.Research) {
+                            val lane = try { searchTools.search(question) } catch (e: Exception) { "" }
+                            if (lane.isNotBlank() && !com.flora.app.tools.IntentRouter.isLaneFailure(lane)) {
+                                val msg = "Live search se: $lane"
+                                messages = messages + ChatMsg(msg, false)
+                                voice.speak(msg.take(600))
+                            } else {
+                                val brainReply = brain.ask(personaPrefix(prefs.persona()) + question, memCtx, history)
+                                val msg = "Live source se jawab nahi mila — ye brain ka jawab hai, taaza hone ki pushti nahi hai: $brainReply"
+                                messages = messages + ChatMsg(msg, false)
+                                voice.speak(msg.take(600))
+                            }
                             busy = false
                             return@launch
                         }
@@ -4648,7 +4702,10 @@ fun FloraApp(
             } else if (screen == Screen.JOURNAL) {
                 JournalScreen(journalStore)
             } else if (screen == Screen.BROWSER) {
-                BrowserScreen(voice)
+                // B1 G6/G7: searchTools pass karna zaroori hai —
+                // warna BrowserScreen ka research-lane fallback
+                // (wall/load-fail) kabhi lane tak nahi pahunchega.
+                BrowserScreen(voice = voice, searchTools = searchTools)
             } else if (screen == Screen.LOCK) {
                 LockScreen(pinVault, onUnlock = { screen = Screen.CHAT }, onBack = { screen = Screen.CHAT })
             } else if (screen == Screen.PC_LINK) {
