@@ -80,8 +80,14 @@ dependencies {
     // B5-09) + App Startup (registry init ka single point,
     // B5-09) + AppSearch (unified memory index, B5-04).
     // Sab Apache-2.0, AGP 8.5.2 / Kotlin 1.9.24 stack par pinned.
-    implementation("androidx.appsearch:appsearch:1.1.0")
-    implementation("androidx.appsearch:appsearch-local-storage:1.1.0")
+    // AppSearch pin 1.1.0-beta01 (Jan 2025) — CI-PROVEN: 1.1.0
+    // stable (aaj resolve hone wala artifact) ko compileSdk 36 +
+    // AGP 8.9.1 chahiye, jo pinned stack (34 / 8.5.2) se takrata
+    // hai (CI run 40896889152, checkDebugAarMetadata FAILED).
+    // Stack bump (36 / 8.9.1) coordinator approval ke bina nahi
+    // hoga — isliye beta01 pin hi sahi raasta hai.
+    implementation("androidx.appsearch:appsearch:1.1.0-beta01")
+    implementation("androidx.appsearch:appsearch-local-storage:1.1.0-beta01")
     implementation("com.jakewharton.timber:timber:5.0.1")
     implementation("androidx.startup:startup-runtime:1.1.1")
     // B5-11 test-only + debug-only — production/release APK me kabhi nahi.
