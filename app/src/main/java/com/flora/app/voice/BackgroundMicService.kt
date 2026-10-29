@@ -255,7 +255,7 @@ class BackgroundMicService : Service() {
         val faceLocked = try {
             prefs.faceLock() && !prefs.isFaceLockUnlocked()
         } catch (e: Exception) {
-            false
+            true
         }
         if (faceLocked) {
             voice?.speak("Chat lock hai — pehle app khol kar PIN daal kar unlock karo, phir dobara bolo.")
