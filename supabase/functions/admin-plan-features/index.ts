@@ -7,10 +7,20 @@
 // hisaab se), isliye plans ka single source yehi table hai
 // (plans table ko koi code read nahi karta — audit A7).
 //   get: { plans: { free: [...], pro: [...] } } — row na ho to
-//     defaults (free=[talk], pro=14 flags); table na ho to bhi
+//     defaults (free=[talk,builder], pro=15 flags); table na ho to bhi
 //     defaults (fail-open, panel editor khaali nahi dikhega).
 //   set { plan, features }: plan free/pro; features array, har
-//     entry 14 contract keys me honi chahiye (allowlist); dedupe;
+//     entry 15 contract keys me honi chahiye (allowlist); dedupe;
+// B5 (2026-10-29): "builder" plan-features key hai — feature-flags ka
+// toggle NAHI hai (flags FLAG_KEYS me builder nahi; effective = plan AND
+// flag, missing key fail-open = true, isliye builder effectively
+// plan-only hai). QUOTA CONTRACT (defaults): Free = max 3 projects +
+// max 5 AI builds/day; Pro = unlimited. 1 AI build = 1 code-generation
+// call; day = device local day. Quota enforcement APP-side/device-side
+// honest gate hai, hard enforcement nahi (server project code nahi
+// dekhta); server-side Free limiter brain-proxy 600s/day cap ALAG hai.
+// Deploy order: allowlist wali ye function seed ke saath ya usse pehle
+// deploy honi chahiye, warna panel Save builder par 400 dega.
 //     upsert. Features config hai, secret nahi — isliye values
 //     response/audit me dikhana theek hai.
 // Deploy se pehle supabase/sql/licence_system.sql chalao.
@@ -19,10 +29,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const FLAG_KEYS = [
   "talk", "calls", "sms", "whatsapp", "browser", "macros",
   "image_gen", "screen_vision", "camera", "overlay_mic", "wakeword",
-  "home", "routines", "form_fill",
+  "home", "routines", "form_fill", "builder",
 ];
 const DEFAULTS = {
-  free: ["talk"],
+  free: ["talk", "builder"],
   pro: FLAG_KEYS.slice(),
 };
 

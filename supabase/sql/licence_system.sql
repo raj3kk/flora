@@ -107,10 +107,25 @@ create table if not exists public.plan_features (
 alter table public.plan_features enable row level security;
 
 -- Seed defaults (dobara chalane par overwrite nahi — admin edits safe).
--- 14 contract flags (flag-keys, panel FLAG_LABELS se match):
+-- 15 contract flags (flag-keys, panel PLAN_FLAG_LABELS se match):
 -- talk, calls, sms, whatsapp, browser, macros, image_gen,
--- screen_vision, camera, overlay_mic, wakeword, home, routines, form_fill.
+-- screen_vision, camera, overlay_mic, wakeword, home, routines, form_fill, builder.
+-- B5 (2026-10-29): "builder" plan-features key hai — ye feature-flags ka
+-- toggle NAHI hai (flags me builder ki koi key nahi; effective = plan AND
+-- flag, missing key fail-open = true, isliye builder effectively plan-only
+-- hai). Entitlement source licence-verify features[] hai (plan_features
+-- table se; fallback sirf table/row missing par lagta hai, yahan nahi
+-- badla gaya). QUOTA CONTRACT (defaults, user ek shabd me badal sakta
+-- hai): Free = max 3 projects + max 5 AI builds/day; Pro = unlimited.
+-- 1 AI build = 1 code-generation call (plan-generation steps builds me
+-- nahi ginege); day = device local day (local midnight reset). Quota
+-- enforcement APP-side/device-side honest gate hai (hard enforcement
+-- nahi — server kabhi project code nahi dekhta); server-side Free
+-- limiter brain-proxy 600s/day cap ALAG hai aur waisa hi rahega.
+-- Seed ON CONFLICT DO NOTHING hai: live DB par pehle se seeded rows
+-- par dobara chalane se builder NAHI judega — live DB ko panel Save
+-- on Free AND Pro chahiye (allowlist deploy ke BAAD) ya alag UPDATE step.
 insert into public.plan_features (plan, features) values
-  ('free', '["talk"]'::jsonb),
-  ('pro', '["talk","calls","sms","whatsapp","browser","macros","image_gen","screen_vision","camera","overlay_mic","wakeword","home","routines","form_fill"]'::jsonb)
+  ('free', '["talk","builder"]'::jsonb),
+  ('pro', '["talk","calls","sms","whatsapp","browser","macros","image_gen","screen_vision","camera","overlay_mic","wakeword","home","routines","form_fill","builder"]'::jsonb)
 on conflict (plan) do nothing;

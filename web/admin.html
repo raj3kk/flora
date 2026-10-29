@@ -209,6 +209,7 @@ Admin banne ke liye: (1) app me Settings → “Website account link” me isi e
 <div id="plan-features-free">Login ke baad yahan aayenge.</div>
 <div id="plan-features-pro">Login ke baad yahan aayenge.</div>
 <p class="note" id="plan-features-status"></p>
+<p class="note">Builder quota (defaults, display-only — panel se editable nahi, koi save path nahi): Free: 3 projects + 5 AI builds/day; Pro: unlimited. 1 AI build = 1 code-generation call (plan-generation steps builds me nahi ginege); day = device local day. Quota device-side honest gate hai (hard enforcement nahi — server kabhi project code nahi dekhta); quota cross par imaandaar gate message + upgrade hint milega, silent block nahi. Ye builder quota, server-side Free brain-proxy 600s/day cap se ALAG hai (wo cap waisa hi rahega; dono limits builder AI calls par lagti hain). Free me builder shamil hai — quota-limited builder; quota khatm par Pro gate message, "no builder" nahi.</p>
 </section>
 
 <section class="card">
@@ -630,6 +631,17 @@ async function loadAudit() {
 }
 
 const FLAG_LABELS = { talk: "Baat-cheet (chat)", calls: "Calls", sms: "SMS", whatsapp: "WhatsApp", browser: "Browser", macros: "Macros", image_gen: "Image generation", screen_vision: "Screen vision", camera: "Camera", overlay_mic: "Overlay mic", wakeword: "Wakeword", home: "Home sync", routines: "Routines", form_fill: "Form fill" };
+// B5 (2026-10-29, CEO clearance option A): plan editor ke liye ALAG map.
+// PLAN_FLAG_LABELS = 14 purani keys + builder ("Builder"). Global flags
+// editor purane FLAG_LABELS par hi rehta hai — usme builder toggle NAHI
+// aana chahiye (builder plan-features key hai, feature-flags toggle nahi;
+// effective = plan AND flag, missing key fail-open = true, isliye builder
+// effectively plan-only hai). Quota defaults DISPLAY-ONLY hain (panel se
+// editable nahi): Free = 3 projects + 5 AI builds/day; Pro = unlimited.
+// 1 AI build = 1 code-generation call; day = device local day; quota
+// device-side honest gate hai, hard enforcement nahi; server-side Free
+// limiter brain-proxy 600s/day cap ALAG hai aur waisa hi rahega.
+const PLAN_FLAG_LABELS = { talk: "Baat-cheet (chat)", calls: "Calls", sms: "SMS", whatsapp: "WhatsApp", browser: "Browser", macros: "Macros", image_gen: "Image generation", screen_vision: "Screen vision", camera: "Camera", overlay_mic: "Overlay mic", wakeword: "Wakeword", home: "Home sync", routines: "Routines", form_fill: "Form fill", builder: "Builder" };
 
 async function loadOverview() {
   const el = document.getElementById('overview-cards');
@@ -961,14 +973,14 @@ async function loadPlanFeatures() {
       h.innerHTML = "<strong>" + (plan === "free" ? "Free" : "Pro") + "</strong>";
       el.appendChild(h);
       const cur = (d.plans && d.plans[plan]) || [];
-      Object.keys(FLAG_LABELS).forEach(k => {
+      Object.keys(PLAN_FLAG_LABELS).forEach(k => {
         const lab = document.createElement('label');
         lab.style.display = "block";
         const cb = document.createElement('input');
         cb.type = "checkbox"; cb.value = k; cb.checked = cur.indexOf(k) !== -1;
         cb.style.width = "auto"; cb.style.marginRight = "8px";
         lab.appendChild(cb);
-        lab.appendChild(document.createTextNode(FLAG_LABELS[k]));
+        lab.appendChild(document.createTextNode(PLAN_FLAG_LABELS[k]));
         el.appendChild(lab);
       });
       const btn = document.createElement('button');
