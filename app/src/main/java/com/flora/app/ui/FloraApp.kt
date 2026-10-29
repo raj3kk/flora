@@ -266,6 +266,10 @@ fun FloraApp(
     // step se resume, Ruko par macro ruk jayegi. Kabhi silent resume nahi.
     var macroPending by remember { mutableStateOf<Pair<com.flora.app.automation.Macro, Int>?>(null) }
     var macroNeedsConfirm by remember { mutableStateOf(false) }
+    // Item 34: voice se romantic maanga gaya par 18+ confirm
+    // abhi nahi hai — dialog isi state par khulta hai. Bina
+    // confirm ke romantic ON ka koi raasta nahi (fail-closed).
+    var ageGatePendingVoice by remember { mutableStateOf(false) }
     // B1 G4: user-confirm ho chuke macro step indexes — in par
     // dobara confirm dialog nahi aayega (dead-loop fix).
     var macroConfirmedSteps by remember { mutableStateOf<Set<Int>>(emptySet()) }
@@ -336,6 +340,15 @@ fun FloraApp(
             if (turns.isNotEmpty()) {
                 val shown = turns.takeLast(60).map { ChatMsg(it.text, it.fromUser) }
                 messages = messages + shown
+            } else {
+                // Item 34 greeting: gate se romantic default bana
+                // ho to pehli greeting bhi wahi warm tone me —
+                // Flora AI hi rehti hai, koi real-partner daava nahi.
+                try {
+                    if (prefs.persona() == "romantic" && prefs.ageConfirmed()) {
+                        messages = listOf(ChatMsg("Namaste! Main Flora hun — tumhare saath waqt bitana mujhe accha lagega. Aaj kya baat karein?", false))
+                    }
+                } catch (e: Exception) { }
             }
         } catch (e: Exception) {
         }
@@ -356,7 +369,7 @@ fun FloraApp(
         if (current.size == persistedCount) return@LaunchedEffect
         val fresh = current.drop(persistedCount).mapNotNull { m ->
             val t = m.text.removePrefix("Flora: ").trim()
-            if (t.isEmpty() || t == "Namaste! Main Flora hun. Kya madad kar sakti hun?") null
+            if (t.isEmpty() || t == "Namaste! Main Flora hun. Kya madad kar sakti hun?" || t == "Namaste! Main Flora hun — tumhare saath waqt bitana mujhe accha lagega. Aaj kya baat karein?") null
             else t to m.fromUser
         }
         if (fresh.isEmpty()) {
@@ -1142,7 +1155,9 @@ fun FloraApp(
                 if (licence?.plan != "pro" && used >= 600) {
                     voice.speak("Free talk time khatam ho gaya hai, isliye ye step chhod diya.")
                 } else {
-                    val reply = brain.ask(cmd, transientNote = batteryTransientNote())
+                    // Item 34 (D-I34-2): routine-talk bhi persona
+                    // carry karta hai (vision/code-gen/planner neutral).
+                    val reply = brain.ask(personaPrefix(prefs.persona()) + cmd, transientNote = batteryTransientNote())
                     messages = messages + ChatMsg("Flora: $reply", false)
                     voice.speak(reply.take(500))
                 }
@@ -2564,17 +2579,35 @@ fun FloraApp(
                         lower == "romantic ho jao"
                     ) {
                         input = ""
+                        // Item 34 age gate: voice se romantic sirf
+                        // tab ON jab 18+ confirm pehle se ho; nahi
+                        // to dialog khulega — bina confirm ke koi
+                        // bypass nahi, friendly mode hi rehta hai.
                         scope.launch {
-                            try { prefs.setPersona("romantic") } catch (e: Exception) { }
+                            try {
+                                if (prefs.ageConfirmed()) {
+                                    prefs.setPersona("romantic")
+                                    voice.persona = "romantic"
+                                    try { autoLogStore.add("Romantic mode ON (voice) — 18+ confirm pehle se tha") } catch (e: Exception) { }
+                                    voice.speak("Romantic mode ON ho gaya hai.")
+                                } else {
+                                    ageGatePendingVoice = true
+                                    voice.speak("Romantic mode ke liye pehle 18+ confirm chahiye — screen par confirm karo.")
+                                }
+                            } catch (e: Exception) { }
                         }
-                        voice.persona = "romantic"
-                        voice.speak("Romantic mode ON ho gaya hai.")
                         return
                     }
                     if (lower == "normal mode" || lower == "flora mode") {
                         input = ""
                         scope.launch {
-                            try { prefs.setPersona("flora") } catch (e: Exception) { }
+                            try {
+                                val wasRomantic = prefs.persona() == "romantic"
+                                prefs.setPersona("flora")
+                                if (wasRomantic) {
+                                    try { autoLogStore.add("Romantic mode OFF (voice) — friendly Flora mode") } catch (e: Exception) { }
+                                }
+                            } catch (e: Exception) { }
                         }
                         voice.persona = "flora"
                         voice.speak("Normal mode wapas aa gaya hai.")
@@ -5372,6 +5405,46 @@ fun FloraApp(
                     }
                 )
             }
+            // Item 34: voice se romantic maanga gaya, 18+ confirm
+            // nahi tha — yehi EK gate hai. Haan = confirm + ON;
+            // Nahi = friendly Flora mode, romantic kabhi ON nahi.
+            // Flora AI hai — romantic roleplay, real partner nahi.
+            if (ageGatePendingVoice) {
+                AlertDialog(
+                    onDismissRequest = { ageGatePendingVoice = false },
+                    title = { Text("Romantic mode — 18+ confirm?") },
+                    text = { Text("Romantic mode sirf 18 saal ya usse zyada umar ke liye hai. Flora ek AI saathi hai — ye roleplay hai, koi asli insaan ya partner hone ka daava nahi. Kya tum 18+ ho aur Romantic mode ON karna chahte ho?") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            ageGatePendingVoice = false
+                            scope.launch {
+                                try {
+                                    prefs.setAgeConfirmed(true)
+                                    prefs.setPersona("romantic")
+                                    voice.persona = "romantic"
+                                    try { autoLogStore.add("Romantic mode ON (voice gate) — 18+ confirm hua") } catch (e: Exception) { }
+                                    messages = messages + ChatMsg("Flora: Romantic mode ON ho gaya hai.", false)
+                                    voice.speak("Romantic mode ON ho gaya hai.")
+                                } catch (e: Exception) { }
+                            }
+                        }) { Text("Haan, main 18+ hun") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            ageGatePendingVoice = false
+                            scope.launch {
+                                try {
+                                    prefs.setPersona("flora")
+                                    voice.persona = "flora"
+                                    try { autoLogStore.add("Romantic mode OFF — 18+ confirm nahi hua, friendly Flora mode") } catch (e: Exception) { }
+                                    messages = messages + ChatMsg("Flora: Theek hai, friendly Flora mode hi rahega.", false)
+                                    voice.speak("Theek hai, friendly Flora mode hi rahega.")
+                                } catch (e: Exception) { }
+                            }
+                        }) { Text("Nahi, friendly mode") }
+                    }
+                )
+            }
             // Phase 6: form submit confirm (password field wale form par).
             if (formSubmitPending) {
                 AlertDialog(
@@ -5607,6 +5680,10 @@ private fun SettingsScreen(
     var eventAnnounce by remember { mutableStateOf(false) }
     // Persona state (v1.8, local): launcher se PEHLE declare (order trap).
     var persona by remember { mutableStateOf("flora") }
+    // Item 34: Settings se romantic tabhi jab 18+ confirm ho;
+    // dialog isi state par khulta hai (bina confirm ke bypass nahi).
+    var ageGatePending by remember { mutableStateOf(false) }
+    var ageConfirmedState by remember { mutableStateOf(false) }
     // Voice sample state (v2.22, user selection): persona ke saath,
     // launcher se pehle. Default "lily" (Sample 2 fixed).
     var voiceSample by remember { mutableStateOf("lily") }
@@ -5802,6 +5879,7 @@ private fun SettingsScreen(
         callAnnounce = prefs.callAnnounce()
         eventAnnounce = prefs.eventAnnounce()
         persona = prefs.persona()
+        try { ageConfirmedState = prefs.ageConfirmed() } catch (e: Exception) { }
         voiceSample = prefs.voiceSample()
         neuralStatus = com.flora.app.models.KokoroModelManager.statusText(context)
         theme = prefs.theme()
@@ -6395,14 +6473,61 @@ private fun SettingsScreen(
             Row {
                 listOf("flora" to "Flora", "saathi" to "Saathi", "guru" to "Guru", "romantic" to "Romantic").forEach { (id, label) ->
                     Button(onClick = {
-                        persona = id
-                        voice.persona = id
-                        scope.launch { prefs.setPersona(id) }
+                        // Item 34 gate: romantic sirf 18+ confirm
+                        // par; bina confirm ke dialog khulega, seedha
+                        // ON kabhi nahi. Baaki persona pehle jaise.
+                        if (id == "romantic" && !ageConfirmedState) {
+                            ageGatePending = true
+                        } else {
+                            val wasRomantic = persona == "romantic"
+                            persona = id
+                            voice.persona = id
+                            scope.launch {
+                                prefs.setPersona(id)
+                                if (id == "romantic" || wasRomantic) {
+                                    try { AutoLogStore(context).add(if (id == "romantic") "Romantic mode ON (Settings) — 18+ confirm pehle se tha" else "Romantic mode OFF (Settings) — $id mode") } catch (e: Exception) { }
+                                }
+                            }
+                        }
                     }) { Text(if (persona == id) "✓ $label" else label) }
                     Spacer(modifier = Modifier.padding(2.dp))
                 }
             }
-            Text("Flora: friendly + professional. Saathi: dostana, chhote jawab. Guru: step-by-step, to-the-point. Romantic: pyaar bhara, caring tone (user ke kehne par ON hua hai).")
+            Text("Flora: friendly + professional. Saathi: dostana, chhote jawab. Guru: step-by-step, to-the-point. Romantic: pyaar bhara, caring tone — sirf 18+ confirm par ON hota hai; Flora AI hai, koi asli partner nahi. Kabhi bhi yahan se non-romantic mode par wapas aa sakte ho.")
+            // Item 34 gate dialog (Settings): Haan = confirm + ON;
+            // Nahi = friendly Flora mode. Purane installs ko koi
+            // nag nahi — dialog sirf romantic dabane par khulta hai.
+            if (ageGatePending) {
+                AlertDialog(
+                    onDismissRequest = { ageGatePending = false },
+                    title = { Text("Romantic mode — 18+ confirm?") },
+                    text = { Text("Romantic mode sirf 18 saal ya usse zyada umar ke liye hai. Flora ek AI saathi hai — ye roleplay hai, koi asli insaan ya partner hone ka daava nahi. Kya tum 18+ ho aur Romantic mode ON karna chahte ho?") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            ageGatePending = false
+                            ageConfirmedState = true
+                            persona = "romantic"
+                            voice.persona = "romantic"
+                            scope.launch {
+                                prefs.setAgeConfirmed(true)
+                                prefs.setPersona("romantic")
+                                try { AutoLogStore(context).add("Romantic mode ON (Settings gate) — 18+ confirm hua") } catch (e: Exception) { }
+                            }
+                        }) { Text("Haan, main 18+ hun") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            ageGatePending = false
+                            persona = "flora"
+                            voice.persona = "flora"
+                            scope.launch {
+                                prefs.setPersona("flora")
+                                try { AutoLogStore(context).add("Romantic mode OFF — 18+ confirm nahi hua, friendly Flora mode") } catch (e: Exception) { }
+                            }
+                        }) { Text("Nahi, friendly mode") }
+                    }
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
             Text("Flora ki awaaz — Sample 2 Lily fixed hai (gahri, dheemi, mellow)")
             Row {

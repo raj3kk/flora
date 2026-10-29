@@ -19,9 +19,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.flora.app.data.AutoLogStore
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -129,10 +131,19 @@ fun SetupWizard(
     var personaSel by remember { mutableStateOf("flora") }
     var voiceSel by remember { mutableStateOf("lily") }
     var wizardNote by remember { mutableStateOf("") }
+    // Item 34: naye install par hi romantic-default gate-card;
+    // dialog state callbacks se PEHLE declare (order trap).
+    var ageGatePending by remember { mutableStateOf(false) }
+    var ageGateNote by remember { mutableStateOf("") }
+    var gateCardDismissed by remember { mutableStateOf(false) }
+    var freshInstall by remember { mutableStateOf(false) }
+    var ageConfirmedWiz by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         try { linkedEmail = prefs?.linkedEmail() ?: "" } catch (e: Exception) { }
         try { personaSel = prefs?.persona() ?: "flora" } catch (e: Exception) { }
         try { voiceSel = prefs?.voiceSample() ?: "lily" } catch (e: Exception) { }
+        try { freshInstall = prefs?.let { !(it.hasStoredPersona()) } ?: false } catch (e: Exception) { }
+        try { ageConfirmedWiz = prefs?.ageConfirmed() ?: false } catch (e: Exception) { }
     }
     // Launcher ke callback se PEHLE declare (order trap).
     var lastRequested by remember { mutableStateOf("") }
@@ -518,16 +529,95 @@ fun SetupWizard(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Persona (tone) chuno — awaaz Sample 2 Lily default hai (gahri, dheemi, mellow).")
                 Spacer(modifier = Modifier.height(8.dp))
+                // Item 34 (D-I34-1): NAYE install par hi romantic
+                // default ka gate-card — purane installs ko kabhi
+                // nag nahi (unka stored persona hi rehta hai).
+                // Confirm = romantic default; Nahi = friendly mode.
+                if (freshInstall && !ageConfirmedWiz && !gateCardDismissed) {
+                    Text("Flora ka default nature Romantic 18+ hai — pyaar bhara, caring saathi ka tone. Flora ek AI hai, koi asli partner nahi. Sirf 18+ ke liye.")
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row {
+                        Button(
+                            onClick = {
+                                ageConfirmedWiz = true
+                                personaSel = "romantic"
+                                wizardScope.launch {
+                                    try { prefs?.setAgeConfirmed(true) } catch (e: Exception) { }
+                                    try { prefs?.setPersona("romantic") } catch (e: Exception) { }
+                                    try { AutoLogStore(context).add("Romantic mode ON (wizard gate) — 18+ confirm hua, naya install default") } catch (e: Exception) { }
+                                }
+                            },
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) { Text("Haan, main 18+ hun — Romantic default") }
+                        Button(
+                            onClick = {
+                                gateCardDismissed = true
+                                personaSel = "flora"
+                                wizardScope.launch { try { prefs?.setPersona("flora") } catch (e: Exception) { } }
+                            },
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) { Text("Nahi, friendly mode") }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                if (ageGateNote.isNotEmpty()) {
+                    Text(ageGateNote)
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
                 Row {
                     listOf("flora" to "Flora", "saathi" to "Saathi", "guru" to "Guru", "romantic" to "Romantic").forEach { (id, label) ->
                         Button(
                             onClick = {
-                                personaSel = id
-                                wizardScope.launch { try { prefs?.setPersona(id) } catch (e: Exception) { } }
+                                // Item 34 gate: romantic seedha kabhi
+                                // ON nahi — bina confirm ke dialog.
+                                if (id == "romantic" && !ageConfirmedWiz) {
+                                    ageGatePending = true
+                                } else {
+                                    val wasRomantic = personaSel == "romantic"
+                                    personaSel = id
+                                    wizardScope.launch {
+                                        try { prefs?.setPersona(id) } catch (e: Exception) { }
+                                        if (id == "romantic" || wasRomantic) {
+                                            try { AutoLogStore(context).add(if (id == "romantic") "Romantic mode ON (wizard) — 18+ confirm pehle se tha" else "Romantic mode OFF (wizard) — $id mode") } catch (e: Exception) { }
+                                        }
+                                    }
+                                }
                             },
                             modifier = Modifier.padding(end = 4.dp)
                         ) { Text(if (personaSel == id) "✓ $label" else label) }
                     }
+                }
+                // Item 34 gate dialog (wizard): Haan = confirm + ON;
+                // Nahi = friendly Flora mode, romantic kabhi ON nahi.
+                if (ageGatePending) {
+                    AlertDialog(
+                        onDismissRequest = { ageGatePending = false },
+                        title = { Text("Romantic mode — 18+ confirm?") },
+                        text = { Text("Romantic mode sirf 18 saal ya usse zyada umar ke liye hai. Flora ek AI saathi hai — ye roleplay hai, koi asli insaan ya partner hone ka daava nahi. Kya tum 18+ ho aur Romantic mode ON karna chahte ho?") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                ageGatePending = false
+                                ageConfirmedWiz = true
+                                personaSel = "romantic"
+                                wizardScope.launch {
+                                    try { prefs?.setAgeConfirmed(true) } catch (e: Exception) { }
+                                    try { prefs?.setPersona("romantic") } catch (e: Exception) { }
+                                    try { AutoLogStore(context).add("Romantic mode ON (wizard gate) — 18+ confirm hua") } catch (e: Exception) { }
+                                }
+                            }) { Text("Haan, main 18+ hun") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                ageGatePending = false
+                                personaSel = "flora"
+                                ageGateNote = "18+ confirm nahi hua, isliye friendly Flora mode rakha hai — Romantic kabhi bhi Settings se 18+ confirm karke ON kar sakte ho."
+                                wizardScope.launch {
+                                    try { prefs?.setPersona("flora") } catch (e: Exception) { }
+                                    try { AutoLogStore(context).add("Romantic mode OFF — 18+ confirm nahi hua, friendly Flora mode") } catch (e: Exception) { }
+                                }
+                            }) { Text("Nahi, friendly mode") }
+                        }
+                    )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Row {

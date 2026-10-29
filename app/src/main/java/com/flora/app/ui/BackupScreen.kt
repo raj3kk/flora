@@ -250,8 +250,14 @@ fun BackupScreen(
                     else -> "App link is backup me nahi tha."
                 }
                 note = "Restore ho gaya. $linkText " +
-                    (report.licenceMessage ?: "") + " " + report.licenceKeyNote
+                    (report.licenceMessage ?: "") + " " + report.licenceKeyNote +
+                    if (report.romanticDowngraded) " Romantic mode backup me tha par is phone par 18+ confirm nahi mila, isliye friendly Flora mode par wapas aa gaya hai — Settings se 18+ confirm karke dobara ON kar sakte ho." else ""
                 try { autoLog.add("Backup se restore hua") } catch (e: Exception) { }
+                // Item 34 (D-I34-4): fail-closed downgrade chhupa
+                // nahi — Auto Log me bhi saaf entry.
+                if (report.romanticDowngraded) {
+                    try { autoLog.add("Romantic mode restore par downgrade hua (flora) — 18+ confirm nahi mila") } catch (e: Exception) { }
+                }
             } catch (e: BackupFailure) {
                 note = e.message ?: "Restore nahi hua."
             } catch (e: Exception) {

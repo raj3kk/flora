@@ -65,6 +65,9 @@ data class RestoreReport(
     val linkLost: Boolean,
     val licenceMessage: String?,
     val licenceKeyNote: String,
+    // Item 34 (D-I34-4): restore me romantic tha par is phone
+    // par 18+ confirm nahi mila -> flora par downgrade hua.
+    val romanticDowngraded: Boolean = false,
 )
 
 class FloraBackupManager(
@@ -189,6 +192,9 @@ class FloraBackupManager(
         val settings = JSONObject()
         settings.put("avatar", prefs.avatar())
         settings.put("persona", prefs.persona())
+        // Item 34: age-confirm flag bhi backup me — purane
+        // backup me ye key nahi hogi (fail-closed trigger).
+        settings.put("ageConfirmed", prefs.ageConfirmed())
         settings.put("voiceSample", prefs.voiceSample())
         settings.put("theme", prefs.theme())
         settings.put("wakeEnabled", prefs.wakeEnabled())
@@ -287,6 +293,7 @@ class FloraBackupManager(
         // dobara restore ka raasta bataya jata hai (blob intact
         // hai — dobara restore hi recovery hai). Backup format
         // change nahi hua. Success ka jhootha daava kabhi nahi.
+        restoreRomanticDowngraded = false
         try {
             writeAll(parsed)
         } catch (e: BackupFailure) {
@@ -318,6 +325,7 @@ class FloraBackupManager(
             licenceMessage = linkResult.third,
             licenceKeyNote = "Licence key backup me nahi rakhi jaati — key se licence " +
                 "chalane wale users ko import ke baad key dobara daalni hogi.",
+            romanticDowngraded = restoreRomanticDowngraded,
         )
     }
 
@@ -527,9 +535,22 @@ class FloraBackupManager(
         applySecrets(parsed.secrets)
     }
 
+    // Item 34 (D-I34-4): is restore me romantic fail-closed
+    // downgrade hua ya nahi — restoreFromBlob report me jata hai.
+    private var restoreRomanticDowngraded: Boolean = false
+
     private suspend fun applySettings(settings: JSONObject) {
         if (settings.has("avatar")) prefs.setAvatar(settings.optString("avatar", ""))
+        if (settings.has("ageConfirmed")) prefs.setAgeConfirmed(settings.optBoolean("ageConfirmed", false))
         if (settings.has("persona")) prefs.setPersona(settings.optString("persona", ""))
+        // Item 34 fail-closed: backup me romantic ho par is phone
+        // par 18+ confirm na ho (purana backup ya flag off) to
+        // chupchaap romantic wapas ON kabhi nahi — flora par
+        // downgrade + UI/Auto Log me imaandaar note (BackupScreen).
+        if (prefs.persona() == "romantic" && !prefs.ageConfirmed()) {
+            prefs.setPersona("flora")
+            restoreRomanticDowngraded = true
+        }
         if (settings.has("voiceSample")) prefs.setVoiceSample(settings.optString("voiceSample", ""))
         if (settings.has("theme")) prefs.setTheme(settings.optString("theme", ""))
         if (settings.has("wakeEnabled")) prefs.setWakeEnabled(settings.optBoolean("wakeEnabled", false))

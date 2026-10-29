@@ -92,7 +92,28 @@ class VoiceEngine(context: Context) {
     var voiceSample: String = "lily"
 
     private fun applyPersona() {
-        if (voiceSample == "lily") {
+        // Item 34 dead-branch fix: purana romantic else-if kabhi
+        // nahi chalta tha — voiceSample hamesha lily/isabella/
+        // myrtle me se ek hota hai, isliye sample branch pehle
+        // jeet jaati thi aur romantic tone dead tha. Ab romantic
+        // PEHLE check hota hai, sample ke base par narm/dheemi
+        // modulation ke saath (non-romantic branches bilkul wahi).
+        // Sirf system TTS tone; neural engine ko chheda nahi.
+        if (persona == "romantic") {
+            if (voiceSample == "lily") {
+                tts?.setPitch(0.90f)
+                tts?.setSpeechRate(0.84f)
+            } else if (voiceSample == "isabella") {
+                tts?.setPitch(1.00f)
+                tts?.setSpeechRate(0.86f)
+            } else if (voiceSample == "myrtle") {
+                tts?.setPitch(1.10f)
+                tts?.setSpeechRate(0.88f)
+            } else {
+                tts?.setPitch(1.25f)
+                tts?.setSpeechRate(0.90f)
+            }
+        } else if (voiceSample == "lily") {
             tts?.setPitch(0.95f)
             tts?.setSpeechRate(0.88f)
         } else if (voiceSample == "isabella") {
@@ -101,9 +122,6 @@ class VoiceEngine(context: Context) {
         } else if (voiceSample == "myrtle") {
             tts?.setPitch(1.15f)
             tts?.setSpeechRate(0.92f)
-        } else if (persona == "romantic") {
-            tts?.setPitch(1.25f)
-            tts?.setSpeechRate(0.90f)
         } else {
             tts?.setPitch(1.1f)
             tts?.setSpeechRate(0.95f)

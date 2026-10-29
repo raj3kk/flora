@@ -70,6 +70,12 @@ class FloraPreferences(private val context: Context) {
         val BATTERY_LAST_WARNED = stringPreferencesKey("battery_last_warned")
         val DRIVING_MODE = booleanPreferencesKey("driving_mode")
         val PERSONA = stringPreferencesKey("persona")
+        // Item 34 (Romantic 18+ default): age-confirm flag — sirf
+        // user ke confirm par true hota hai; romantic enable ka
+        // EK gate isi flag par hai (Settings/wizard/voice teeno).
+        // Backup me bhi jata hai; purane backup me na ho to
+        // restore fail-closed (romantic -> flora) hota hai.
+        val AGE_CONFIRMED = booleanPreferencesKey("age_confirmed")
         val VOICE_SAMPLE = stringPreferencesKey("voice_sample")
         val THEME = stringPreferencesKey("theme")
         val MODELS_MANIFEST_URL = stringPreferencesKey("models_manifest_url")
@@ -628,6 +634,22 @@ class FloraPreferences(private val context: Context) {
     suspend fun setPersona(value: String) {
         context.floraDataStore.edit { it[Keys.PERSONA] = value }
     }
+
+    /** Item 34: 18+ age-confirm flag. Default false — romantic
+     *  kabhi bhi bina confirm ke ON nahi hota. */
+    suspend fun ageConfirmed(): Boolean =
+        context.floraDataStore.data.map { it[Keys.AGE_CONFIRMED] ?: false }.first()
+
+    suspend fun setAgeConfirmed(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.AGE_CONFIRMED] = value }
+    }
+
+    /** Item 34 (D-I34-1): kya persona kabhi store hua hai?
+     *  Naye install par false — sirf tabhi wizard me romantic
+     *  default ka gate-card dikhta hai; purane installs ko
+     *  kabhi nag nahi (unka stored persona hi rehta hai). */
+    suspend fun hasStoredPersona(): Boolean =
+        context.floraDataStore.data.map { it.contains(Keys.PERSONA) }.first()
 
     /** Voice sample (v2.22, user selection 2026-10-28): Sample 2
      *  Lily har jagah fixed. Default "lily". */
