@@ -19,11 +19,16 @@ import androidx.compose.ui.unit.dp
 import com.flora.app.security.PinVault
 
 /**
- * PIN lock screen (v2.22, Phase 5, G8) — PIN se
- * chhootne wala lock, kabhi na chhootne wala nahi.
+ * PIN gate screen (v2.22, Phase 5, G8; Cycle 3, F6 me naam
+ * aur text imaandaar kiye gaye).
+ * YE APP-WIDE LOCK NAHI HAI — sirf ek PIN gate wali
+ * screen hai:
  * - PIN sahi ho to onUnlock() (chat par wapas).
- * - Back dabao to bhi chat par wapas — user kabhi
- *   is screen me phansa nahi rahega.
+ * - Back dabao to bhi chat par wapas, BINA PIN ke — user
+ *   kabhi is screen me phansa nahi rahega (anti-lockout
+ *   intent barkaraar hai, Back escape hataya NAHI gaya).
+ * - Asli suraksha Face Lock (Chat gate — PIN + timeout)
+ *   aur Guardian hai, ye screen nahi.
  * - PIN set hi na ho to guidance dikhti hai (Settings
  *   me PIN set karo), lock ka naatak nahi.
  */
@@ -40,16 +45,23 @@ fun LockScreen(
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp)
     ) {
-        Text("Flora Lock")
+        Text("PIN gate (app-wide lock nahi)")
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Ye sirf ek PIN gate wali screen hai — app-wide " +
+                "lock nahi hai. Back dabate hi Chat par wapas ja " +
+                "sakoge, bina PIN ke. Asli suraksha Face Lock " +
+                "(Chat gate) + Guardian hai."
+        )
         Spacer(modifier = Modifier.height(8.dp))
         if (!hasPin) {
             Text(
-                "Abhi koi PIN set nahi hai. Lock lagane ke liye " +
-                    "pehle Settings me ja kar PIN set karo, phir " +
-                    "yahan wapas aao."
+                "Abhi koi PIN set nahi hai. PIN gate use karne " +
+                    "ke liye pehle Settings me ja kar PIN set karo, " +
+                    "phir yahan wapas aao."
             )
         } else {
-            Text("Flora kholne ke liye PIN daalo.")
+            Text("Is gate se aage jaane ke liye PIN daalo.")
             Spacer(modifier = Modifier.height(8.dp))
             TextField(
                 value = pin,
@@ -64,7 +76,12 @@ fun LockScreen(
                     note = ""
                     onUnlock()
                 } else {
-                    note = "Galat PIN — dobara daalo."
+                    // Cycle 3, F2: lockout par imaandaar waqt.
+                    note = if (pinVault.isLockedOut()) {
+                        "Bahut zyada galat tries — ${pinVault.lockoutRemainingSeconds()} second baad dobara koshish karo."
+                    } else {
+                        "Galat PIN — dobara daalo."
+                    }
                 }
             }) { Text("Khol do") }
         }

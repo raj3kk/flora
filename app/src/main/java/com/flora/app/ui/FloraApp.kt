@@ -119,7 +119,9 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.HOME -> "Home"
     Screen.AVATAR -> "Avatar"
     Screen.BROWSER -> "Browser"
-    Screen.LOCK -> "Lock"
+    // Cycle 3, F6: "Lock" naam jhootha daava tha (Back se
+    // skip ho jata hai) — ab imaandaar naam "PIN gate".
+    Screen.LOCK -> "PIN gate"
     Screen.PC_LINK -> "PC Link"
 }
 
@@ -204,6 +206,12 @@ fun FloraApp(
     var licence by remember { mutableStateOf<LicenceStatus?>(null) }
     var faceLockOn by remember { mutableStateOf(false) }
     var chatUnlocked by remember { mutableStateOf(false) }
+    // Cycle 3, F1 (e): chat unlock ka waqt — timeout isi se
+    // gina jata hai (chatUnlocked akela kabhi reset nahi hota
+    // tha, ab session timeout + screen/faceLock sync use reset
+    // karte hain). Prefs wala session (setFaceLockUnlock)
+    // background service ke liye alag se rakha jata hai.
+    var chatUnlockedAtMs by remember { mutableStateOf(0L) }
     var pinInput by remember { mutableStateOf("") }
     var lockNote by remember { mutableStateOf("") }
     var pendingVoiceUnlock by remember { mutableStateOf(false) }
@@ -348,6 +356,79 @@ fun FloraApp(
                 voice.speak(msg)
                 try { autoLogStore.add("Guardian ne roka: PIN verify ke bina kaam nahi chala") } catch (e: Exception) { }
             }
+        }
+    }
+
+    // Cycle 3, F1: Face Lock session ka EK sach (foreground).
+    // Lock OFF ho to hamesha khula; ON ho to sirf tab jab
+    // chatUnlocked ho AUR unlock ka waqt timeout ke andar ho.
+    // sendChat gate, routine runner, due-jobs block, voice
+    // paths — sab isi ko dekhte hain (ek gate, teeno vectors).
+    fun isFaceLockUnlockedNow(): Boolean {
+        if (!faceLockOn) return true
+        if (!chatUnlocked) return false
+        return System.currentTimeMillis() - chatUnlockedAtMs <=
+            GuardianGate.FACE_LOCK_SESSION_TIMEOUT_MS
+    }
+
+    // Cycle 3, F1: unlock ka EK raasta (composition + prefs
+    // session dono ek saath) — PIN unlock aur voice unlock
+    // dono isi se guzarte hain, taaki koi raasta prefs
+    // session set karna na bhoole (warna background service
+    // locked samajh kar jawab dena band kar degi).
+    fun noteFaceLockUnlock() {
+        chatUnlocked = true
+        chatUnlockedAtMs = System.currentTimeMillis()
+        scope.launch {
+            try { prefs.setFaceLockUnlock() } catch (e: Exception) { }
+        }
+    }
+
+    // Cycle 3, F5: website publish ka EK helper (pehle routine
+    // + chat me do identical blocks the — ab dono isi ko
+    // bulate hain). Slug linked identity (effectiveUserId)
+    // se banta hai; unlinked ho to per-install slug par
+    // TEMPORARY warning ke saath publish hota hai (reinstall
+    // par naya UUID = naya slug = purani site orphan — ye
+    // baat user ko publish se pehle hi bata di jati hai).
+    // SERVER-POLICY NOTE (app team ke domain se bahar):
+    // bucket policy anon upsert ko kisi bhi slug par allow
+    // karti hai ya nahi, ye server team ko check karna hai —
+    // is helper se policy nahi badalti.
+    suspend fun publishSavedWebsite() {
+        voice.speak("Pichhli website ko public link par daal rahi hun.")
+        try {
+            val file = java.io.File(appContext.filesDir, "last-website.html")
+            if (!file.exists()) {
+                voice.speak("Pehle website banao — 'website banao' bol kar ek website banwao, phir main use publish kar dungi.")
+                return
+            }
+            val html = file.readText()
+            val anonKey = try { prefs.supabaseAnonKey() } catch (e: Exception) { "" }
+            val linked = try { prefs.linkedUserId() } catch (e: Exception) { "" }
+            val uid = try { prefs.effectiveUserId() } catch (e: Exception) { "" }
+            if (anonKey.isBlank() || uid.isBlank()) {
+                voice.speak("Publish ke liye app ki setting me website wali key chahiye — Settings me daal kar dobara bolo.")
+                return
+            }
+            val slug = "site-" + uid.take(8)
+            if (linked.isEmpty()) {
+                val warn = "Account link nahi hai, isliye ye publish temporary link par ho raha hai — app reinstall hone par naya link banega aur purani site orphan ho jayegi. Permanent link ke liye Settings me website account link karo."
+                messages = messages + ChatMsg("Flora: $warn", false)
+                voice.speak(warn)
+            }
+            val result = WebsitePublisher.publish(html, slug, anonKey)
+            if (result.isSuccess) {
+                val url = result.getOrNull() ?: ""
+                messages = messages + ChatMsg("Flora: Website publish ho gayi — $url", false)
+                voice.speak("Website publish ho gayi hai, link chat me de diya hai.")
+            } else {
+                // Cycle 1, APP-C1-006: raw exception TTS
+                // me kabhi nahi — sirf warm Hindi line.
+                voice.speak("Arre, website publish nahi ho payi — thodi der baad dobara koshish karo.")
+            }
+        } catch (e: Exception) {
+            voice.speak("Publish me dikkat aayi, dobara koshish karo.")
         }
     }
 
@@ -640,7 +721,11 @@ fun FloraApp(
     var routineQueue by remember { mutableStateOf<List<String>>(emptyList()) }
     var routineName by remember { mutableStateOf("") }
     var routineRunning by remember { mutableStateOf(false) }
-    LaunchedEffect(routineQueue) {
+    // Cycle 3, F1 (c): key me chatUnlocked bhi hai — unlock
+    // hote hi ruki hui queue khud chal padegi (effect dobara
+    // chalega); lock hote hi chalti routine ruk jayegi (step
+    // consume nahi hua, isliye kuch chupchaap nahi chalega).
+    LaunchedEffect(routineQueue, chatUnlocked) {
         if (routineQueue.isEmpty()) {
             if (routineRunning) {
                 routineRunning = false
@@ -648,6 +733,16 @@ fun FloraApp(
                 messages = messages + ChatMsg("Flora: $done", false)
                 voice.speak(done)
             }
+            return@LaunchedEffect
+        }
+        // Face Lock par routine QUEUE ME RUKEGI — na chalegi,
+        // na drop hogi, na call/SMS step chupchaap chalega.
+        // Unlock hote hi (key change) ye effect dobara chalega
+        // aur wahi step se aage badhega.
+        if (faceLockOn && !isFaceLockUnlockedNow()) {
+            val lockMsg = "Routine ruki hui hai — Chat lock hai. PIN daal kar unlock karo, unlock hote hi routine khud chalegi."
+            messages = messages + ChatMsg("Flora: $lockMsg", false)
+            voice.speak(lockMsg)
             return@LaunchedEffect
         }
         val cmd = routineQueue.first()
@@ -803,36 +898,10 @@ fun FloraApp(
                 }
             }
             lower == "website publish karo" -> {
-                voice.speak("Pichhli website ko public link par daal rahi hun.")
-                scope.launch {
-                    try {
-                        val file = java.io.File(appContext.filesDir, "last-website.html")
-                        if (!file.exists()) {
-                            voice.speak("Pehle website banao — 'website banao' bol kar ek website banwao, phir main use publish kar dungi.")
-                            return@launch
-                        }
-                        val html = file.readText()
-                        val anonKey = try { prefs.supabaseAnonKey() } catch (e: Exception) { "" }
-                        val uid = try { prefs.userId() } catch (e: Exception) { "" }
-                        if (anonKey.isBlank() || uid.isBlank()) {
-                            voice.speak("Publish ke liye app ki setting me website wali key chahiye — Settings me daal kar dobara bolo.")
-                            return@launch
-                        }
-                        val slug = "site-" + uid.take(8)
-                        val result = WebsitePublisher.publish(html, slug, anonKey)
-                        if (result.isSuccess) {
-                            val url = result.getOrNull() ?: ""
-                            messages = messages + ChatMsg("Flora: Website publish ho gayi — $url", false)
-                            voice.speak("Website publish ho gayi hai, link chat me de diya hai.")
-                        } else {
-                            // Cycle 1, APP-C1-006: raw exception TTS
-                            // me kabhi nahi — sirf warm Hindi line.
-                            voice.speak("Arre, website publish nahi ho payi — thodi der baad dobara koshish karo.")
-                        }
-                    } catch (e: Exception) {
-                        voice.speak("Publish me dikkat aayi, dobara koshish karo.")
-                    }
-                }
+                // Cycle 3, F5: dedup — publishSavedWebsite helper
+                // (routine effect suspend context me hai, isliye
+                // seedha call; chat branch scope.launch me karta hai).
+                publishSavedWebsite()
             }
             lower == "sos" || lower == "sos bhejo" || lower == "madad" -> {
                 screen = Screen.SOS
@@ -968,6 +1037,36 @@ fun FloraApp(
     }
     LaunchedEffect(screen) {
         if (screen == Screen.CHAT) faceLockOn = prefs.faceLock()
+    }
+
+    // Cycle 3, F1 (e): Face Lock unlock session ka reset.
+    // (1) Timeout: unlock ke FACE_LOCK_SESSION_TIMEOUT_MS
+    // baad chat dobara lock (PIN dobara chahiye) — ye fixed
+    // session timeout hai, Guardian ke idle-timeout se alag
+    // constant par (GuardianGate.FACE_LOCK_SESSION_TIMEOUT_MS).
+    // (2) faceLockOn badle (Settings se ON/OFF) to composition
+    // unlock prefs session se dobara sync ho — ON karne par
+    // purana unlocked state aage nahi badhega (Settings ON
+    // karte waqt prefs session clear hota hai).
+    LaunchedEffect(chatUnlocked) {
+        if (chatUnlocked) {
+            kotlinx.coroutines.delay(GuardianGate.FACE_LOCK_SESSION_TIMEOUT_MS)
+            chatUnlocked = false
+            chatUnlockedAtMs = 0L
+            try { prefs.clearFaceLockUnlock() } catch (e: Exception) { }
+        }
+    }
+    LaunchedEffect(faceLockOn) {
+        if (!faceLockOn) {
+            chatUnlocked = false
+            chatUnlockedAtMs = 0L
+        } else {
+            val sessionOk = try { prefs.isFaceLockUnlocked() } catch (e: Exception) { false }
+            if (!sessionOk) {
+                chatUnlocked = false
+                chatUnlockedAtMs = 0L
+            }
+        }
     }
 
     LaunchedEffect(voiceResult.value) {
@@ -1192,7 +1291,9 @@ fun FloraApp(
                             onClick = { screen = Screen.ROUTINES; menuOpen = false },
                         )
                         DropdownMenuItem(
-                            text = { Text("Lock") },
+                            // Cycle 3, F6: menu label bhi imaandaar —
+                            // ye app-wide lock nahi, sirf PIN gate hai.
+                            text = { Text("PIN gate") },
                             onClick = { screen = Screen.LOCK; menuOpen = false },
                         )
                         DropdownMenuItem(
@@ -1261,7 +1362,17 @@ fun FloraApp(
                                     routineName = found.joinToString(", ") { it.name }
                                     routineQueue = found.flatMap { it.commands }
                                     routineRunning = true
-                                    val msg = "Waqt ho gaya — routine '${routineName}' chalu kar raha hun."
+                                    // Cycle 3, F1 (c): locked ho to
+                                    // queue bhar di gayi hai, par
+                                    // routine runner use tab tak
+                                    // nahi chalayega jab tak unlock
+                                    // na ho — "chalu kar raha hun"
+                                    // ka jhootha daava yahan nahi.
+                                    val msg = if (faceLockOn && !isFaceLockUnlockedNow()) {
+                                        "Routine '${routineName}' ka waqt ho gaya hai, par Chat lock hai — PIN daal kar unlock karo, unlock hote hi routine chalegi."
+                                    } else {
+                                        "Waqt ho gaya — routine '${routineName}' chalu kar raha hun."
+                                    }
                                     messages = messages + ChatMsg("Flora: $msg", false)
                                     voice.speak(msg)
                                 } else {
@@ -1274,8 +1385,8 @@ fun FloraApp(
                     } catch (e: Exception) {
                     }
                 }
-                if (faceLockOn && !chatUnlocked) {
-                    Text("Chat locked hai (Face Lock ON). PIN daal kar unlock kijiye. Face presence check se unlock nahi hota — PIN chahiye, aur awaaz enrolled ho to uske baad awaaz ka check bhi lagega.")
+                if (faceLockOn && !isFaceLockUnlockedNow()) {
+                    Text("Chat locked hai (Face Lock ON). PIN daal kar unlock kijiye. Face presence check se unlock nahi hota — PIN chahiye, aur awaaz enrolled ho to uske baad awaaz ka check bhi lagega. Unlock 15 minute ke liye hota hai, phir PIN dobara chahiye.")
                     Spacer(modifier = Modifier.height(8.dp))
                     if (pendingVoiceUnlock) {
                         // PIN sahi ho gaya; ab awaaz ka check (v2.22).
@@ -1293,7 +1404,7 @@ fun FloraApp(
                                     if (result.matched) {
                                         guardian.markVoiceVerified()
                                         pendingVoiceUnlock = false
-                                        chatUnlocked = true
+                                        noteFaceLockUnlock()
                                         lockNote = ""
                                         voiceUnlockNote = ""
                                         voice.speak("Awaaz mil gayi, chat khol raha hun.")
@@ -1335,11 +1446,15 @@ fun FloraApp(
                                     voiceUnlockNote = ""
                                     lockNote = "PIN sahi hai, ab awaaz se confirm karo."
                                 } else {
-                                    chatUnlocked = true
+                                    noteFaceLockUnlock()
                                     lockNote = ""
                                 }
                             } else {
-                                lockNote = "Galat PIN."
+                                lockNote = if (pinVault.isLockedOut()) {
+                                    "Bahut zyada galat tries — ${pinVault.lockoutRemainingSeconds()} second baad dobara koshish karo."
+                                } else {
+                                    "Galat PIN."
+                                }
                             }
                             pinInput = ""
                         }) { Text("Unlock karo") }
@@ -1669,6 +1784,23 @@ fun FloraApp(
                 fun sendChat(questionRaw: String) {
                     val question = questionRaw.trim()
                     if (question.isEmpty() || busy) return
+                    // Cycle 3, F1 (a/b): Face Lock gate — typed,
+                    // voice, continuous-mic, barge-in, pending-task
+                    // saare raaste isi sendChat se jaate hain,
+                    // isliye EK gate sabko rokta hai. Locked
+                    // voice command yahan drop hota hai, par
+                    // bina bataye nahi — message saaf kehta hai
+                    // ki PIN ke baad dobara bolna/bhejna padega
+                    // (pending command unlock par khud nahi chalega).
+                    // Typed mic-dialog raasta (voiceResult sirf
+                    // input bharta hai, send nahi karta) chheda nahi.
+                    if (faceLockOn && !isFaceLockUnlockedNow()) {
+                        input = ""
+                        val lockMsg = "Chat lock hai — pehle PIN daal kar unlock karo, phir dobara bolo ya bhejo. Ye wala message/task lock par nahi chala."
+                        messages = messages + ChatMsg("Flora: $lockMsg", false)
+                        voice.speak(lockMsg)
+                        return
+                    }
                     // Teach-by-doing (v2.22, P4-F20): "routine
                     // sikhao <naam>" ke baad user jo commands bolta
                     // hai, wo execute NAHI hote — steps ke roop me
@@ -4152,36 +4284,9 @@ fun FloraApp(
                     // starter + publish — teeno chat se chalte hain.
                     if (lower == "website publish karo") {
                         input = ""
-                        voice.speak("Pichhli website ko public link par daal rahi hun.")
-                        scope.launch {
-                            try {
-                                val file = java.io.File(appContext.filesDir, "last-website.html")
-                                if (!file.exists()) {
-                                    voice.speak("Pehle website banao — 'website banao' bol kar ek website banwao, phir main use publish kar dungi.")
-                                    return@launch
-                                }
-                                val html = file.readText()
-                                val anonKey = try { prefs.supabaseAnonKey() } catch (e: Exception) { "" }
-                                val uid = try { prefs.userId() } catch (e: Exception) { "" }
-                                if (anonKey.isBlank() || uid.isBlank()) {
-                                    voice.speak("Publish ke liye app ki setting me website wali key chahiye — Settings me daal kar dobara bolo.")
-                                    return@launch
-                                }
-                                val slug = "site-" + uid.take(8)
-                                val result = WebsitePublisher.publish(html, slug, anonKey)
-                                if (result.isSuccess) {
-                                    val url = result.getOrNull() ?: ""
-                                    messages = messages + ChatMsg("Flora: Website publish ho gayi — $url", false)
-                                    voice.speak("Website publish ho gayi hai, link chat me de diya hai.")
-                                } else {
-                                    // Cycle 1, APP-C1-006: raw exception TTS
-                                    // me kabhi nahi — sirf warm Hindi line.
-                                    voice.speak("Arre, website publish nahi ho payi — thodi der baad dobara koshish karo.")
-                                }
-                            } catch (e: Exception) {
-                                voice.speak("Publish me dikkat aayi, dobara koshish karo.")
-                            }
-                        }
+                        // Cycle 3, F5: dedup — publishSavedWebsite
+                        // helper (routine branch bhi isi ko bulata hai).
+                        scope.launch { publishSavedWebsite() }
                         return
                     }
                     // Live update, chat se (v2.22, Phase 6 fix):
@@ -4747,7 +4852,7 @@ fun FloraApp(
                                 guardianPinNote = ""
                                 scope.launch { pending() }
                             } else {
-                                guardianPinNote = "Galat PIN."
+                                guardianPinNote = if (pinVault.isLockedOut()) "Bahut zyada galat tries — ${pinVault.lockoutRemainingSeconds()} second baad dobara koshish karo." else "Galat PIN."
                                 guardianPinInput = ""
                             }
                         }) { Text("Verify karo") }
@@ -4954,9 +5059,15 @@ private fun SettingsScreen(
                             // note me nahi — sirf warm Hindi message.
                             note = "Google se link nahi ho paya, dobara koshish karo."
                         } else {
-                            prefs.setLink(res.uid, account?.email ?: "", res.refreshToken)
-                            linkedEmailDisplay = account?.email ?: ""
-                            note = "Google se account link ho gaya."
+                            // Cycle 3, F3: setLink fail (encrypt
+                            // fail) par jhootha "link ho gaya" nahi.
+                            val linkSaved = prefs.setLink(res.uid, account?.email ?: "", res.refreshToken)
+                            if (!linkSaved) {
+                                note = "Account link save nahi ho paya, dobara koshish karo."
+                            } else {
+                                linkedEmailDisplay = account?.email ?: ""
+                                note = "Google se account link ho gaya."
+                            }
                         }
                     }
                 }
@@ -5451,30 +5562,37 @@ private fun SettingsScreen(
                                 // note me nahi — sirf warm Hindi message.
                                 note = "Account link nahi ho paya — email aur password dobara check karke koshish karo."
                             } else {
-                                prefs.setLink(result.uid, linkEmail.trim(), result.refreshToken)
-                                // Phase 8 link fix: linked UI tabhi
-                                // jab server row confirm ho. Sync
-                                // ka result ab dekha jata hai
-                                // (pehle ignore hota tha, isliye
-                                // sync hue bina hi "Linked" dikhta tha).
-                                prefs.setLinkServerConfirmed(false)
-                                linkedEmailDisplay = linkEmail.trim()
-                                linkConfirmedDisplay = false
-                                linkEmail = ""
-                                val aid = Settings.Secure.getString(
-                                    context.contentResolver, Settings.Secure.ANDROID_ID
-                                )
-                                val token = prefs.fcmToken()
-                                if (token.isEmpty()) {
-                                    note = "Login ho gaya, par server sync abhi baaki hai (FCM token nahi mila) — app restart karte hi sync ho jayega, ya 'Server sync dobara karo' dabao."
+                                // Cycle 3, F3: setLink fail (encrypt
+                                // fail) par linked UI + sync aage
+                                // nahi — imaandaar fail message.
+                                val linkSaved = prefs.setLink(result.uid, linkEmail.trim(), result.refreshToken)
+                                if (!linkSaved) {
+                                    note = "Account link save nahi ho paya, dobara koshish karo."
                                 } else {
-                                    val ok = licenceClient.syncPushToken(result.uid, prefs.deviceId(aid), token)
-                                    if (ok) {
-                                        prefs.setLinkServerConfirmed(true)
-                                        linkConfirmedDisplay = true
-                                        note = "Website account link ho gaya — ab website wala Pro isi app me dikhega."
+                                    // Phase 8 link fix: linked UI tabhi
+                                    // jab server row confirm ho. Sync
+                                    // ka result ab dekha jata hai
+                                    // (pehle ignore hota tha, isliye
+                                    // sync hue bina hi "Linked" dikhta tha).
+                                    prefs.setLinkServerConfirmed(false)
+                                    linkedEmailDisplay = linkEmail.trim()
+                                    linkConfirmedDisplay = false
+                                    linkEmail = ""
+                                    val aid = Settings.Secure.getString(
+                                        context.contentResolver, Settings.Secure.ANDROID_ID
+                                    )
+                                    val token = prefs.fcmToken()
+                                    if (token.isEmpty()) {
+                                        note = "Login ho gaya, par server sync abhi baaki hai (FCM token nahi mila) — app restart karte hi sync ho jayega, ya 'Server sync dobara karo' dabao."
                                     } else {
-                                        note = "Login ho gaya, par server sync nahi hua — 'Server sync dobara karo' dabao ya app restart karo."
+                                        val ok = licenceClient.syncPushToken(result.uid, prefs.deviceId(aid), token)
+                                        if (ok) {
+                                            prefs.setLinkServerConfirmed(true)
+                                            linkConfirmedDisplay = true
+                                            note = "Website account link ho gaya — ab website wala Pro isi app me dikhega."
+                                        } else {
+                                            note = "Login ho gaya, par server sync nahi hua — 'Server sync dobara karo' dabao ya app restart karo."
+                                        }
                                     }
                                 }
                             }
@@ -5742,7 +5860,7 @@ private fun SettingsScreen(
                     guardian.markPinVerified()
                     note = "PIN sahi hai — 15 minute idle tak unlock rahega, phir dobara PIN maanga jayega."
                 } else {
-                    note = "Galat PIN."
+                    note = if (pinVault.isLockedOut()) "Bahut zyada galat tries — ${pinVault.lockoutRemainingSeconds()} second baad dobara koshish karo." else "Galat PIN."
                 }
                 verifyPin = ""
             }) { Text("PIN verify karo") }
@@ -5758,6 +5876,10 @@ private fun SettingsScreen(
                             } else {
                                 faceLock = true
                                 prefs.setFaceLock(true)
+                                // Cycle 3, F1: lock ON karte hi purana
+                                // unlock session khatam (warna ON
+                                // karne ke baad bhi unlocked rehta).
+                                prefs.clearFaceLockUnlock()
                                 note = "Face Lock ON ho gaya."
                             }
                         }
@@ -5872,7 +5994,7 @@ private fun SettingsScreen(
                                 guardianPinNote = ""
                                 scope.launch { pending() }
                             } else {
-                                guardianPinNote = "Galat PIN."
+                                guardianPinNote = if (pinVault.isLockedOut()) "Bahut zyada galat tries — ${pinVault.lockoutRemainingSeconds()} second baad dobara koshish karo." else "Galat PIN."
                                 guardianPinInput = ""
                             }
                         }) { Text("Verify karo") }
