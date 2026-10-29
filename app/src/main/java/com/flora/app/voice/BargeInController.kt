@@ -7,6 +7,8 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import androidx.core.content.ContextCompat
+import com.flora.app.data.FloraPreferences
+import com.flora.app.data.LicenceGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -23,6 +25,12 @@ import kotlinx.coroutines.launch
  * false deta hai — chupchaap no-barge-in, kabhi crash nahi.
  * Audio kabhi save/upload ke alawa kahin nahi jata; zyada
  * se zyada 30 second ke baad apne aap ruk jata hai.
+ * Cycle 1, APP-C1-002: Deepgram streaming start se pehle
+ * wahi LicenceGate check lagta hai jo FloraRecognitionService
+ * me hai — blocked / free-cap-khatm user ka Deepgram kharcha
+ * nahi hoga. (FloraApp call site par bhi gate hai; ye
+ * controller-level guard hai taaki koi bhi caller isse
+ * bypass karke stream na khol sake.)
  */
 class BargeInController(private val context: Context) {
 
@@ -34,7 +42,10 @@ class BargeInController(private val context: Context) {
     var running = false
         private set
 
-    fun start(key: String, onFinal: (String) -> Unit): Boolean {
+    // Suspend isliye hai taaki LicenceGate (suspend) stream
+    // start se pehle chal sake — ekmatra caller FloraApp
+    // pehle se scope.launch ke andar se bulata hai.
+    suspend fun start(key: String, onFinal: (String) -> Unit): Boolean {
         if (running || key.isEmpty()) return false
         if (ContextCompat.checkSelfPermission(
                 context, Manifest.permission.RECORD_AUDIO
@@ -42,6 +53,15 @@ class BargeInController(private val context: Context) {
         ) {
             return false
         }
+        // APP-C1-002: FloraRecognitionService wala hi gate —
+        // stream khulne se pehle. Blocked ho to false, koi
+        // Deepgram call nahi, koi kharcha nahi.
+        val gate = try {
+            LicenceGate.check(FloraPreferences(context))
+        } catch (e: Exception) {
+            null
+        }
+        if (gate is LicenceGate.Result.Blocked) return false
         val sampleRate = 16000
         val minBuf = AudioRecord.getMinBufferSize(
             sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT

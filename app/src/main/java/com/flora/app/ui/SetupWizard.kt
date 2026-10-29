@@ -41,9 +41,12 @@ import androidx.core.content.ContextCompat
  * hai — ek dialog ke baad doosra). Har permission ki row par tap
  * karke usko akela bhi maanga ja sakta hai, aur "App settings
  * kholo" se user khud Settings me jaa kar bhi de sakta hai.
- * Sirf Microphone zaroori hai — uske bina "Aage badho" nahi
- * khulega; baaki permissions ke bina sirf unke features band
- * rahenge, app nahi atakegi.
+ * Microphone bolne ke liye chahiye — par uske bina bhi aage
+ * badha ja sakta hai (Cycle 1, APP-C1-001): mic deny karne
+ * wala user "Mic ke bina aage badho" se step 3 par ja sakta
+ * hai, tab sirf likh kar baat hogi, bol kar nahi. Baaki
+ * permissions ke bina sirf unke features band rahenge, app
+ * nahi atakegi.
  *
  * Step 3 ke saare kaam user ki marzi se hain — koi bhi step
  * chhoda ja sakta hai, "Ho gaya" dabate hi Flora khul jayegi.
@@ -56,7 +59,7 @@ private val WIZARD_PERMISSIONS = listOf(
     WizardPermission(
         Manifest.permission.RECORD_AUDIO,
         "Microphone",
-        "Taaki tum Flora se baat kar sako. Zaroori hai.",
+        "Taaki tum Flora se baat kar sako. Bina iske sirf likh kar baat hogi.",
     ),
     WizardPermission(
         Manifest.permission.POST_NOTIFICATIONS,
@@ -116,12 +119,18 @@ fun SetupWizard(onDone: () -> Unit) {
         attempted = true
         grants = grants + result
     }
+    // Cycle 1, APP-C1-001: system check HI sach hai. Pehle
+    // grants map ka purana denial (false) system check ko
+    // daba deta tha — Settings se mic grant karke wapas aane
+    // par bhi "Aage badho" stale-disabled rehta tha, har launch
+    // par gate atak jata tha. Ab system ki maujooda haalat hi
+    // dikhegi; grants map sirf callback record ke liye rehta hai.
     fun isGranted(permission: String): Boolean {
         @Suppress("UNUSED_EXPRESSION")
         refresh
-        return grants[permission] ?: (ContextCompat.checkSelfPermission(
+        return ContextCompat.checkSelfPermission(
             context, permission
-        ) == PackageManager.PERMISSION_GRANTED)
+        ) == PackageManager.PERMISSION_GRANTED
     }
     val micGranted = isGranted(Manifest.permission.RECORD_AUDIO)
 
@@ -153,8 +162,9 @@ fun SetupWizard(onDone: () -> Unit) {
                 Text("Flora ko apna phone use karne do")
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "Ek tap — Android ek ek karke sab poochega. Sirf " +
-                        "microphone zaroori hai; baaki se wo kaam ki banti hai."
+                    "Ek tap — Android ek ek karke sab poochega. " +
+                        "Microphone bolne ke liye chahiye; bina mic ke " +
+                        "bhi aage badh sakte ho, tab sirf likh kar baat hogi."
                 )
                 Spacer(modifier = Modifier.height(12.dp))
             }
@@ -215,8 +225,20 @@ fun SetupWizard(onDone: () -> Unit) {
                 ) { Text("→ Aage badho") }
                 Spacer(modifier = Modifier.height(4.dp))
                 if (!micGranted) {
-                    Text("Microphone allow hote hi \"Aage badho\" khul jayega.")
+                    Text(
+                        "Microphone allow hote hi \"Aage badho\" khul " +
+                            "jayega — ya mic ke bina bhi aage badh sakte " +
+                            "ho, tab sirf likh kar baat hogi, bol kar nahi. " +
+                            "Baad me Settings se mic de sakte ho."
+                    )
                 }
+                // Cycle 1, APP-C1-001: mic deny karne wala user
+                // bhi aage badh sake — text-only raasta. Isse gate
+                // kabhi mic par atak kar har launch par nahi khulega.
+                TextButton(
+                    onClick = { step = 3 },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Mic ke bina aage badho (sirf likh kar)") }
                 Text("Har row par tap karke us permission ko akela bhi maang sakte ho.")
             }
         }

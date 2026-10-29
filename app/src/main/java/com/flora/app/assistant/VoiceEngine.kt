@@ -14,12 +14,46 @@ class VoiceEngine(context: Context) {
     private var ready = false
 
     /**
-     * Har bolne par andaza seconds (Hindi TTS ~13 chars/sec).
-     * Free talk-limit (600 sec/day) isi se record hota hai — ye
-     * andaza hai, stopwatch nahi; limit ke paas pahunchne par Flora
-     * pehle batayegi, achanak nahi rokegi.
+     * Har bolne par ASLI bola hua time (seconds, stopwatch se).
+     * Free talk-limit (600 sec/day) isi se record hota hai.
+     * Cycle 1, APP-C1-011 se pehle ye speak-start par andaza
+     * tha (Hindi TTS ~13 chars/sec) — ab utterance ke shuru
+     * (onStart) se khatam/interrupt (onDone/onError/stop) tak
+     * ka guzra waqt gina jata hai. Cap ka matlab waisa hi hai,
+     * sirf counting sahi hui hai; limit ke paas pahunchne par
+     * Flora pehle batayegi, achanak nahi rokegi.
      */
     var onSpoken: ((Long) -> Unit)? = null
+
+    // APP-C1-011 utterance accounting: ek waqt par ek hi
+    // utterance (QUEUE_FLUSH) — seq se purani (interrupt hui)
+    // utterance ka late callback nayi utterance ko count nahi
+    // karega. startMs onStart par lagta hai (sachhi shuruaat),
+    // neural path me speak() waqt fallback ke taur par.
+    @Volatile
+    private var utteranceSeq = 0
+
+    @Volatile
+    private var utteranceStartMs = 0L
+
+    @Volatile
+    private var utteranceCounted = true
+
+    private fun finishUtterance(seq: Int) {
+        if (seq != utteranceSeq || utteranceCounted) return
+        utteranceCounted = true
+        val start = utteranceStartMs
+        if (start > 0L) {
+            val seconds = maxOf(
+                1L,
+                (System.currentTimeMillis() - start) / 1000L
+            )
+            try {
+                onSpoken?.invoke(seconds)
+            } catch (e: Exception) {
+            }
+        }
+    }
 
     /** TTS poora bolne par (v2.14): continuous mic isi se dobara
      * sunna shuru karta hai — taaki Flora apni awaaz khud na sune. */
@@ -77,14 +111,24 @@ class VoiceEngine(context: Context) {
                 tts?.setOnUtteranceProgressListener(
                     object : android.speech.tts.UtteranceProgressListener() {
                         override fun onStart(utteranceId: String?) {
-                            if (utteranceId == "flora-reply") onSpeechStart?.invoke()
+                            if (utteranceId == "flora-reply") {
+                                utteranceStartMs = System.currentTimeMillis()
+                                utteranceCounted = false
+                                onSpeechStart?.invoke()
+                            }
                         }
                         override fun onError(utteranceId: String?) {
-                            if (utteranceId == "flora-reply") onSpeechDone?.invoke()
+                            if (utteranceId == "flora-reply") {
+                                finishUtterance(utteranceSeq)
+                                onSpeechDone?.invoke()
+                            }
                         }
 
                         override fun onDone(utteranceId: String?) {
-                            if (utteranceId == "flora-reply") onSpeechDone?.invoke()
+                            if (utteranceId == "flora-reply") {
+                                finishUtterance(utteranceSeq)
+                                onSpeechDone?.invoke()
+                            }
                         }
                     }
                 )
@@ -115,29 +159,49 @@ class VoiceEngine(context: Context) {
         // na ho ya fail ho to neeche system TTS (Lily profile)
         // hi chalega — system TTS is build me hataya NAHI gaya
         // (gate: hatana sirf phone test pass ke baad).
+        utteranceSeq += 1
+        val seq = utteranceSeq
+        utteranceStartMs = System.currentTimeMillis()
+        // Counted=true jab tak onStart na aaye: purani utterance
+        // ka late onDone/onError nayi utterance ko samay se
+        // pehle count nahi karega; onStart aate hi false hoga
+        // (system TTS + neural engine contract dono onStart dete
+        // hain — bina bole kuch count nahi hoga, jo sahi hai).
+        utteranceCounted = true
         val eng = NeuralSpeaker.engine
         if (eng != null) {
             try {
                 eng.speak(
                     clean,
-                    { onSpeechStart?.invoke() },
-                    { onSpeechDone?.invoke() }
+                    {
+                        utteranceStartMs = System.currentTimeMillis()
+                        utteranceCounted = false
+                        onSpeechStart?.invoke()
+                    },
+                    {
+                        finishUtterance(seq)
+                        onSpeechDone?.invoke()
+                    }
                 )
-                val seconds = maxOf(1L, (clean.length / 13).toLong())
-                onSpoken?.invoke(seconds)
                 return
             } catch (e: Exception) {
                 // Engine fail: system TTS par gir jao, awaaz na ruke.
+                // (Seq/start waisa hi — system path ke callbacks
+                // isi utterance ko count karenge.)
             }
         }
-        if (!ready) return
+        if (!ready) {
+            utteranceCounted = true
+            return
+        }
         applyPersona()
         tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "flora-reply")
-        val seconds = maxOf(1L, (clean.length / 13).toLong())
-        onSpoken?.invoke(seconds)
     }
 
     fun stop() {
+        // Interrupt par bhi ab tak bola hua waqt gino — poora
+        // text kabhi count nahi hoga jab aadha hi bola ho.
+        finishUtterance(utteranceSeq)
         tts?.stop()
     }
 

@@ -17,8 +17,11 @@ import com.flora.app.assistant.BrainClient
 import com.flora.app.assistant.VisionClient
 import com.flora.app.assistant.VoiceEngine
 import com.flora.app.automation.FloraAutomationService
+import com.flora.app.core.FeatureFlags
+import com.flora.app.core.PlanFeatures
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
+import com.flora.app.data.LicenceGate
 import com.flora.app.tools.ImageTools
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -254,6 +257,28 @@ class BackgroundMicService : Service() {
         // isliye confirmation rule yahan nahi tootta (sirf dekhna
         // + bolna). Screenshot/key na mile to seedha batao.
         if (isScreenQuestion(lower)) {
+            // Cycle 1, APP-C1-003: background vision path par
+            // bhi wahi gate jo chat commands par hai — flag OFF
+            // ho to vision na chale, aur LicenceGate (blocked /
+            // free-cap) se pehle hi ruk jaye, taaki blocked ya
+            // free-cap-khatm user ka vision kharcha na ho.
+            // (Command ka raasta isse alag hai — isCommand par
+            // foreground + confirmation hoti hai, use chhua nahi.)
+            if (!FeatureFlags.isEnabled("screen_vision") ||
+                !PlanFeatures.isAllowed("screen_vision")
+            ) {
+                voice?.speak("Ye feature abhi band hai.")
+                return
+            }
+            val visionGate = try {
+                LicenceGate.check(prefs)
+            } catch (e: Exception) {
+                null
+            }
+            if (visionGate is LicenceGate.Result.Blocked) {
+                voice?.speak(visionGate.message)
+                return
+            }
             val jpeg = try {
                 FloraAutomationService.instance?.screenshotJpeg()
             } catch (e: Exception) {
@@ -301,7 +326,27 @@ class BackgroundMicService : Service() {
             // brain wala general raasta chalega.
         }
         // Image (Pollinations, bina key): background me bhi banegi.
+        // Cycle 1, APP-C1-003: is path par bhi image_gen flag +
+        // LicenceGate — taaki ye raasta kabhi ungated na chale.
+        // (Aaj isCommand is prefix ko pehle pakad kar foreground
+        // + confirmation par bhej deta hai; ye gate us routing
+        // ke badalne par bhi suraksha rakhega — routing chhui nahi.)
         if (lower.startsWith("image banao ") || lower.startsWith("photo banao ")) {
+            if (!FeatureFlags.isEnabled("image_gen") ||
+                !PlanFeatures.isAllowed("image_gen")
+            ) {
+                voice?.speak("Ye feature abhi band hai.")
+                return
+            }
+            val imageGate = try {
+                LicenceGate.check(prefs)
+            } catch (e: Exception) {
+                null
+            }
+            if (imageGate is LicenceGate.Result.Blocked) {
+                voice?.speak(imageGate.message)
+                return
+            }
             val prompt = question.substringAfter("banao", "").trim()
             val saved = ImageTools.generateImage(applicationContext, prompt)
             val msg = if (saved != null) {

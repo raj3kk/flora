@@ -18,8 +18,15 @@ private val Context.floraDataStore: DataStore<Preferences> by preferencesDataSto
 
 /**
  * On-device settings only. No password, no API key value is ever written
- * to a file, a backup or a server by this class — keys live in DataStore
+ * to a backup or a server by this class — keys live in DataStore
  * on this phone only, and the PIN lives only in PinVault (KeyStore).
+ * Cycle 1, APP-C1-005: user keys, linked refresh token, licence
+ * key aur FCM token ab DataStore me KeyStore AES/GCM se
+ * encrypted save hote hain (MemoryCrypto pattern — wahi alias
+ * family, wahi IV+ciphertext Base64 shape). Non-sensitive
+ * prefs (toggles, theme, counters) waisi hi plaintext rehti
+ * hain. Supabase anon key publishable hai by design, isliye
+ * wo is encryption me nahi hai.
  */
 class FloraPreferences(private val context: Context) {
 
@@ -84,6 +91,66 @@ class FloraPreferences(private val context: Context) {
         val PERMISSIONS_GATE_DONE = booleanPreferencesKey("permissions_gate_done")
         val CONTINUOUS_MIC = booleanPreferencesKey("continuous_mic")
         val VOICE_VIEW = booleanPreferencesKey("voice_view")
+        // Cycle 1, APP-C1-009 (home sync state): Home screen se
+        // server sync safal hua ya nahi — awaaz wale jawab isi
+        // se "sync baaki hai" ka sach bolenge.
+        val HOME_SERVER_SYNCED = booleanPreferencesKey("home_server_synced")
+    }
+
+    /**
+     * APP-C1-005 secret helpers (MemoryCrypto pattern):
+     * - readSecret: ciphertext mile to decrypt karke do; purana
+     *   plaintext mile to ek baar encrypted save karo (migration)
+     *   aur wahi value do — phir plaintext DataStore me nahi
+     *   bachega. Decrypt fail + plaintext jaisa na lage to bhi
+     *   raw hi do (data kabhi lose nahi hoga — MemoryCrypto
+     *   decodeStored wala hi niyam).
+     * - writeSecret: encrypt karke save karo; encrypt fail ho to
+     *   plaintext fallback (data safe); khali ho to key hata do.
+     * KeyStore key isi phone + isi app se bandhi hai — naye
+     * phone/restore par purana ciphertext nahi khulega (PIN
+     * vault jaisa hi niyam); tab user ko key dobara daalni hogi.
+     * Saare secret readers/writers inhi do helpers se jaate
+     * hain — DataStore keys ko seedha koi aur file nahi chhuti.
+     */
+    private suspend fun readSecret(key: Preferences.Key<String>): String {
+        val raw = context.floraDataStore.data.map { it[key] ?: "" }.first()
+        if (raw.isEmpty()) return ""
+        val decrypted = try {
+            MemoryCrypto.decrypt(raw)
+        } catch (e: Exception) {
+            null
+        }
+        if (decrypted != null) return decrypted
+        try {
+            val encrypted = MemoryCrypto.encrypt(raw)
+            if (encrypted != null) {
+                context.floraDataStore.edit { it[key] = encrypted }
+            }
+        } catch (e: Exception) {
+        }
+        return raw
+    }
+
+    private suspend fun writeSecret(key: Preferences.Key<String>, value: String) {
+        if (value.isEmpty()) {
+            context.floraDataStore.edit { it.remove(key) }
+            return
+        }
+        val stored = try {
+            MemoryCrypto.encrypt(value)
+        } catch (e: Exception) {
+            null
+        } ?: value
+        context.floraDataStore.edit { it[key] = stored }
+    }
+
+    /** APP-C1-009: Home server sync hua ya nahi (plain flag). */
+    suspend fun homeServerSynced(): Boolean =
+        context.floraDataStore.data.map { it[Keys.HOME_SERVER_SYNCED] ?: false }.first()
+
+    suspend fun setHomeServerSynced(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.HOME_SERVER_SYNCED] = value }
     }
 
     suspend fun userId(): String {
@@ -113,9 +180,10 @@ class FloraPreferences(private val context: Context) {
         context.floraDataStore.data.map { it[Keys.LINKED_EMAIL] ?: "" }.first()
 
     /** Linked account ka refresh token (sirf is phone ke DataStore
-     *  me; app-start session renew ke liye. Khali = link nahi hai. */
+     *  me, APP-C1-005 se KeyStore-encrypted; app-start session
+     *  renew ke liye. Khali = link nahi hai. */
     suspend fun linkedRefreshToken(): String =
-        context.floraDataStore.data.map { it[Keys.LINKED_REFRESH_TOKEN] ?: "" }.first()
+        readSecret(Keys.LINKED_REFRESH_TOKEN)
 
     suspend fun effectiveUserId(): String {
         val linked = linkedUserId()
@@ -123,10 +191,15 @@ class FloraPreferences(private val context: Context) {
     }
 
     suspend fun setLink(uid: String, email: String, refreshToken: String) {
+        // APP-C1-005: refresh token encrypted save hota hai.
+        val encRefresh = if (refreshToken.isEmpty()) "" else
+            (try { MemoryCrypto.encrypt(refreshToken) } catch (e: Exception) { null }
+                ?: refreshToken)
         context.floraDataStore.edit {
             it[Keys.LINKED_USER_ID] = uid
             it[Keys.LINKED_EMAIL] = email
-            it[Keys.LINKED_REFRESH_TOKEN] = refreshToken
+            if (encRefresh.isEmpty()) it.remove(Keys.LINKED_REFRESH_TOKEN)
+            else it[Keys.LINKED_REFRESH_TOKEN] = encRefresh
         }
     }
 
@@ -168,9 +241,10 @@ class FloraPreferences(private val context: Context) {
         context.floraDataStore.data.map { it[Keys.MODELS_MANIFEST_URL] ?: "" }.first()
 
     /** Deepgram key (mega build, user faisla: Deepgram hi rahega).
-     *  Khali = system STT fallback; key aate hi sachhi barge-in. */
+     *  Khali = system STT fallback; key aate hi sachhi barge-in.
+     *  APP-C1-005 se KeyStore-encrypted save hoti hai. */
     suspend fun deepgramApiKey(): String =
-        context.floraDataStore.data.map { it[Keys.DEEPGRAM_API_KEY] ?: "" }.first()
+        readSecret(Keys.DEEPGRAM_API_KEY)
 
     /** Home box code (v2.22, P5-F22 phone half): box ka join code
      *  sirf phone par save hota hai. Server sync (S4) abhi baaki
@@ -200,7 +274,7 @@ class FloraPreferences(private val context: Context) {
     }
 
     suspend fun setDeepgramApiKey(value: String) {
-        context.floraDataStore.edit { it[Keys.DEEPGRAM_API_KEY] = value }
+        writeSecret(Keys.DEEPGRAM_API_KEY, value)
     }
 
     /** Voice-match threshold — 0.50 STARTING GUESS hai, lock nahi
@@ -238,71 +312,73 @@ class FloraPreferences(private val context: Context) {
         context.floraDataStore.edit { it[Keys.SUPABASE_ANON_KEY] = value }
     }
 
+    // APP-C1-005: neeche ki saari user keys KeyStore-encrypted
+    // save hoti hain (readSecret/writeSecret se).
     suspend fun geminiApiKey(): String =
-        context.floraDataStore.data.map { it[Keys.GEMINI_API_KEY] ?: "" }.first()
+        readSecret(Keys.GEMINI_API_KEY)
 
     suspend fun setGeminiApiKey(value: String) {
-        context.floraDataStore.edit { it[Keys.GEMINI_API_KEY] = value }
+        writeSecret(Keys.GEMINI_API_KEY, value)
     }
 
     suspend fun groqApiKey(): String =
-        context.floraDataStore.data.map { it[Keys.GROQ_API_KEY] ?: "" }.first()
+        readSecret(Keys.GROQ_API_KEY)
 
     suspend fun setGroqApiKey(value: String) {
-        context.floraDataStore.edit { it[Keys.GROQ_API_KEY] = value }
+        writeSecret(Keys.GROQ_API_KEY, value)
     }
 
     /** Optional second keys + optional search keys (v2.1): khali = lane band. */
     suspend fun geminiApiKey2(): String =
-        context.floraDataStore.data.map { it[Keys.GEMINI_API_KEY2] ?: "" }.first()
+        readSecret(Keys.GEMINI_API_KEY2)
 
     suspend fun setGeminiApiKey2(value: String) {
-        context.floraDataStore.edit { it[Keys.GEMINI_API_KEY2] = value }
+        writeSecret(Keys.GEMINI_API_KEY2, value)
     }
 
     suspend fun groqApiKey2(): String =
-        context.floraDataStore.data.map { it[Keys.GROQ_API_KEY2] ?: "" }.first()
+        readSecret(Keys.GROQ_API_KEY2)
 
     suspend fun setGroqApiKey2(value: String) {
-        context.floraDataStore.edit { it[Keys.GROQ_API_KEY2] = value }
+        writeSecret(Keys.GROQ_API_KEY2, value)
     }
 
     suspend fun tavilyApiKey(): String =
-        context.floraDataStore.data.map { it[Keys.TAVILY_API_KEY] ?: "" }.first()
+        readSecret(Keys.TAVILY_API_KEY)
 
     suspend fun setTavilyApiKey(value: String) {
-        context.floraDataStore.edit { it[Keys.TAVILY_API_KEY] = value }
+        writeSecret(Keys.TAVILY_API_KEY, value)
     }
 
     suspend fun braveApiKey(): String =
-        context.floraDataStore.data.map { it[Keys.BRAVE_API_KEY] ?: "" }.first()
+        readSecret(Keys.BRAVE_API_KEY)
 
     suspend fun setBraveApiKey(value: String) {
-        context.floraDataStore.edit { it[Keys.BRAVE_API_KEY] = value }
+        writeSecret(Keys.BRAVE_API_KEY, value)
     }
 
     suspend fun serpApiKey(): String =
-        context.floraDataStore.data.map { it[Keys.SERPAPI_API_KEY] ?: "" }.first()
+        readSecret(Keys.SERPAPI_API_KEY)
 
     suspend fun setSerpApiKey(value: String) {
-        context.floraDataStore.edit { it[Keys.SERPAPI_API_KEY] = value }
+        writeSecret(Keys.SERPAPI_API_KEY, value)
     }
 
     suspend fun mapsApiKey(): String =
-        context.floraDataStore.data.map { it[Keys.MAPS_API_KEY] ?: "" }.first()
+        readSecret(Keys.MAPS_API_KEY)
 
     suspend fun setMapsApiKey(value: String) {
-        context.floraDataStore.edit { it[Keys.MAPS_API_KEY] = value }
+        writeSecret(Keys.MAPS_API_KEY, value)
     }
 
     // FCM device token (v2.2): sirf is phone par DataStore me rahega;
     // kabhi log, chat, backup ya message me nahi jayega. Server sync
     // tabhi hoga jab push_tokens table + server function taiyaar ho.
     suspend fun fcmToken(): String =
-        context.floraDataStore.data.map { it[Keys.FCM_TOKEN] ?: "" }.first()
+        readSecret(Keys.FCM_TOKEN)
 
     suspend fun setFcmToken(value: String) {
-        context.floraDataStore.edit { it[Keys.FCM_TOKEN] = value }
+        writeSecret(Keys.FCM_TOKEN, value)
     }
 
     // Wake Word toggle (v2.4): default OFF. ON = foreground service
@@ -385,12 +461,15 @@ class FloraPreferences(private val context: Context) {
         context.floraDataStore.edit { it[Keys.LAST_UTR] = value }
     }
 
-    /** Wave B: saved licence key (khali = koi key fill nahi hui). */
+    /** Wave B: saved licence key (khali = koi key fill nahi hui).
+     *  APP-C1-005 se phone par KeyStore-encrypted save hoti hai
+     *  (server-side design waisa hi hai — ye sirf phone storage
+     *  ka badlaav hai, key ka matlab/masking waisa hi). */
     suspend fun licenceKey(): String =
-        context.floraDataStore.data.map { it[Keys.LICENCE_KEY] ?: "" }.first()
+        readSecret(Keys.LICENCE_KEY)
 
     suspend fun setLicenceKey(value: String) {
-        context.floraDataStore.edit { it[Keys.LICENCE_KEY] = value }
+        writeSecret(Keys.LICENCE_KEY, value)
     }
 
     /** Wave B: pehle se stored stable device id (khali = abhi set nahi hua). */

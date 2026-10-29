@@ -36,12 +36,13 @@ fun PcLinkScreen(prefs: FloraPreferences) {
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp)
     ) {
-        Text("PC Link")
+        Text("PC Link (taiyaari)")
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            "Is code ko Flora ke PC client me daalo to computer " +
-                "aur phone jud jayenge. Code sirf is phone par hai, " +
-                "kisi server par nahi jata."
+            "Taiyaari stage: PC client abhi nahi hai, isliye ye " +
+                "code abhi kahin daala nahi ja sakta. Client aate " +
+                "hi isi code se phone aur computer judenge. Code " +
+                "sirf is phone par hai, kisi server par nahi jata."
         )
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = {
@@ -54,19 +55,25 @@ fun PcLinkScreen(prefs: FloraPreferences) {
                     prefs.setPcPairCode(fresh)
                     code = fresh
                 }
-                note = "Pairing code taiyaar hai."
+                note = "Pairing code taiyaar hai — par PC client abhi nahi hai, isliye ye code abhi kahin daala nahi ja sakta."
             }
         }) { Text("Pairing code dikhao") }
         Spacer(modifier = Modifier.height(8.dp))
         if (code.isNotEmpty()) {
             Text("Pairing code: $code")
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Taiyaari hi hai: PC client abhi nahi bana hai, " +
+                    "isliye ye code abhi kisi PC app me daala nahi " +
+                    "ja sakta. (PC client is screen ka hissa nahi hai.)"
+            )
         }
         Button(onClick = {
             scope.launch {
                 val fresh = (100000..999999).random().toString()
                 prefs.setPcPairCode(fresh)
                 code = fresh
-                note = "Naya pairing code ban gaya hai."
+                note = "Naya pairing code ban gaya hai — par PC client abhi nahi hai, isliye ye code abhi kahin daala nahi ja sakta."
             }
         }) { Text("Naya code banao") }
         if (note.isNotEmpty()) {
