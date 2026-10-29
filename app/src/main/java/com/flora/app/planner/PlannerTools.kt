@@ -81,7 +81,10 @@ class PlannerTools(
                 PlanStop.LOGIN_2FA,
             )
         }
-        val step: MacroStep? = when (action) {
+        // CI fix (compileDebugKotlin fail tha): nullable declared type
+        // par Elvis smart-cast nahi laga, isliye do-step binding —
+        // stepOrNull (nullable) se step (non-null, ?: return se).
+        val stepOrNull: MacroStep? = when (action) {
             "open" -> if (label.isNotBlank()) MacroStep.Open(label) else null
             "tap" -> if (label.isNotBlank()) MacroStep.Tap(label) else null
             "type" -> if (text.isNotBlank()) MacroStep.Type(text) else null
@@ -89,7 +92,8 @@ class PlannerTools(
             "scroll" -> MacroStep.Scroll((input["forward"] ?: "true") == "true")
             "back" -> MacroStep.Back
             else -> null
-        } ?: return StepOutcome.Blocked(
+        }
+        val step = stepOrNull ?: return StepOutcome.Blocked(
             "Macro action '$action' samajh nahi aaya (open/tap/type/wait/scroll/back hi allowed).",
             PlanStop.GENUINE_BLOCK,
         )
