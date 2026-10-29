@@ -12,9 +12,11 @@ import com.flora.app.data.ChatMemoryStore
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
 import com.flora.app.data.MacroStore
+import com.flora.app.data.ProjectMemoryStore
 import com.flora.app.data.ProjectStore
 import com.flora.app.data.StoredMacro
 import com.flora.app.tools.BuilderFailureKind
+import timber.log.Timber
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -124,6 +126,38 @@ class PlannerEngine(
     /** Apna scope — lifecycleScope kabhi nahi (F03). */
     private val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var runJob: Job? = null
+
+    /**
+     * B5 stores — sab yahan (engine) bante hain, PlannerEngineFactory
+     * shared instance se ek hi baar. Order: appContext / prefs /
+     * licenceClient / androidId / chatMemoryStore / autoLogStore
+     * sab constructor se pehle maujood hain, isliye init order safe
+     * hai. Koi B5 store PlannerTools ya PlannerBrain ke andar
+     * dobara nahi banta (single construction site barkaraar).
+     */
+    private val projectMemoryStore = ProjectMemoryStore(appContext)
+    private val learnedEngine = LearnedEngine(appContext)
+    private val aiBuildQuota = AiBuildQuota(appContext, prefs, licenceClient, androidId)
+    private val selfMapClient = SelfMapClient(appContext)
+    private val memoryAppSearchIndex = MemoryAppSearchIndex(appContext)
+    private val unifiedSearch = UnifiedSearch(
+        chatMemoryStore, projectMemoryStore, autoLogStore, memoryAppSearchIndex,
+    )
+
+    /** Learned shortcut se bane plans — in par dobara learned record nahi hoga (feedback loop nahi). */
+    private val learnedCreatedPlanIds = mutableSetOf<String>()
+
+    init {
+        // B5-07 audit sink + B5-06 quota gates — tools ko engine hi deta hai.
+        tools.auditSink = { text ->
+            try {
+                autoLogStore.add(text)
+            } catch (e: Exception) {
+            }
+        }
+        tools.buildQuotaGate = { aiBuildQuota.buildGateMessage() }
+        tools.projectQuotaGate = { count -> aiBuildQuota.projectGateMessage(count) }
+    }
     private sealed class QueueItem {
         data class Plan(val planId: String) : QueueItem()
         data class Goal(val goal: String) : QueueItem()
@@ -193,6 +227,40 @@ class PlannerEngine(
 
     /** Plan banao (brain se) + Room me save. Licence Blocked par koi AI call nahi (PlannerBrain me hook). */
     suspend fun createPlan(goal: String): Result<StoredPlan> {
+        // B5-05 learned shortcut — repeat kaam par ZERO AI call.
+        // Sirf SAFE tools (NOTE / MACRO_UI_STEP): NOTE ka koi
+        // side-effect nahi; MACRO sirf adapter-queued hota hai
+        // (Routines confirm ke bina execute kabhi nahi). Side-effect
+        // tools ka pattern kabhi offline nahi chalta (AI chain hi).
+        when (val learned = learnedEngine.decide(goal, null)) {
+            is LearnedEngine.Route.Offline -> {
+                val pattern = learned.pattern
+                val draft = PlanDraft(
+                    goal = goal,
+                    steps = listOf(
+                        PlanStepDraft(
+                            title = pattern.actionLabel.ifBlank { goal },
+                            tool = pattern.tool,
+                            input = pattern.input,
+                            successCheck = "Learned pattern se step poora hua",
+                            fallback = "Dobara AI se plan banao",
+                            sideEffectPreview = if (pattern.tool == PlanTool.MACRO_UI_STEP.name) {
+                                "Macro adapter me jayega (Routines confirm ke baad hi chalega)"
+                            } else {
+                                ""
+                            },
+                        )
+                    ),
+                )
+                val planId = UUID.randomUUID().toString().substring(0, 8)
+                val saved = repository.saveNewPlan(planId, draft, PlanEstimateCalc.forPlan(1, 0))
+                learnedCreatedPlanIds += planId
+                log(planId, -1, "learned pattern se bina AI call ke plan bana (tool=${pattern.tool})")
+                stateFlow.value = EngineState(saved, PlanStatus.DRAFT, "Plan taiyaar hai (learned pattern, bina AI call).", 0, queue.size, false)
+                return Result.success(saved)
+            }
+            else -> {}
+        }
         val deviceId = deviceId()
         return when (val gen = plannerBrain.generate(goal, deviceId)) {
             is PlannerBrain.Generation.Blocked -> Result.failure(IllegalStateException(gen.message))
@@ -201,10 +269,65 @@ class PlannerEngine(
                 val estimate = PlanEstimateCalc.forPlan(gen.draft.steps.size, gen.calls)
                 val planId = UUID.randomUUID().toString().substring(0, 8)
                 val saved = repository.saveNewPlan(planId, gen.draft, estimate)
-                log(planId, -1, "plan bana (v1, source=${gen.source}, calls=${gen.calls})")
+                // B5-06: plan-generation calls ka count sirf hisaab
+                // ke liye — builds me KABHI nahi ginega (CEO faisla c).
+                try {
+                    aiBuildQuota.recordPlanGeneration(gen.calls)
+                } catch (e: Exception) {
+                }
+                log(planId, -1, "plan bana (v1, source=${gen.source}, calls=${gen.calls}; plan calls builds me nahi gine)")
                 stateFlow.value = EngineState(saved, PlanStatus.DRAFT, "Plan taiyaar hai.", 0, queue.size, false)
                 Result.success(saved)
             }
+        }
+    }
+
+    /** B5 public APIs — PlannerScreen / BuilderScreen / chat se call honge (engine shared instance se). */
+    suspend fun searchMemory(query: String): List<UnifiedSearchResult> {
+        return try {
+            unifiedSearch.search(query)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun selfMap(): SelfMap? {
+        return try {
+            selfMapClient.load()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun aiBuildStatus(): String {
+        return try {
+            aiBuildQuota.statusText()
+        } catch (e: Exception) {
+            "AI build status nahi mila."
+        }
+    }
+
+    suspend fun projectGateMessage(count: Int): String? {
+        return try {
+            aiBuildQuota.projectGateMessage(count)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun learnedRoute(query: String): LearnedEngine.Route =
+        learnedEngine.decide(query, null)
+
+    /** B5-05: plan DONE hone par safe single-step plan se seekho (Macro/Routine/Job se kabhi nahi). */
+    private suspend fun maybeRecordLearned(plan: StoredPlan) {
+        if (plan.planId in learnedCreatedPlanIds) return
+        if (plan.steps.size != 1) return
+        val step = plan.steps[0]
+        if (step.status != StepStatus.VERIFIED) return
+        if (step.tool != PlanTool.NOTE && step.tool != PlanTool.MACRO_UI_STEP) return
+        try {
+            learnedEngine.record(plan.goal, step.tool.name, step.title, step.input, fromExplicitAutomation = false)
+        } catch (e: Exception) {
         }
     }
 
@@ -502,6 +625,13 @@ class PlannerEngine(
             autoLogStore.add("[plan:$planId step:$stepIndex] $text")
         } catch (e: Exception) {
         }
+        // B5-09: Timber = planner-step logging ka ek standard raasta.
+        // Yahan sirf pattern-level text jata hai (planId/step/status) —
+        // free-text detail (input, file content, key) Timber par kabhi nahi.
+        try {
+            Timber.tag("Planner").d("[plan:%s step:%d] %s", planId, stepIndex, text)
+        } catch (e: Exception) {
+        }
     }
 
     private suspend fun bumpPrompt(planId: String) {
@@ -536,6 +666,13 @@ class PlannerEngine(
                 val allDone = fresh.steps.all { it.status == StepStatus.VERIFIED || it.status == StepStatus.SKIPPED }
                 val finalStatus = if (allDone) PlanStatus.DONE else PlanStatus.BLOCKED
                 repository.updatePlanMeta(planId, status = finalStatus)
+                // B5-05: DONE plan se safe single-step pattern seekho.
+                if (finalStatus == PlanStatus.DONE) {
+                    try {
+                        maybeRecordLearned(fresh)
+                    } catch (e: Exception) {
+                    }
+                }
                 log(planId, -1, "plan khatm: $finalStatus")
                 PlanNotifier.showProgress(appContext, planId, "Plan khatm: $finalStatus", 0, 0, ongoing = false)
                 refreshState(planId, finalStatus, if (allDone) "Plan poora ho gaya." else "Plan atka hua hai — baaki steps dekho.")
@@ -634,6 +771,19 @@ class PlannerEngine(
         if (step.irreversible && "$planId:${step.stepIndex}" !in approvedSteps) {
             return StepRunResult.Stopped(PlanStop.DELETE_IRREVERSIBLE, "Step '${step.title}' irreversible lag raha hai — ek baar confirm karo tabhi aage badhega (stop #2).")
         }
+        // B5-06 build-quota gate — sirf code-gen tools par, execute
+        // se PEHLE. Plan-generation calls is gate se kabhi nahi
+        // gine (wo createPlan me alag counter me hain).
+        if (step.tool in AiBuildQuotaLogic.CODE_GEN_TOOLS) {
+            val gateMsg = try {
+                aiBuildQuota.buildGateMessage()
+            } catch (e: Exception) {
+                null
+            }
+            if (gateMsg != null) {
+                return StepRunResult.Stopped(PlanStop.GENUINE_BLOCK, gateMsg)
+            }
+        }
         repository.updateStep(step.copy(status = StepStatus.RUNNING), planId)
         log(planId, step.stepIndex, "shuru: ${step.title} [${step.tool}]")
         var attempts = 0
@@ -673,6 +823,20 @@ class PlannerEngine(
                     lastFailureKindByStep.remove("$planId:${step.stepIndex}")
                     if (step.stepIndex in transientInputs) transientInputs.remove(step.stepIndex)
                     log(planId, step.stepIndex, "VERIFIED: ${outcome.detail}")
+                    // B5-06: AI build sirf yahan gina jata hai —
+                    // code-gen execution VERIFIED hone par, ek baar
+                    // (M1: VERIFIED step dobara kabhi nahi chalega,
+                    // isliye double-count impossible hai).
+                    if (step.tool in AiBuildQuotaLogic.CODE_GEN_TOOLS) {
+                        try {
+                            aiBuildQuota.recordCodeGeneration()
+                        } catch (e: Exception) {
+                        }
+                        try {
+                            log(planId, step.stepIndex, "ai-build gina (aaj ${aiBuildQuota.buildsToday()}/5)")
+                        } catch (e: Exception) {
+                        }
+                    }
                     return StepRunResult.Done(done)
                 }
                 is PlannerTools.StepOutcome.Blocked -> {

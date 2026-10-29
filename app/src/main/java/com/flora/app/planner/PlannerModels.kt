@@ -134,6 +134,20 @@ object PlanValidator {
 
     private val FORBIDDEN_INPUT_KEYS = listOf("password", "db_pass", "secret", "token", "passwd")
 
+    /** B5-03: project-memory save path bhi isi list se gate hota hai (ek source, duplicate nahi). */
+    fun isForbiddenKey(key: String): Boolean {
+        val lowerKey = key.lowercase()
+        return FORBIDDEN_INPUT_KEYS.any { lowerKey.contains(it) }
+    }
+
+    private val FORBIDDEN_ASSIGNMENT = Regex(
+        "(?i)\\b(password|db_pass|secret|token|passwd)\\b\\s*[:=]"
+    )
+
+    /** Free text me forbidden naam ke saath value lagi ho (jaise "token: ...") to true. */
+    fun containsForbiddenAssignment(text: String): Boolean =
+        FORBIDDEN_ASSIGNMENT.containsMatchIn(text)
+
     fun validate(draft: PlanDraft): List<String> {
         val errors = mutableListOf<String>()
         if (draft.goal.isBlank()) errors += "goal khali hai"

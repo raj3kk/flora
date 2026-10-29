@@ -1,6 +1,7 @@
 package com.flora.app
 
 import android.app.Application
+import com.flora.app.planner.FloraToolsStartup
 
 /**
  * Flora application class. No background work starts on its own.
@@ -15,6 +16,10 @@ import android.app.Application
 class FloraApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // B5-09: tools registry init — App Startup initializer bhi
+        // isi ensure ko call karta hai (double-plant guard andar
+        // hai); crash handler uske baad lagta hai, pehle jaisa hi.
+        FloraToolsStartup.ensureInitialized(this)
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             try {

@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
+import com.flora.app.core.PlanFeatures
 import com.flora.app.data.AutoLogStore
 import com.flora.app.data.ProjectMeta
 import com.flora.app.tools.KeyInputGuard
@@ -74,7 +75,11 @@ import java.io.File
  * B5 (F2) me aayega.
  */
 @Composable
-fun BuilderScreen(projectStore: ProjectStore, autoLogStore: AutoLogStore) {
+fun BuilderScreen(
+    projectStore: ProjectStore,
+    autoLogStore: AutoLogStore,
+    quotaGate: (suspend (Int) -> String?)? = null,
+) {
     val appContext = LocalContext.current
     val scope = rememberCoroutineScope()
     var projects by remember { mutableStateOf<List<ProjectMeta>>(emptyList()) }
@@ -251,6 +256,27 @@ fun BuilderScreen(projectStore: ProjectStore, autoLogStore: AutoLogStore) {
         return
     }
 
+    // B5-08 builder entitlement gate (PlanFeatures mechanism reuse —
+    // key pehli baar B5 me use hua hai; B2 ungated ruling isi se
+    // supersede hoti hai). Fail-open: list na mile to isAllowed
+    // true deta hai (purana vyavhaar). List mile aur "builder" na
+    // ho to imaandaar message — silent block nahi. Ye block saare
+    // hooks (states + launchers + LaunchedEffect) ke BAAD hai,
+    // isliye hook order kabhi nahi toot-ta (showServices swap
+    // wala pattern hi hai). Server hissa (F2: seed 14->15,
+    // allowlist 14->15, panel editor) pending hai — key aane ke
+    // baad test dobara hoga (audit log me limit darj hai).
+    if (!PlanFeatures.isAllowed("builder")) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(12.dp)
+        ) {
+            Text("Builder abhi is plan me nahi hai.")
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Builder (Pro) chahiye — plan-features me 'builder' key aane ke baad ye screen khulegi. Agar licence list abhi mili hi nahi hai to purana vyavhaar hi rahega (fail-open).")
+        }
+        return
+    }
+
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)
     ) {
@@ -270,17 +296,28 @@ fun BuilderScreen(projectStore: ProjectStore, autoLogStore: AutoLogStore) {
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = {
             scope.launch {
-                val created = projectStore.createProject(newProjectName)
-                projects = projectStore.listProjects()
-                selectedProjectId = created.id
-                selectedFileName = null
-                editorText = ""
-                newProjectName = ""
-                try {
-                    autoLogStore.add("Builder: project bana (${created.name})")
+                // B5-06 project-count gate (Free 3 projects) — engine
+                // ka wahi gate jo planner auto-create path par hai.
+                val gateMsg = try {
+                    quotaGate?.invoke(projects.size)
                 } catch (e: Exception) {
+                    null
                 }
-                note = "Project ban gaya."
+                if (gateMsg != null) {
+                    note = gateMsg
+                } else {
+                    val created = projectStore.createProject(newProjectName)
+                    projects = projectStore.listProjects()
+                    selectedProjectId = created.id
+                    selectedFileName = null
+                    editorText = ""
+                    newProjectName = ""
+                    try {
+                        autoLogStore.add("Builder: project bana (${created.name})")
+                    } catch (e: Exception) {
+                    }
+                    note = "Project ban gaya."
+                }
             }
         }) { Text("Naya project banao") }
         Spacer(modifier = Modifier.height(12.dp))

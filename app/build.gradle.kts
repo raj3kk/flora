@@ -71,12 +71,24 @@ dependencies {
     // nahi). Dono AGP 8.5.2 / Kotlin 1.9.24 stack par pinned.
     // Deliberately NAHI: lifecycle-runtime-ktx (v1.3 CI fail),
     // Hilt (manual constructor DI hi fallback hai, F15),
-    // Retrofit (B3 OkHttp clients ka duplicate hota),
-    // Timber/App Startup/AppSearch (optional, B5 consolidation me).
+    // Retrofit (B3 OkHttp clients ka duplicate hota).
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
     implementation("androidx.work:work-runtime-ktx:2.8.1")
+    // B5 tools consolidation — Timber (planner-step logging,
+    // B5-09) + App Startup (registry init ka single point,
+    // B5-09) + AppSearch (unified memory index, B5-04).
+    // Sab Apache-2.0, AGP 8.5.2 / Kotlin 1.9.24 stack par pinned.
+    implementation("androidx.appsearch:appsearch:1.1.0")
+    implementation("androidx.appsearch:appsearch-local-storage:1.1.0")
+    implementation("com.jakewharton.timber:timber:5.0.1")
+    implementation("androidx.startup:startup-runtime:1.1.1")
+    // B5-11 test-only + debug-only — production/release APK me kabhi nahi.
+    testImplementation("app.cash.turbine:turbine:1.0.0")
+    testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation("com.google.truth:truth:1.4.4")
+    debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")
     // B2 unit tests — sirf test scope, production APK me nahi.
     testImplementation("junit:junit:4.13.2")
     // Google sign-in (v2.22, Phase 5, G14): sirf id_token

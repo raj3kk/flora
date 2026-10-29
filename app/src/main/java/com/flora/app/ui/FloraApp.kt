@@ -4866,7 +4866,10 @@ fun FloraApp(
             } else if (screen == Screen.DOCS) {
                 DocsScreen(docsStore)
             } else if (screen == Screen.BUILDER) {
-                BuilderScreen(projectStore, autoLogStore)
+                BuilderScreen(
+                    projectStore, autoLogStore,
+                    quotaGate = { count -> plannerEngine.projectGateMessage(count) },
+                )
             } else if (screen == Screen.PLANNER) {
                 // B4-DOCTOR: PlannerScreen se doctor button sirf
                 // navigation hai — fix wiring DoctorScreen me hi.

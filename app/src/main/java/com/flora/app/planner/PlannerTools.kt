@@ -3,6 +3,7 @@ package com.flora.app.planner
 import com.flora.app.automation.Macro
 import com.flora.app.automation.MacroJson
 import com.flora.app.automation.MacroStep
+import com.flora.app.core.PlanFeatures
 import com.flora.app.data.BuilderService
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.ProjectStore
@@ -60,6 +61,39 @@ class PlannerTools(
      * entry point hain.
      */
     var allowedTargetsProvider: (suspend () -> Set<String>)? = null
+
+    /**
+     * B5-07 registry audit + B5-06 quota gates — engine hi inhe
+     * set karta hai (PlannerEngine init, single construction
+     * site PlannerEngine:82). Null = gate/audit nahi (fail-open,
+     * purana vyavhaar) — tools engine ke bina kabhi nahi chalte,
+     * isliye production me ye hamesha set hote hain.
+     */
+    var auditSink: (suspend (String) -> Unit)? = null
+    var buildQuotaGate: (suspend () -> String?)? = null
+    var projectQuotaGate: (suspend (Int) -> String?)? = null
+
+    /** Builder tools (B5-08 gate isi set par lagta hai). */
+    private val builderTools: Set<PlanTool> = setOf(
+        PlanTool.GITHUB_CREATE_REPO,
+        PlanTool.GITHUB_PUSH_FILE,
+        PlanTool.VERCEL_CREATE_PROJECT,
+        PlanTool.VERCEL_DEPLOY,
+        PlanTool.SUPABASE_CREATE_PROJECT,
+        PlanTool.SUPABASE_RUN_SQL,
+        PlanTool.PROJECT_SAVE_FILE,
+        PlanTool.PROJECT_READ_FILE,
+    )
+
+    /** Registry descriptor list — ToolRegistry.all() hi ek source hai. */
+    fun toolDescriptors(): List<ToolDescriptor> = ToolRegistry.all()
+
+    private suspend fun audit(tool: String, action: String) {
+        try {
+            auditSink?.invoke("[tool:$tool] $action")
+        } catch (e: Exception) {
+        }
+    }
 
     private suspend fun allowedTargets(): Set<String> =
         allowedTargetsProvider?.invoke() ?: emptySet()
@@ -150,6 +184,21 @@ class PlannerTools(
 
     suspend fun execute(step: StoredStep, transient: Map<String, String>): StepOutcome {
         val input = step.input + transient
+        // B5-08 builder entitlement gate (PlanFeatures.kt mechanism
+        // reuse — key pehli baar yahan use hua hai). Fail-open:
+        // list na mile to isAllowed true deta hai (purana
+        // vyavhaar). List mile aur "builder" na ho to imaandaar
+        // message + upgrade hint, silent block nahi. NOTE/MACRO
+        // par gate nahi (local/adapter raaste hain).
+        if (step.tool in builderTools && !PlanFeatures.isAllowed("builder")) {
+            return StepOutcome.Blocked(
+                "Builder feature abhi is plan me nahi hai — Builder (Pro) chahiye. " +
+                    "Plan-features me 'builder' key aane ke baad dobara koshish karo.",
+                PlanStop.GENUINE_BLOCK,
+            )
+        }
+        // B5-07: har tool ka log ek jagah se (AutoLogStore, engine ke auditSink se).
+        audit(step.tool.name, "execute")
         return when (step.tool) {
             PlanTool.NOTE -> StepOutcome.Ok("", step.title)
             PlanTool.MACRO_UI_STEP -> adaptMacro(input)
@@ -322,6 +371,16 @@ class PlannerTools(
             val projectName = input["projectName"] ?: ""
             if (projectName.isBlank()) {
                 return StepOutcome.Failure(BuilderFailureKind.BAD_REQUEST, "projectId ya projectName chahiye")
+            }
+            // B5-06 project-count gate (Free 3 projects) — auto-create
+            // path par bhi, wahi engine gate jo BuilderScreen button par hai.
+            val projectGateMsg = try {
+                projectQuotaGate?.invoke(projectStore.listProjects().size)
+            } catch (e: Exception) {
+                null
+            }
+            if (projectGateMsg != null) {
+                return StepOutcome.Failure(BuilderFailureKind.BAD_REQUEST, projectGateMsg)
             }
             val created = try {
                 projectStore.createProject(projectName)

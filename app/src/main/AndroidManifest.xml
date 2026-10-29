@@ -32,6 +32,12 @@
         android:label="Flora"
         android:allowBackup="false"
         android:theme="@android:style/Theme.Material">
+        <!-- B5-09 App Startup: FloraToolsInitializer auto-discover
+             hoga (startup-runtime ka provider manifest merger se
+             aata hai) — Timber plant + tools-init ka single point. -->
+        <meta-data
+            android:name="com.flora.app.planner.FloraToolsInitializer"
+            android:value="androidx.startup" />
         <activity
             android:name="com.flora.app.MainActivity"
             android:exported="true">
