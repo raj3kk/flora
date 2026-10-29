@@ -6,6 +6,15 @@
 <title>Flora Admin</title>
 <!--
   Flora Admin Panel — FULL build 2026-10-29 (admin panel expansion).
+  PHASE 2 (2026-10-29): CEO Overview sabse upar, feature flags
+  (global + per-user override), global brain instructions/knowledge,
+  push history, users table me last_seen column. Naye functions
+  (admin-overview, admin-flags, admin-instructions, feature-flags,
+  heartbeat) dashboard deploy hone tak sections imaandaar
+  "deploy nahi hua" message dikhayenge, crash nahi honge.
+  Flags ka on-device asar Phase 8 app client se aayega — phase 2
+  sirf store + UI + server config hai. "Online" kabhi nahi likha
+  jata — sirf last_seen time hai.
   Payments approvals admin-approve Edge Function se hote hain
   (server-side admin check + licence activation + audit insert,
   sab function ke andar). Client kabhi licence ya payment status
@@ -78,6 +87,19 @@ th,td{border-bottom:1px solid #f3f4f6;padding:8px 6px;text-align:left;vertical-a
 Admin banne ke liye: (1) app me Settings → “Website account link” me isi email se link karo (isse tumhari users row banegi), (2) phir admin flag lagaya jayega, (3) uske baad ye panel poora chalega.</p>
 </div>
 
+<section class="card">
+<h2>CEO Overview</h2>
+<p class="note">Poora Flora ek nazar me — users, Pro/Free, revenue, pending kaam, aaj ka usage, recent activity. Ye data admin-overview function se aata hai (admin-only). "Live" ka matlab refresh par taaza data hai — koi real-time presence nahi hai (heartbeat sirf last_seen deta hai).</p>
+<div id="overview-cards">Login ke baad overview yahan aayega.</div>
+<p class="note" id="overview-warnings"></p>
+<h3 style="font-size:1em">Recent payments</h3>
+<div id="overview-payments">—</div>
+<h3 style="font-size:1em">Recent admin actions</h3>
+<div id="overview-audit">—</div>
+<h3 style="font-size:1em">Push history</h3>
+<div id="overview-push">—</div>
+</section>
+
 <section class="card" id="login-section">
 <h2>Login</h2>
 <label>Email <input id="admin-email" type="email" placeholder="owner email"></label>
@@ -120,6 +142,49 @@ Admin banne ke liye: (1) app me Settings → “Website account link” me isi e
 </section>
 
 <section class="card">
+<h2>Feature flags (global + per-user)</h2>
+<p class="note">Koi bhi feature panel se band/chalu karo. Global toggle sab par lagu; per-user override us user par global se upar hota hai (override hatane par global wapas lagu). On-device asar Phase 8 app client se aayega (purana v2.22 APK flags nahi maanega); server-side cheezein deploy hote hi asar karengi. Flag fetch fail ho to app sab ON rakhta hai (fail-open).</p>
+<div id="flags-list">Login ke baad flags yahan aayenge.</div>
+<p class="note" id="flags-status"></p>
+<label>Per-user override — User
+<select id="flag-user"></select>
+</label>
+<label>Feature
+<select id="flag-key">
+<option value="talk">Baat-cheet (chat)</option>
+<option value="calls">Calls</option>
+<option value="sms">SMS</option>
+<option value="whatsapp">WhatsApp</option>
+<option value="browser">Browser</option>
+<option value="macros">Macros</option>
+<option value="image_gen">Image generation</option>
+<option value="screen_vision">Screen vision</option>
+<option value="camera">Camera</option>
+<option value="overlay_mic">Overlay mic</option>
+<option value="wakeword">Wakeword</option>
+<option value="home">Home sync</option>
+<option value="routines">Routines</option>
+<option value="form_fill">Form fill</option>
+</select>
+</label>
+<div class="row">
+<button id="flag-user-on-btn" type="button" class="small">User ke liye ON</button>
+<button id="flag-user-off-btn" type="button" class="small ghost">User ke liye OFF</button>
+<button id="flag-user-del-btn" type="button" class="small danger">Override hatao</button>
+</div>
+<p class="note" id="flag-user-status"></p>
+</section>
+
+<section class="card">
+<h2>Global brain (sab users par lagu)</h2>
+<p class="note">Ye instructions + knowledge brain-proxy lane ke har jawab me judenge (STYLE ke saath). App-direct Gemini/Groq lanes apne prompts use karte hain — un par ye tabhi asar karega jab app build instructions fetch kare. Har field max 2000 chars. Ye secret nahi hain — admin ko edit form me text dikhega.</p>
+<label>Global instructions <textarea id="brain-instructions" rows="4" style="width:100%;max-width:640px;padding:9px;border-radius:10px;border:1px solid #fed7aa"></textarea></label>
+<label>Global knowledge <textarea id="brain-knowledge" rows="4" style="width:100%;max-width:640px;padding:9px;border-radius:10px;border:1px solid #fed7aa"></textarea></label>
+<div class="row"><button id="brain-save-btn" type="button">Brain config save karo</button></div>
+<p class="note" id="brain-status"></p>
+</section>
+
+<section class="card">
 <h2>Push bhejo</h2>
 <p class="note">Sirf fixed templates chalte hain (send-push function manmana title/body reject karta hai). "Sabhi users" par sirf un users ko bheja jayega jinke paas push token hai — bina token wale skip honge aur count me dikhenge.</p>
 <label>Template
@@ -137,6 +202,12 @@ Admin banne ke liye: (1) app me Settings → “Website account link” me isi e
 <div class="row"><button id="push-send-btn" type="button">Push bhejo</button></div>
 <p class="note" id="push-status"></p>
 <div id="push-results"></div>
+</section>
+
+<section class="card">
+<h2>Push history</h2>
+<p class="note">send-push se bheje gaye push (template + ok). Token value kabhi yahan nahi aati. History tabhi dikhegi jab push_log table + send-push redeploy (local file se) ho jaye.</p>
+<div id="push-history-list">Login ke baad history yahan aayegi (overview se aati hai).</div>
 </section>
 
 <section class="card">
@@ -191,6 +262,7 @@ const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let adminSession = null;
 let isAdmin = false;
 let adminData = null;
+let overviewData = null;
 let payFilter = "all";
 
 function shortId(id) { return (id || "").slice(0, 8) + "…"; }
@@ -318,13 +390,15 @@ function renderAppTable() {
   if (!adminData) { el.textContent = "Login ke baad list yahan aayegi."; return; }
   const users = adminData.users || [];
   if (!users.length) { el.textContent = "Koi user nahi hai."; return; }
-  let html = "<table><tr><th>User</th><th>Device</th><th>Push token</th><th>Token updated</th></tr>";
+  let html = "<table><tr><th>User</th><th>Device</th><th>Push token</th><th>Token updated</th><th>Last seen</th></tr>";
   users.forEach(u => {
     const push = (adminData.push || {})[u.id];
+    const seen = (overviewData && overviewData.heartbeats && overviewData.heartbeats[u.id]) ? overviewData.heartbeats[u.id] : "—";
     html += "<tr><td>" + ((adminData.emails || {})[u.id] || shortId(u.id)) + "</td>" +
       "<td>" + (u.device_id ? shortId(u.device_id) : "?") + "</td>" +
       "<td>" + (push ? "haan" : "nahi") + "</td>" +
-      "<td>" + (push && push.updated_at ? push.updated_at : "—") + "</td></tr>";
+      "<td>" + (push && push.updated_at ? push.updated_at : "—") + "</td>" +
+      "<td>" + seen + "</td></tr>";
   });
   html += "</table>";
   el.innerHTML = html;
@@ -375,6 +449,7 @@ function fillPushUsers() {
     opt.textContent = (adminData.emails || {})[u.id] || shortId(u.id);
     sel.appendChild(opt);
   });
+  fillFlagUsers();
 }
 
 const PUSH_TEMPLATES = {
@@ -515,7 +590,143 @@ async function loadAudit() {
   });
 }
 
-function loadAll() { loadPayments(); loadAudit(); loadAdminList(); loadKeys(); loadUpi(); }
+const FLAG_LABELS = { talk: "Baat-cheet (chat)", calls: "Calls", sms: "SMS", whatsapp: "WhatsApp", browser: "Browser", macros: "Macros", image_gen: "Image generation", screen_vision: "Screen vision", camera: "Camera", overlay_mic: "Overlay mic", wakeword: "Wakeword", home: "Home sync", routines: "Routines", form_fill: "Form fill" };
+
+async function loadOverview() {
+  const el = document.getElementById('overview-cards');
+  const payEl = document.getElementById('overview-payments');
+  const audEl = document.getElementById('overview-audit');
+  const pushEl = document.getElementById('overview-push');
+  const histEl = document.getElementById('push-history-list');
+  const warnEl = document.getElementById('overview-warnings');
+  try {
+    const d = await callFn("admin-overview", {});
+    overviewData = d;
+    el.innerHTML = "";
+    const cards = [
+      ["Users", d.users_total + " (linked " + d.linked + ", admin " + d.admins + ")"],
+      ["Pro / Free", d.pro_active + " Pro / " + d.free_count + " Free (7 din me expiry: " + d.pro_expiring_7d + ")"],
+      ["Revenue (approved)", "₹" + (d.revenue_paisa / 100)],
+      ["Pending payments", d.pending_count + " (₹" + (d.pending_paisa / 100) + ")"],
+      ["Pending admin actions", d.pending_actions + " (pending payments + unclaimed licences)"],
+      ["Aaj ka usage", d.usage_today_seconds + "s talk / " + d.usage_today_tools + " tools"],
+      ["Heartbeats (24h)", d.heartbeats_24h + " users (last_seen ke hisaab se)"],
+    ];
+    cards.forEach(c => {
+      const div = document.createElement('div');
+      div.className = "item";
+      div.innerHTML = "<strong>" + c[0] + ":</strong> " + c[1];
+      el.appendChild(div);
+    });
+    warnEl.textContent = (d.warnings && d.warnings.length) ? ("Warning — ye sections load nahi hue: " + d.warnings.join(", ")) : "";
+    payEl.innerHTML = (d.recent_payments || []).length ? (d.recent_payments || []).map(p =>
+      "<div class='item'>₹" + (p.amount_paisa / 100) + " | " + p.status + " | " + (p.user_email || shortId(p.user_id)) + " | UTR " + p.utr + " | " + p.created_at + "</div>").join("") : "Koi payment nahi hai.";
+    audEl.innerHTML = (d.recent_audit || []).length ? (d.recent_audit || []).map(a =>
+      "<div class='item'>" + a.created_at + " | " + a.action + " | admin " + shortId(a.admin_user_id) + " | user " + shortId(a.target_user_id) + "</div>").join("") : "Koi audit entry nahi hai.";
+    const pushHtml = (d.push_recent || []).length ? (d.push_recent || []).map(p =>
+      "<div class='item'>" + p.template + " | " + (p.ok ? "OK" : "FAIL") + " | " + (p.user_email || shortId(p.user_id)) + " | " + p.sent_at + "</div>").join("") : "Koi push history nahi hai.";
+    pushEl.innerHTML = pushHtml;
+    histEl.innerHTML = pushHtml;
+    if (adminData) renderAppTable();
+  } catch (e) {
+    el.textContent = "Load fail: " + e.message;
+    payEl.textContent = "Load fail: " + e.message;
+    audEl.textContent = "Load fail: " + e.message;
+    pushEl.textContent = "Load fail: " + e.message;
+    histEl.textContent = "Load fail: " + e.message;
+  }
+}
+
+function fillFlagUsers() {
+  const sel = document.getElementById('flag-user');
+  if (!sel || !adminData) return;
+  sel.innerHTML = "";
+  (adminData.users || []).forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.id;
+    opt.textContent = (adminData.emails || {})[u.id] || shortId(u.id);
+    sel.appendChild(opt);
+  });
+}
+
+async function loadFlags() {
+  const el = document.getElementById('flags-list');
+  try {
+    const d = await callFn("admin-flags", { action: "list" });
+    const byKey = {};
+    (d.flags || []).forEach(r => { if (r.scope === "global") byKey[r.key] = r.enabled; });
+    el.innerHTML = "";
+    Object.keys(FLAG_LABELS).forEach(k => {
+      const cur = (k in byKey) ? byKey[k] : true;
+      const div = document.createElement('div');
+      div.className = "item";
+      div.innerHTML = "<strong>" + FLAG_LABELS[k] + "</strong> " +
+        (cur ? "<span class='badge green'>ON</span>" : "<span class='badge red'>OFF</span>") +
+        "<span class='meta'> (global; na mile to app default ON rakhta hai)</span>";
+      const btn = document.createElement('button');
+      btn.textContent = cur ? "OFF karo" : "ON karo";
+      btn.className = "small ghost";
+      btn.onclick = async () => {
+        try {
+          await callFn("admin-flags", { action: "set", key: k, enabled: !cur, scope: "global" });
+          document.getElementById('flags-status').textContent = FLAG_LABELS[k] + " global " + (!cur ? "ON" : "OFF") + " ho gaya.";
+        } catch (e) { document.getElementById('flags-status').textContent = "Save fail: " + e.message; return; }
+        loadFlags();
+      };
+      const row = document.createElement('div');
+      row.className = "row";
+      row.appendChild(btn);
+      div.appendChild(row);
+      el.appendChild(div);
+    });
+    fillFlagUsers();
+  } catch (e) {
+    el.textContent = "Load fail: " + e.message;
+  }
+}
+
+async function flagUserAction(mode) {
+  const st = document.getElementById('flag-user-status');
+  const uid = document.getElementById('flag-user').value;
+  const key = document.getElementById('flag-key').value;
+  if (!uid) { st.textContent = "Pehle user chuno (users load hone par list bharegi)."; return; }
+  try {
+    if (mode === "del") {
+      if (!confirm("Is user ka " + FLAG_LABELS[key] + " override hatana hai? Uske baad global lagu hoga.")) return;
+      await callFn("admin-flags", { action: "delete", key, user_id: uid });
+      st.textContent = "Override hata diya gaya.";
+    } else {
+      await callFn("admin-flags", { action: "set", key, enabled: (mode === "on"), user_id: uid });
+      st.textContent = FLAG_LABELS[key] + " is user ke liye " + (mode === "on" ? "ON" : "OFF") + " ho gaya.";
+    }
+    loadFlags();
+  } catch (e) { st.textContent = "Save fail: " + e.message; }
+}
+document.getElementById('flag-user-on-btn').addEventListener('click', () => flagUserAction("on"));
+document.getElementById('flag-user-off-btn').addEventListener('click', () => flagUserAction("off"));
+document.getElementById('flag-user-del-btn').addEventListener('click', () => flagUserAction("del"));
+
+async function loadInstructions() {
+  const st = document.getElementById('brain-status');
+  try {
+    const d = await callFn("admin-instructions", { action: "get" });
+    document.getElementById('brain-instructions').value = d.instructions || "";
+    document.getElementById('brain-knowledge').value = d.knowledge || "";
+    st.textContent = d.updated_at ? ("Aakhri save: " + d.updated_at) : "Abhi kuch set nahi hai.";
+  } catch (e) { st.textContent = "Load fail: " + e.message; }
+}
+
+document.getElementById('brain-save-btn').addEventListener('click', async () => {
+  const st = document.getElementById('brain-status');
+  try {
+    const r = await callFn("admin-instructions", { action: "set",
+      instructions: document.getElementById('brain-instructions').value,
+      knowledge: document.getElementById('brain-knowledge').value });
+    st.textContent = "Save ho gaya (instructions " + r.instructions_len + " chars, knowledge " + r.knowledge_len + " chars).";
+  } catch (e) { st.textContent = "Save fail: " + e.message; }
+});
+
+function loadAll() { loadPayments(); loadAudit(); loadAdminList(); loadKeys(); loadUpi(); loadOverview(); loadFlags(); loadInstructions(); }
 
 async function afterLogin(session, user) {
   adminSession = session;

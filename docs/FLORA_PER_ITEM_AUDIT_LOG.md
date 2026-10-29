@@ -1172,3 +1172,81 @@ maujood, index bhi 200. Download page ab live hai.
   Supabase dashboard se set hongi, panel par kabhi nahi. User ne panel me key option
   maanga → panel-set keys ban gayi hain, par VALUES panel par kabhi display nahi hongi
   (sirf present/missing + set form); dashboard secrets zyada secure raasta bana rahega.
+
+## Admin panel PHASE 2 build — 2026-10-29 (user order ~09:29 IST, CEO perspective)
+- Wajah: user ne panel ko CEO perspective se bada + poora maanga — har cheez ka
+  control, feature on/off, Flora ko globally train karna, pura server + live overview
+  ek jagah, kuch nahi bache. Blueprint: docs/FLORA_FULL_APP_AUDIT_FOR_ADMIN.md
+  (read-only audit; phase 1 files tree me the, deploy baaki tha).
+- CONTRACT (Phase 8 app builder ke saath shared — EXACT yehi rakha gaya):
+  POST functions/v1/feature-flags, anon-key Bearer, body {user_id?} optional →
+  {flags: {talk, calls, sms, whatsapp, browser, macros, image_gen, screen_vision,
+  camera, overlay_mic, wakeword, home, routines, form_fill}} — sab boolean.
+  Logic: scope='global' rows base + scope=user_id override; jo key na mile → true
+  (fail-open). Table read service-role se (RLS no-policy).
+- supabase/sql/admin_panel_phase2.sql NEW: feature_flags (key, enabled, scope,
+  PRIMARY KEY (key, scope)); global_instructions (id=1, instructions, knowledge);
+  push_log (id uuid, user_id, template, sent_at, ok); heartbeats (user_id PK,
+  last_seen). Sab par RLS ON, koi policy nahi (service-role-only by design).
+- supabase/functions/feature-flags NEW: contract ke mutabiq; NO user-JWT check
+  (global config, secret nahi); table na ho to bhi sab true (catch → defaults).
+- supabase/functions/admin-flags NEW: admin JWT + is_admin check (admin-approve
+  pattern); list/set/delete; key allowlist = contract keys; scope 'global' ya user_id
+  (user scope par users row verify, warna 400); enabled boolean check.
+- supabase/functions/admin-instructions NEW: admin check; get (text admin ko hi
+  milta hai — instructions secret nahi hain); set (merge + upsert id=1, har field
+  max 2000 chars); set response me sirf confirm + lengths (poora text wapas nahi).
+- supabase/functions/brain-proxy v4 (v3 se): v3 logic (env→DB key fallback, JWT
+  gate + user_id match, model chain, 4000 prompt reject) BARKARAAR + global_
+  instructions prepend (STYLE ke saath; global pehle, combined global+prompt ≤ 4000
+  par prompt truncate; global > 4000 ho to 4000 par cut). Table/row na ho to global
+  khaali (fail-open, v3 jaisa jawab). Sirf proxy lane par asar — app-direct lanes
+  apne prompts use karte hain.
+- supabase/functions/heartbeat NEW: user JWT check + body user_id == JWT user
+  (warna 403); heartbeats upsert (last_seen=now). Koi aur data nahi liya jata.
+- supabase/functions/admin-overview NEW: admin check + aggregates (users total /
+  linked / admins, Free/Pro split, 7-din expiry, approved revenue sum, pending
+  count + rakam, pending actions = pending + unclaimed licences, aaj ka usage,
+  recent payments 5 / audit 5 / push 10, heartbeats map + 24h count, warnings
+  array jo section fail ho). Token/key value kabhi nahi. Function-to-function
+  live probe nahi (counts hi kaafi hain).
+- supabase/functions/send-push LOCAL EDIT ONLY (repo me nahi hai — git push me
+  NAHI dala gaya): send attempt ke baad push_log insert (user_id + template + ok;
+  token kabhi log nahi); table na ho to insert fail par send response wahi
+  (best-effort catch). Header comment me local-only note joda gaya.
+- web/admin.html: CEO Overview section SABSE UPAR (counts cards + recent
+  payments/audit/push + warnings); Feature flags section (14 global toggles +
+  per-user override form: user select + key select + ON/OFF/delete, confirm ke
+  saath); Global brain section (instructions + knowledge textareas + save);
+  Push history section (overview se); Users table (App connection) me Last seen
+  column (heartbeats map se; "online" kabhi nahi likha). Naye functions deploy na
+  hue hon to phase 1 jaisa imaandaar "deploy nahi hua" message (callFn 404
+  pattern) — crash nahi. JS syntax node --check se OK; naye section ids ek-ek
+  baar mile; phase 1 sections/logic chheda nahi (sirf renderAppTable me column
+  + fillPushUsers me fillFlagUsers hook + loadAll me 3 loaders).
+- web/admin-draft.html DELETE: audit me dead darj tha ("Purana draft" title);
+  kisi page se koi link nahi (web/*.html grep 0) — push_flora_delete.py se
+  isi commit me delete kiya gaya.
+- DEPLOY (dashboard, alag browser step — is commit se deploy NAHI hota).
+  ORDER: (1) supabase/sql/admin_panel_tables.sql (phase 1 wala — agar abhi tak
+  nahi chala), (2) supabase/sql/admin_panel_phase2.sql, (3) functions deploy
+  karo: phase 1 wale (admin-list replace, admin-payments new, admin-keys new,
+  admin-settings new, public-settings new, brain-proxy replace → v4 wali file,
+  tts-proxy replace) + phase 2 wale (feature-flags new, admin-flags new,
+  admin-instructions new, heartbeat new, admin-overview new) + send-push
+  REDEPLOY — LOCAL file se (repo me nahi hai; isme admin check + templates
+  wala version + push_log insert live aana chahiye). home-sync function + table
+  is commit me nahi hain (Phase 8 builder ke paas hain — deploy checklist me
+  uske baad jodna). Dashboard verify notes (code mat chhedna): plans + settings
+  tables ke columns dashboard se verify karo (schema unknown hai — panel me
+  inke columns nahi dikhaye gaye); Google link web client (GOOGLE_WEB_CLIENT_ID)
+  dashboard step hai.
+- LIVE TEST ke liye chahiye: admin unblock (app-link + is_admin=true) — bina
+  iske admin functions 403 denge, ye expected hai, bug nahi.
+- IMAANDAAR LIMITS: flags ka on-device asar Phase 8 app client se aayega —
+  phase 2 sirf store + UI + server config hai (brain-proxy me flag gating is
+  build me nahi ki gayi); presence = last_seen only ("online" claim nahi);
+  global instructions sirf proxy lane par asar karenge (app-direct lanes ke
+  liye app build me instructions fetch chahiye — alag app change); app-link
+  ke bina heartbeats khaali rahenge (heartbeat ke liye user JWT chahiye);
+  overview limits: lists limit 1000 (payments/usage), listUsers 1000 users tak.

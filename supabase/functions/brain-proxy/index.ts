@@ -11,6 +11,13 @@
 //   (panel se set ki gayi key, service-role read). Koi key na
 //   mile to pehle wala 503 hi rahega. Baaki logic (JWT gate,
 //   model chain, caps) bilkul wahi hai.
+// v4 (admin panel PHASE 2, 2026-10-29): global_instructions row
+//   (id=1, panel se set) STYLE ke saath judti hai — instructions
+//   + knowledge, proxy lane par hi asar (app-direct lanes apne
+//   prompts use karte hain). Combined cap: global + prompt ≤ 4000
+//   (global pehle, prompt truncate; akela prompt > 4000 ab bhi
+//   reject — v3 wala cost control). Table na ho to global khaali
+//   (fail-open, v3 jaisa jawab).
 // Order: Gemini first, Groq fallback, then honest error. Keys never logged.
 // Style: short-casual replies default (same instruction as app BrainClient).
 // Prompt cap: 4000 chars (lambi prompt reject, cost control).
@@ -42,6 +49,18 @@ serve(async (req) => {
   const jwtUserId = userData.user.id;
   const svc = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
+  // v4: global instructions/knowledge (panel se set, id=1).
+  // Table na ho / row na ho to khaali — fail-open, v3 jaisa jawab.
+  let globalText = "";
+  try {
+    const { data: g } = await svc.from("global_instructions")
+      .select("instructions,knowledge").eq("id", 1).maybeSingle();
+    const parts: string[] = [];
+    if (g?.instructions?.trim()) parts.push("Global instructions:\n" + g.instructions.trim());
+    if (g?.knowledge?.trim()) parts.push("Global knowledge:\n" + g.knowledge.trim());
+    globalText = parts.join("\n\n");
+  } catch (_e) { globalText = ""; }
+
   // Key resolution (v3): env FIRST, else provider_keys DB row.
   // DB key kabhi log nahi hogi, kabhi response me nahi jayegi.
   async function resolveKey(provider: string, envName: string): Promise<string> {
@@ -62,6 +81,14 @@ serve(async (req) => {
     return json({ error: "prompt too long (max 4000 chars)" }, 400);
   }
 
+  // v4 combined cap: global + prompt ≤ 4000 (global pehle, prompt truncate).
+  if (globalText.length > 4000) globalText = globalText.slice(0, 4000);
+  let effPrompt = prompt;
+  if (globalText.length + effPrompt.length > 4000) {
+    effPrompt = effPrompt.slice(0, Math.max(0, 4000 - globalText.length));
+  }
+  const globalSuffix = globalText ? "\n\n" + globalText : "";
+
   const geminiKey = await resolveKey("gemini", "GEMINI_API_KEY");
   if (geminiKey) {
     // v2.22: chain me verified-working models bhi (user key par
@@ -74,7 +101,7 @@ serve(async (req) => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              contents: [{ parts: [{ text: `${STYLE} Sawal: ${prompt}` }] }],
+              contents: [{ parts: [{ text: `${STYLE}${globalSuffix} Sawal: ${effPrompt}` }] }],
             }),
           },
         );
@@ -96,8 +123,8 @@ serve(async (req) => {
         body: JSON.stringify({
           model: "openai/gpt-oss-20b",
           messages: [
-            { role: "system", content: STYLE },
-            { role: "user", content: prompt },
+            { role: "system", content: STYLE + globalSuffix },
+            { role: "user", content: effPrompt },
           ],
         }),
       });
