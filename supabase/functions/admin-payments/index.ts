@@ -58,5 +58,15 @@ Deno.serve(async (req) => {
   if (error) return json({ error: error.message }, 500);
   const emails = await loadEmails(svc);
   const out = (payments || []).map((p: any) => ({ ...p, user_email: emails[p.user_id] || null }));
-  return json({ ok: true, payments: out });
+  // S1-36 (Cycle 1 FIX, ADDITIVE): total DB count (status filter
+  // ke saath) + truncated flag. Count query na chale to total
+  // null rahega (panel isko "unknown" samjhe, 0 nahi).
+  let total: number | null = null;
+  try {
+    let cq = svc.from("payment_submissions").select("*", { count: "exact", head: true });
+    if (status) cq = cq.eq("status", status);
+    const { count, error: countErr } = await cq;
+    if (!countErr && typeof count === "number") total = count;
+  } catch (_e) { /* total null hi rahega */ }
+  return json({ ok: true, payments: out, total, truncated: (payments || []).length >= 200 });
 });

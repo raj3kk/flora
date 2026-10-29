@@ -85,13 +85,31 @@ Deno.serve(async (req) => {
     usageTotals[r.user_id] = t;
   });
   const emails = await loadEmails(svc);
+  // S1-12 (Cycle 1 FIX): truncation flags + counts — ADDITIVE hi
+  // hai, maujooda fields ki shape nahi tooti. Limit par pahunchne
+  // par truncated=true (limit ke barabar rows = shayad aur rows
+  // hain, panel isko "poora" mat samjhe).
+  const usageFetched = usageAll || [];
   return new Response(JSON.stringify({
     ok: true,
     users: users || [],
-    usage: (usageAll || []).slice(0, 200),
+    usage: usageFetched.slice(0, 200),
     licences: licencesOut,
     push,
     emails,
     usage_totals: usageTotals,
+    truncated: {
+      users: (users || []).length >= 200,
+      licences: licencesOut.length >= 200,
+      usage: usageFetched.length >= 1000,
+      push: (pushRows || []).length >= 500,
+    },
+    counts: {
+      users: (users || []).length,
+      licences: licencesOut.length,
+      usage_fetched: usageFetched.length,
+      usage_returned: usageFetched.slice(0, 200).length,
+      push_users: Object.keys(push).length,
+    },
   }), { headers: { "Content-Type": "application/json" } });
 });

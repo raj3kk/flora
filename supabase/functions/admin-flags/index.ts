@@ -36,9 +36,20 @@ Deno.serve(async (req) => {
     return json({ error: "unauthorized" }, 401);
   }
   const svc = createClient(url, serviceKey);
-  const { data: adminRow } = await svc.from("users").select("is_admin").eq("id", userData.user.id).maybeSingle();
+  const adminId = userData.user.id;
+  const { data: adminRow } = await svc.from("users").select("is_admin").eq("id", adminId).maybeSingle();
   if (!adminRow?.is_admin) {
     return json({ error: "admin only" }, 403);
+  }
+  // S1-32 audit helper (admin-approve pattern; audit fail se
+  // action nahi rukega).
+  async function audit(actionName: string, targetUserId: string | null, beforeJson: unknown, afterJson: unknown) {
+    try {
+      await svc.from("admin_audit").insert({
+        admin_user_id: adminId, action: actionName,
+        target_user_id: targetUserId, before_json: beforeJson, after_json: afterJson,
+      });
+    } catch (_e) { /* audit fail se action nahi rukega */ }
   }
   const { action, key, enabled, scope, user_id } = await req.json().catch(() => ({}));
   if (action === "list") {
@@ -59,12 +70,16 @@ Deno.serve(async (req) => {
       const { data: uRow } = await svc.from("users").select("id").eq("id", effScope).maybeSingle();
       if (!uRow) return json({ error: "unknown user scope" }, 400);
     }
-    const { error } = await svc.from("feature_flags").upsert(
+    const { data: beforeRow } = await svc.from("feature_flags").select("key,enabled,scope").eq("key", key).eq("scope", effScope).maybeSingle();
+    const { data: upserted, error } = await svc.from("feature_flags").upsert(
       { key, enabled, scope: effScope, updated_at: new Date().toISOString() },
       { onConflict: "key,scope" },
-    );
+    ).select("key");
     if (error) return json({ error: error.message }, 500);
-    return json({ ok: true });
+    await audit("flag_set", effScope !== "global" ? effScope : null,
+      beforeRow || null, { key, enabled, scope: effScope });
+    // S1-38: additive affected count (upsert hamesha 1 row deta hai).
+    return json({ ok: true, affected: (upserted || []).length });
   }
   if (action === "delete") {
     if (!FLAG_KEYS.includes(key)) {
@@ -72,9 +87,13 @@ Deno.serve(async (req) => {
     }
     const effScope = (typeof user_id === "string" && user_id) ? user_id
       : (typeof scope === "string" && scope ? scope : "global");
-    const { error } = await svc.from("feature_flags").delete().eq("key", key).eq("scope", effScope);
+    const { data: beforeRow } = await svc.from("feature_flags").select("key,enabled,scope").eq("key", key).eq("scope", effScope).maybeSingle();
+    const { data: deleted, error } = await svc.from("feature_flags").delete().eq("key", key).eq("scope", effScope).select("key");
     if (error) return json({ error: error.message }, 500);
-    return json({ ok: true });
+    await audit("flag_deleted", effScope !== "global" ? effScope : null,
+      beforeRow || null, { key, scope: effScope });
+    // S1-38: galat scope/key par silent no-op ki jagah affected:0.
+    return json({ ok: true, affected: (deleted || []).length });
   }
   return json({ error: "action list/set/delete required" }, 400);
 });

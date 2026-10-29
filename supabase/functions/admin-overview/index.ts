@@ -45,11 +45,20 @@ Deno.serve(async (req) => {
   const in24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
   // Emails (best-effort — listUsers fail ho to map khaali rahega).
+  // S1-13: admin-list jaisi paging (10 pages x 100) — pehle sirf
+  // 1 page tha, ab 10 pages tak. 10 pages poore bhare hon to
+  // emails_truncated=true (aur emails ho sakti hain).
   const emails: Record<string, string> = {};
+  let emailsTruncated = false;
   try {
-    const { data: lu } = await svc.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    for (const u of (lu?.users || [])) {
-      if (u.email) emails[u.id] = u.email;
+    for (let page = 1; page <= 10; page++) {
+      const { data: lu } = await svc.auth.admin.listUsers({ page, perPage: 100 });
+      if (!lu?.users?.length) break;
+      for (const u of lu.users) {
+        if (u.email) emails[u.id] = u.email;
+      }
+      if (lu.users.length < 100) break;
+      if (page === 10) emailsTruncated = true;
     }
   } catch (_e) { /* emails map khaali rahega */ }
 
@@ -75,10 +84,28 @@ Deno.serve(async (req) => {
     .order("created_at", { ascending: false }).limit(1000);
   if (payErr) warnings.push("payments");
   const payRows = pays || [];
-  const revenuePaisa = payRows.filter((p) => p.status === "approved")
+  let revenuePaisa = payRows.filter((p) => p.status === "approved")
     .reduce((s, p) => s + (p.amount_paisa || 0), 0);
   const pendRows = payRows.filter((p) => p.status === "pending");
-  const pendingPaisa = pendRows.reduce((s, p) => s + (p.amount_paisa || 0), 0);
+  let pendingPaisa = pendRows.reduce((s, p) => s + (p.amount_paisa || 0), 0);
+  // S1-13: revenue/pending par DB aggregate (PostgREST sum) try
+  // karo; supported na ho ya error aaye to row sums hi rahenge
+  // + truncated flag batayega ki sums adhoore ho sakte hain.
+  let revenuePaisaExact = false, pendingPaisaExact = false;
+  try {
+    const { data: revAgg, error: revErr } = await svc.from("payment_submissions")
+      .select("amount_paisa.sum()").eq("status", "approved");
+    if (!revErr && revAgg && revAgg.length && typeof (revAgg[0] as any).sum === "number") {
+      revenuePaisa = (revAgg[0] as any).sum;
+      revenuePaisaExact = true;
+    }
+    const { data: pendAgg, error: pendErr } = await svc.from("payment_submissions")
+      .select("amount_paisa.sum()").eq("status", "pending");
+    if (!pendErr && pendAgg && pendAgg.length && typeof (pendAgg[0] as any).sum === "number") {
+      pendingPaisa = (pendAgg[0] as any).sum;
+      pendingPaisaExact = true;
+    }
+  } catch (_e) { /* aggregate na chale to row sums + truncated flag */ }
   const recentPayments = payRows.slice(0, 5).map((p) => ({
     id: p.id, user_email: emails[p.user_id] || null, user_id: p.user_id,
     amount_paisa: p.amount_paisa, utr: p.utr, note: p.note,
@@ -136,5 +163,19 @@ Deno.serve(async (req) => {
     recent_payments: recentPayments, recent_audit: recentAudit,
     push_recent: pushRecent, heartbeats, heartbeats_24h: heartbeats24h,
     warnings,
+    // S1-13 ADDITIVE: limit par pahunchne par truncated=true —
+    // panel in totals ko "poora" mat samjhe. revenue/pending par
+    // DB aggregate chal gaya ho to *_exact=true (tab truncated
+    // ka us sum par asar nahi).
+    truncated: {
+      users: (users || []).length >= 1000,
+      licences: (lics || []).length >= 1000,
+      payments: payRows.length >= 1000,
+      usage: (usage || []).length >= 500,
+      heartbeats: (beats || []).length >= 1000,
+      emails: emailsTruncated,
+    },
+    revenue_paisa_exact: revenuePaisaExact,
+    pending_paisa_exact: pendingPaisaExact,
   });
 });

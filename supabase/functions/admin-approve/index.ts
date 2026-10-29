@@ -15,6 +15,16 @@
 // 1. JWT se user nikalo (anon client, auth.getUser). Na mile -> 401.
 // 2. Service client se users row check: is_admin=true na ho -> 403.
 // 3. Payment row load karo: status pending na ho -> 400.
+// 3b. Approve par amount check (S1-4, Cycle 1 FIX): approve
+//     hamesha 'pro' 30-din licence deta hai — expected amount
+//     pricing.html + panel Plans text se hai (dono: Pro
+//     ₹199/mahina = 19900 paisa). Map me sirf pro hai, kyunki
+//     free ka koi approve path nahi hai; koi aur plan/amount
+//     aaye to wo is check se bahar hai (admin manual match hi
+//     control rahega — koi amount blindly hardcode nahi kiya
+//     gaya). Mismatch par 400 + admin_audit, licence NAHI banegi.
+//     amount_paisa missing/non-number ho to check skip (purani
+//     rows) — admin manual match hi control rahega.
 // 4. Approve: payment -> approved + reviewed_by/at; users.device_id
 //    se licences upsert (user_id, device_id) plan_id='pro',
 //    status='active', expires_at = ab + 30 din; audit insert.
@@ -61,6 +71,21 @@ Deno.serve(async (req) => {
   }
   if (payment.status !== "pending") {
     return new Response(JSON.stringify({ error: "already reviewed" }), { status: 400, headers: { "Content-Type": "application/json" } });
+  }
+  // S1-4 amount check (approve path par hi; reject par nahi —
+  // reject koi licence nahi deta). Licence regions ko chhua
+  // nahi gaya hai — ye block unse pehle, alag hai.
+  if (action === "approve") {
+    const EXPECTED_PAISA_FOR_PRO = 19900; // Pro ₹199/mahina (pricing.html + panel Plans)
+    const amt = (payment as any).amount_paisa;
+    if (typeof amt === "number" && amt !== EXPECTED_PAISA_FOR_PRO) {
+      await svc.from("admin_audit").insert({
+        admin_user_id: adminId, action: "payment_approve_amount_mismatch",
+        target_user_id: payment.user_id, before_json: payment,
+        after_json: { expected_paisa: EXPECTED_PAISA_FOR_PRO, actual_paisa: amt, plan_id: "pro" },
+      });
+      return new Response(JSON.stringify({ error: "amount mismatch: expected 19900 paisa (Pro ₹199/mahina) for pro licence" }), { status: 400, headers: { "Content-Type": "application/json" } });
+    }
   }
   const now = new Date().toISOString();
   if (action === "reject") {

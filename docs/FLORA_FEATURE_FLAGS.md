@@ -76,3 +76,27 @@ seedha `FeatureFlags.isEnabled()` dekhte hain.)
   — panel se OFF karne ka asar deploy ke baad hi dikhega.
 - Screen taps se navigation (menu se Scan/Camera screen kholna)
   gate nahi hai — gate voice-triggered feature actions par hai.
+
+## Cycle 1 FIX notes (S1-11 + S1-34, 2026-10-29 — repo push only, deploy-pending)
+
+### Per-user flags: JWT + caller-match (S1-11, CONTRACT CHANGE)
+- Global flags: bina auth, jaise pehle (secret nahi hain).
+- Per-user override (body me `user_id` ho): user JWT zaroori +
+  caller-match — JWT user != body user_id → 403.
+- Bina JWT ke per-user request par sirf global flags milenge
+  (fail-open barkaraar) + response me `per_user_note` hoga ki
+  per-user overrides ke liye JWT chahiye; `per_user_applied`
+  batayega ki override laga ya nahi.
+- Wave B/app team ko: per-user overrides chahiye to request me
+  user JWT (`Authorization: Bearer <user JWT>`) bhejna hoga;
+  sirf anon key se per-user override NAHI milega.
+
+### Flags vs plan precedence (S1-34, CONTRACT — response shape nahi badla)
+- Effective feature = plan-entitlement AND flag-toggle.
+- Sabse restrictive jeetega: plan OFF ho ya flag OFF ho, koi ek
+  bhi OFF ho to feature OFF hai. Dono ON hon tabhi feature ON.
+- Enforcement app client (Wave B) + licence-verify v2 (LFMS,
+  queued) me hoga; feature-flags function sirf flag-toggle
+  deta hai, plan-entitlement nahi deta. Is contract ka server
+  par koi AND enforcement is fix me nahi joda gaya hai — sirf
+  contract define kiya gaya hai.

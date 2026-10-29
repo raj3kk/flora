@@ -28,8 +28,20 @@ Deno.serve(async (req) => {
   const { data: userData, error: userErr } = await anon.auth.getUser();
   if (userErr || !userData?.user) return json({ error: "unauthorized" }, 401);
   const svc = createClient(url, serviceKey);
-  const { data: adminRow } = await svc.from("users").select("is_admin").eq("id", userData.user.id).maybeSingle();
+  const adminId = userData.user.id;
+  const { data: adminRow } = await svc.from("users").select("is_admin").eq("id", adminId).maybeSingle();
   if (!adminRow?.is_admin) return json({ error: "admin only" }, 403);
+  // S1-32 audit helper (admin-approve pattern; audit fail se
+  // action nahi rukega). UPI public payment address hai, isliye
+  // before/after value audit me theek hai.
+  async function audit(actionName: string, beforeJson: unknown, afterJson: unknown) {
+    try {
+      await svc.from("admin_audit").insert({
+        admin_user_id: adminId, action: actionName,
+        target_user_id: null, before_json: beforeJson, after_json: afterJson,
+      });
+    } catch (_e) { /* audit fail se action nahi rukega */ }
+  }
   const body = await req.json().catch(() => ({}));
   if (body.action === "get") {
     const { data, error } = await svc.from("admin_settings").select("value").eq("key", "upi_vpa").maybeSingle();
@@ -41,10 +53,12 @@ Deno.serve(async (req) => {
     if (!value || !VPA_RE.test(value)) {
       return json({ error: "valid upi_vpa required (jaise naam@bank)" }, 400);
     }
+    const { data: beforeRow } = await svc.from("admin_settings").select("value").eq("key", "upi_vpa").maybeSingle();
     const { error } = await svc.from("admin_settings").upsert({
       key: "upi_vpa", value, updated_at: new Date().toISOString(),
     });
     if (error) return json({ error: error.message }, 500);
+    await audit("upi_set", { upi_vpa: beforeRow?.value || null }, { upi_vpa: value });
     return json({ ok: true });
   }
   return json({ error: "action must be get/set" }, 400);

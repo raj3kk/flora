@@ -30,9 +30,21 @@ Deno.serve(async (req) => {
     return json({ error: "unauthorized" }, 401);
   }
   const svc = createClient(url, serviceKey);
-  const { data: adminRow } = await svc.from("users").select("is_admin").eq("id", userData.user.id).maybeSingle();
+  const adminId = userData.user.id;
+  const { data: adminRow } = await svc.from("users").select("is_admin").eq("id", adminId).maybeSingle();
   if (!adminRow?.is_admin) {
     return json({ error: "admin only" }, 403);
+  }
+  // S1-32 audit helper (admin-approve pattern; audit fail se
+  // action nahi rukega). Instructions text audit me nahi — sirf
+  // lengths + badle hue fields (audit log ko halka rakhne ke liye).
+  async function audit(actionName: string, beforeJson: unknown, afterJson: unknown) {
+    try {
+      await svc.from("admin_audit").insert({
+        admin_user_id: adminId, action: actionName,
+        target_user_id: null, before_json: beforeJson, after_json: afterJson,
+      });
+    } catch (_e) { /* audit fail se action nahi rukega */ }
   }
   const { action, instructions, knowledge } = await req.json().catch(() => ({}));
   if (action === "get") {
@@ -60,6 +72,10 @@ Deno.serve(async (req) => {
     };
     const { error } = await svc.from("global_instructions").upsert(next, { onConflict: "id" });
     if (error) return json({ error: error.message }, 500);
+    await audit("instructions_set",
+      { instructions_len: (cur?.instructions || "").length, knowledge_len: (cur?.knowledge || "").length },
+      { instructions_len: next.instructions.length, knowledge_len: next.knowledge.length,
+        changed_fields: [instructions !== undefined ? "instructions" : null, knowledge !== undefined ? "knowledge" : null].filter(Boolean) });
     return json({ ok: true, instructions_len: next.instructions.length, knowledge_len: next.knowledge.length });
   }
   return json({ error: "action get/set required" }, 400);

@@ -7,7 +7,11 @@
 // Bearer bhejta hai taaki gateway JWT verification ON ho to
 // bhi call pass ho jaye; function khud koi auth check nahi
 // karta.
-// Response me SIRF { upi_vpa } hota hai (set na ho to null).
+// Response me { upi_vpa } + ADDITIVE status hota hai (S1-38,
+// Cycle 1 FIX): "set" (value maujood), "unset" (row nahi /
+// khaali value), "table_missing" (admin_settings table hi nahi
+// hai — SQL step baaki hai), "error" (koi aur failure).
+// upi_vpa field waisi hi hai (pay page ka fallback na toote).
 // Isme kabhi aur kuch mat bhejo (keys, settings, users nahi).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -24,9 +28,18 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
     const { data, error } = await svc.from("admin_settings").select("value").eq("key", "upi_vpa").maybeSingle();
-    if (error) return json({ upi_vpa: null });
-    return json({ upi_vpa: data?.value || null });
+    if (error) {
+      // S1-38: table-missing vs unset ka farq — pehle dono par
+      // sirf upi_vpa:null milta tha (silent). 42P01 = Postgres
+      // "relation does not exist".
+      const msg = (error as any).message || "";
+      const tableMissing = (error as any).code === "42P01" ||
+        (msg.includes("does not exist") && msg.includes("admin_settings"));
+      return json({ upi_vpa: null, status: tableMissing ? "table_missing" : "error" });
+    }
+    if (!data?.value) return json({ upi_vpa: null, status: "unset" });
+    return json({ upi_vpa: data.value, status: "set" });
   } catch (_e) {
-    return json({ upi_vpa: null });
+    return json({ upi_vpa: null, status: "error" });
   }
 });

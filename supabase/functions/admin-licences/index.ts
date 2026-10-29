@@ -183,7 +183,18 @@ Deno.serve(async (req) => {
         (r.device_id || "").toLowerCase().includes(s) ||
         (r.user_id || "").toLowerCase().includes(s));
     }
-    return json({ ok: true, licences: out });
+    // S1-36 (Cycle 1 FIX, ADDITIVE ONLY — baaki actions chhue
+    // nahi): total DB count (status filter ke saath, client
+    // search se PEHLE ka count) + truncated flag. Count query na
+    // chale to total null rahega (panel isko "unknown" samjhe).
+    let total: number | null = null;
+    try {
+      let cq = svc.from("licences").select("*", { count: "exact", head: true });
+      if (status) cq = cq.eq("status", status);
+      const { count, error: countErr } = await cq;
+      if (!countErr && typeof count === "number") total = count;
+    } catch (_e) { /* total null hi rahega */ }
+    return json({ ok: true, licences: out, total, truncated: (rows || []).length >= 200 });
   }
 
   if (action === "revoke") {
