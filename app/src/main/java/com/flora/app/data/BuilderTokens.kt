@@ -75,4 +75,29 @@ object BuilderGrantOnce {
             Decision.REPROMPT_ONCE
         }
     }
+
+    /**
+     * B3 follow-up wiring: production code prefs se bhara hua
+     * StoredGrant banata hai (refresh-token ki maujoodgi
+     * included — value kabhi nahi) aur isi decide() se faisla
+     * leta hai. Primitive decide() hi ek faisla hai; ye sirf
+     * uska store-shaped wrapper hai, alag logic nahi.
+     */
+    data class StoredGrant(
+        val connected: Boolean,
+        val hasToken: Boolean,
+        val expiresAtMs: Long,
+        val authKind: BuilderAuthKind?,
+        val hasRefreshToken: Boolean
+    )
+
+    fun decide(grant: StoredGrant, nowMs: Long): Decision =
+        decide(
+            grant.connected,
+            grant.hasToken,
+            grant.expiresAtMs,
+            nowMs,
+            grant.authKind,
+            grant.hasRefreshToken
+        )
 }

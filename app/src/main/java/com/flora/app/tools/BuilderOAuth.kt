@@ -47,6 +47,19 @@ object BuilderOAuth {
 
     data class PkcePair(val verifier: String, val challenge: String)
 
+    /**
+     * P2-2: har OAuth flow ke liye random state (CSRF). Fixed
+     * string kabhi nahi — caller ise flow ke liye store karta
+     * hai aur redirect par parseCodeFromRedirect se validate
+     * karwata hai. Base64url, no padding (PKCE challenge jaisa).
+     */
+    fun newState(): String {
+        val random = ByteArray(16)
+        SecureRandom().nextBytes(random)
+        return java.util.Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(random)
+    }
+
     fun newPkcePair(): PkcePair {
         val random = ByteArray(32)
         SecureRandom().nextBytes(random)
@@ -88,28 +101,37 @@ object BuilderOAuth {
 
     /**
      * Redirect URL se sirf `code` nikalta hai — tabhi jab URL
-     * user ke diye hue redirect URI se shuru hota ho. Koi aur
-     * URL, koi code-less redirect, koi error redirect -> null.
-     * Page content isme kabhi nahi aata.
+     * user ke diye hue redirect URI se shuru hota ho AUR query
+     * ka `state` caller ke stored state se EXACT match kare.
+     * State missing/mismatch, error redirect, code-less redirect,
+     * koi aur URL -> null (koi code capture nahi). Page content
+     * isme kabhi nahi aata. 2-arg overload JAANBOOJH kar nahi
+     * hai — bina state validation ke parse karna hi mana hai.
      */
-    fun parseCodeFromRedirect(url: String, expectedRedirectPrefix: String): String? {
+    fun parseCodeFromRedirect(
+        url: String,
+        expectedRedirectPrefix: String,
+        expectedState: String
+    ): String? {
         if (expectedRedirectPrefix.isBlank()) return null
+        if (expectedState.isBlank()) return null
         if (!url.startsWith(expectedRedirectPrefix)) return null
         val query = url.substringAfter('?', "")
         if (query.isEmpty()) return null
+        val params = mutableMapOf<String, String>()
         for (part in query.split('&')) {
             val key = part.substringBefore('=', "")
-            if (key == "code") {
-                val raw = part.substringAfter('=', "")
-                if (raw.isEmpty()) return null
-                return try {
-                    URLDecoder.decode(raw, "UTF-8")
-                } catch (e: Exception) {
-                    null
-                }
+            if (key.isEmpty() || params.containsKey(key)) continue
+            params[key] = try {
+                URLDecoder.decode(part.substringAfter('=', ""), "UTF-8")
+            } catch (e: Exception) {
+                return null
             }
-            if (key == "error") return null
         }
-        return null
+        if (params.containsKey("error")) return null
+        if (params["state"] != expectedState) return null
+        val code = params["code"] ?: return null
+        if (code.isEmpty()) return null
+        return code
     }
 }

@@ -152,25 +152,29 @@ class BuilderGuardTest {
     fun redirectCodeParsedOnlyFromExpectedRedirect() {
         val code = BuilderOAuth.parseCodeFromRedirect(
             "flora://oauth/github?code=abc123&state=test-state",
-            "flora://oauth/github"
+            "flora://oauth/github",
+            "test-state"
         )
         assertEquals("abc123", code)
         assertNull(
             BuilderOAuth.parseCodeFromRedirect(
                 "https://evil.example/callback?code=abc123",
-                "flora://oauth/github"
+                "flora://oauth/github",
+                "test-state"
             )
         )
         assertNull(
             BuilderOAuth.parseCodeFromRedirect(
                 "flora://oauth/github?error=access_denied",
-                "flora://oauth/github"
+                "flora://oauth/github",
+                "test-state"
             )
         )
         assertNull(
             BuilderOAuth.parseCodeFromRedirect(
                 "flora://oauth/github?state=test-state",
-                "flora://oauth/github"
+                "flora://oauth/github",
+                "test-state"
             )
         )
     }
@@ -240,6 +244,97 @@ class BuilderGuardTest {
         )
         assertEquals("plain/path.kt", GitHubClient.encodeContentsPath("plain/path.kt"))
         assertEquals("a%26b/c%23d.kt", GitHubClient.encodeContentsPath("a&b/c#d.kt"))
+    }
+
+    @Test
+    fun oauthStateValidationAcceptsOnlyMatchingState() {
+        val prefix = "flora://oauth/github"
+        assertEquals(
+            "abc123",
+            BuilderOAuth.parseCodeFromRedirect(
+                "flora://oauth/github?code=abc123&state=syn-state-1", prefix, "syn-state-1"
+            )
+        )
+        assertNull(
+            BuilderOAuth.parseCodeFromRedirect(
+                "flora://oauth/github?code=abc123&state=other-state", prefix, "syn-state-1"
+            )
+        )
+        assertNull(
+            BuilderOAuth.parseCodeFromRedirect(
+                "flora://oauth/github?code=abc123", prefix, "syn-state-1"
+            )
+        )
+        assertNull(
+            BuilderOAuth.parseCodeFromRedirect(
+                "flora://oauth/github?code=abc123&state=syn-state-1", prefix, ""
+            )
+        )
+        val state = BuilderOAuth.newState()
+        assertFalse(state.contains("="))
+        assertFalse(state.contains("+"))
+        assertFalse(state.contains("/"))
+        assertEquals(22, state.length)
+    }
+
+    @Test
+    fun scopeShortAlwaysMapsToWiderScopeRegrant() {
+        assertEquals(
+            BuilderAuthFailure.WiderScopeRegrant,
+            BuilderHttp.authFailureFor(BuilderService.GITHUB, BuilderFailureKind.SCOPE_SHORT, BuilderAuthKind.OAUTH, true)
+        )
+        assertEquals(
+            BuilderAuthFailure.WiderScopeRegrant,
+            BuilderHttp.authFailureFor(BuilderService.SUPABASE, BuilderFailureKind.SCOPE_SHORT, BuilderAuthKind.OAUTH, false)
+        )
+        assertEquals(
+            BuilderAuthFailure.WiderScopeRegrant,
+            BuilderHttp.authFailureFor(BuilderService.VERCEL, BuilderFailureKind.SCOPE_SHORT, BuilderAuthKind.PAT, false)
+        )
+    }
+
+    @Test
+    fun wiredDecisionPathWithFakeStore() {
+        // Fake store: production screen prefs se yahi shape banata hai.
+        val now = 1_000_000L
+        val store = mapOf(
+            BuilderService.GITHUB to BuilderGrantOnce.StoredGrant(true, true, now - 1L, BuilderAuthKind.OAUTH, true),
+            BuilderService.SUPABASE to BuilderGrantOnce.StoredGrant(true, true, now - 1L, BuilderAuthKind.PAT, false),
+            BuilderService.VERCEL to BuilderGrantOnce.StoredGrant(true, true, 0L, BuilderAuthKind.PAT, false)
+        )
+        // Expiry par: OAuth+refresh -> silent-refresh branch hi execute hota hai.
+        assertEquals(
+            BuilderGrantOnce.Decision.REFRESH_SILENTLY,
+            BuilderGrantOnce.decide(store.getValue(BuilderService.GITHUB), now)
+        )
+        assertEquals(
+            BuilderAuthFailure.SilentRefresh,
+            BuilderHttp.authFailureFor(BuilderService.GITHUB, BuilderFailureKind.AUTH_EXPIRED, BuilderAuthKind.OAUTH, true)
+        )
+        // PAT expiry (0-expiry kabhi expire nahi) -> ek baar re-paste.
+        assertEquals(
+            BuilderGrantOnce.Decision.REPROMPT_ONCE,
+            BuilderGrantOnce.decide(store.getValue(BuilderService.SUPABASE), now)
+        )
+        assertEquals(
+            BuilderAuthFailure.RepasteOnce,
+            BuilderHttp.authFailureFor(BuilderService.SUPABASE, BuilderFailureKind.AUTH_EXPIRED, BuilderAuthKind.PAT, false)
+        )
+        // PAT, expiresAtMs=0 -> REUSE-until-401 (expiry se kabhi reprompt nahi).
+        assertEquals(
+            BuilderGrantOnce.Decision.REUSE,
+            BuilderGrantOnce.decide(store.getValue(BuilderService.VERCEL), now)
+        )
+        assertEquals(
+            BuilderGrantOnce.Decision.NOT_CONNECTED,
+            BuilderGrantOnce.decide(BuilderGrantOnce.StoredGrant(false, false, 0L, null, false), now)
+        )
+        // expires_in se expiry: issued-at + expires_in seconds.
+        val issuedAt = 1_700_000_000_000L
+        val expiresAt = issuedAt + 3600L * 1000L
+        val oauthGrant = BuilderGrantOnce.StoredGrant(true, true, expiresAt, BuilderAuthKind.OAUTH, true)
+        assertEquals(BuilderGrantOnce.Decision.REUSE, BuilderGrantOnce.decide(oauthGrant, issuedAt + 1000L))
+        assertEquals(BuilderGrantOnce.Decision.REFRESH_SILENTLY, BuilderGrantOnce.decide(oauthGrant, expiresAt + 1L))
     }
 
     @Test

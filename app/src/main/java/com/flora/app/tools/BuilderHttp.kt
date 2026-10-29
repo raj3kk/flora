@@ -52,6 +52,10 @@ enum class BuilderFailureKind {
  *   eklauta exception, ek baar dobara paste maango.
  * - RegrantOnce: Supabase OAuth bina usable refresh ke — dobara
  *   grant maango (genuine block, wahi imaandaari).
+ * - WiderScopeRegrant (P2-1): 403 SCOPE_SHORT — dobara grant
+ *   WIDER scope ke saath maango; silent refresh ya re-paste se
+ *   scope-kami kabhi theek nahi hoti, isliye wo branch yahan
+ *   kabhi nahi aati.
  * - Blocked: rate-limit/server jaise genuine blocks — dashboard
  *   fallback ka raasta dikhao, "ho gaya" kabhi mat bolo.
  */
@@ -59,6 +63,8 @@ sealed class BuilderAuthFailure {
     object SilentRefresh : BuilderAuthFailure()
     object RepasteOnce : BuilderAuthFailure()
     object RegrantOnce : BuilderAuthFailure()
+    /** P2-1: scope-kami ke liye alag branch — refresh/re-paste scope nahi badhata. */
+    object WiderScopeRegrant : BuilderAuthFailure()
     object Blocked : BuilderAuthFailure()
 }
 
@@ -84,9 +90,10 @@ object BuilderHttp {
         authKind: BuilderAuthKind?,
         hasRefreshToken: Boolean
     ): BuilderAuthFailure {
-        if (kind != BuilderFailureKind.AUTH_EXPIRED &&
-            kind != BuilderFailureKind.SCOPE_SHORT
-        ) return BuilderAuthFailure.Blocked
+        if (kind == BuilderFailureKind.SCOPE_SHORT) {
+            return BuilderAuthFailure.WiderScopeRegrant
+        }
+        if (kind != BuilderFailureKind.AUTH_EXPIRED) return BuilderAuthFailure.Blocked
         if (authKind == BuilderAuthKind.OAUTH && hasRefreshToken) {
             return BuilderAuthFailure.SilentRefresh
         }

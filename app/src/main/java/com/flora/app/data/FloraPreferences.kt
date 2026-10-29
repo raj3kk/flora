@@ -696,9 +696,11 @@ class FloraPreferences(private val context: Context) {
     // encrypt fail par kuch nahi likha jata, plaintext fallback
     // kabhi nahi). Metadata (connected flag, expiry, auth kind,
     // user-project base URL/ref) plain prefs hain — inme koi
-    // token value kabhi nahi hoti. Access token kabhi save nahi
-    // hota (OAuth access token memory me hi rehta hai; jo save
-    // hota hai wo lambi-avaadhi token/refresh token hai).
+    // token value kabhi nahi hoti. OAuth access token setBuilderToken
+    // se KeyStore-encrypted SAVE hota hai (access token + refresh
+    // token dono encrypted slots me; memory-only nahi) — Connect
+    // OAuth path setBuilderToken se hi save karta hai (P2-7 comment
+    // sudhaar: pehle wala "kabhi save nahi hota" galat tha).
     // Reinstall/data-clear par KeyStore ciphertext nahi khulta —
     // tab connected flag bhi saath me mit jata hai aur user ko
     // dobara grant karna hota hai (R-B3-6, expected behaviour).
@@ -708,6 +710,12 @@ class FloraPreferences(private val context: Context) {
         val GITHUB_CONNECTED = booleanPreferencesKey("builder_github_connected")
         val GITHUB_EXPIRES = longPreferencesKey("builder_github_expires_ms")
         val GITHUB_AUTH_KIND = stringPreferencesKey("builder_github_auth_kind")
+        // OAuth client ID — PUBLIC identifier hai (secret nahi),
+        // isliye plain metadata me: silent refresh ko yehi
+        // chahiye (refresh grant me client_id lagta hai). Verifier
+        // kabhi yahan nahi aata — wo single-use aur composition
+        // state me hi rehta hai, use ke baad clear hota hai.
+        val GITHUB_OAUTH_CLIENT_ID = stringPreferencesKey("builder_github_oauth_client_id")
         val VERCEL_TOKEN = stringPreferencesKey("builder_vercel_token")
         // Kabhi likha nahi jata — Vercel token ka refresh token
         // hota hi nahi; key sirf mapping ko poora rakhne ke liye hai.
@@ -715,11 +723,13 @@ class FloraPreferences(private val context: Context) {
         val VERCEL_CONNECTED = booleanPreferencesKey("builder_vercel_connected")
         val VERCEL_EXPIRES = longPreferencesKey("builder_vercel_expires_ms")
         val VERCEL_AUTH_KIND = stringPreferencesKey("builder_vercel_auth_kind")
+        val VERCEL_OAUTH_CLIENT_ID = stringPreferencesKey("builder_vercel_oauth_client_id")
         val SUPABASE_TOKEN = stringPreferencesKey("builder_supabase_token")
         val SUPABASE_REFRESH = stringPreferencesKey("builder_supabase_refresh")
         val SUPABASE_CONNECTED = booleanPreferencesKey("builder_supabase_connected")
         val SUPABASE_EXPIRES = longPreferencesKey("builder_supabase_expires_ms")
         val SUPABASE_AUTH_KIND = stringPreferencesKey("builder_supabase_auth_kind")
+        val SUPABASE_OAUTH_CLIENT_ID = stringPreferencesKey("builder_supabase_oauth_client_id")
         val SUPABASE_BASE_URL = stringPreferencesKey("builder_supabase_base_url")
         val SUPABASE_PROJECT_REF = stringPreferencesKey("builder_supabase_project_ref")
         // R-B3-9 clipboard opt-out: sirf chhoti setting, kabhi
@@ -762,6 +772,24 @@ class FloraPreferences(private val context: Context) {
             BuilderService.VERCEL -> BuilderKeys.VERCEL_AUTH_KIND
             BuilderService.SUPABASE -> BuilderKeys.SUPABASE_AUTH_KIND
         }
+
+    private fun builderOAuthClientIdKey(service: BuilderService): Preferences.Key<String> =
+        when (service) {
+            BuilderService.GITHUB -> BuilderKeys.GITHUB_OAUTH_CLIENT_ID
+            BuilderService.VERCEL -> BuilderKeys.VERCEL_OAUTH_CLIENT_ID
+            BuilderService.SUPABASE -> BuilderKeys.SUPABASE_OAUTH_CLIENT_ID
+        }
+
+    /** Persisted OAuth client ID (public identifier; khali = OAuth grant nahi ya purana save). */
+    suspend fun builderOAuthClientId(service: BuilderService): String =
+        context.floraDataStore.data.map { it[builderOAuthClientIdKey(service)] ?: "" }.first()
+
+    suspend fun setBuilderOAuthClientId(service: BuilderService, clientId: String) {
+        context.floraDataStore.edit {
+            if (clientId.isEmpty()) it.remove(builderOAuthClientIdKey(service))
+            else it[builderOAuthClientIdKey(service)] = clientId
+        }
+    }
 
     suspend fun builderToken(service: BuilderService): String =
         readSecret(builderTokenKey(service))
@@ -858,9 +886,32 @@ class FloraPreferences(private val context: Context) {
             it.remove(builderConnectedKey(service))
             it.remove(builderExpiresKey(service))
             it.remove(builderAuthKindKey(service))
+            it.remove(builderOAuthClientIdKey(service))
             if (service == BuilderService.SUPABASE) {
                 it.remove(BuilderKeys.SUPABASE_BASE_URL)
                 it.remove(BuilderKeys.SUPABASE_PROJECT_REF)
+            }
+        }
+    }
+
+    /**
+     * P2-8: Supabase project ref/base URL metadata-only update —
+     * token ko dobara chhue bina (token value yahan kabhi nahi
+     * aati). Clipboard/OAuth save ke baad ref chune par yehi
+     * chalta hai; khali ref = metadata hat jati hai.
+     */
+    suspend fun setBuilderSupabaseRef(projectRef: String) {
+        val ref = projectRef.trim()
+        context.floraDataStore.edit {
+            if (ref.isEmpty()) {
+                it.remove(BuilderKeys.SUPABASE_BASE_URL)
+                it.remove(BuilderKeys.SUPABASE_PROJECT_REF)
+            } else {
+                // Wahi formula jo BuilderHosts.userProjectBaseUrl
+                // deta hai (tools import se package-cycle bachane
+                // ke liye yahan inline — dono ek hi shape hain).
+                it[BuilderKeys.SUPABASE_BASE_URL] = "https://$ref.supabase.co"
+                it[BuilderKeys.SUPABASE_PROJECT_REF] = ref
             }
         }
     }
