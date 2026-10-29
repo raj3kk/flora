@@ -224,6 +224,9 @@ fun FloraApp(
     // step se resume, Ruko par macro ruk jayegi. Kabhi silent resume nahi.
     var macroPending by remember { mutableStateOf<Pair<com.flora.app.automation.Macro, Int>?>(null) }
     var macroNeedsConfirm by remember { mutableStateOf(false) }
+    // B1 G4: user-confirm ho chuke macro step indexes — in par
+    // dobara confirm dialog nahi aayega (dead-loop fix).
+    var macroConfirmedSteps by remember { mutableStateOf<Set<Int>>(emptySet()) }
     // Phase 6: form submit confirm — password field wale form par submit se pehle dialog.
     var formSubmitPending by remember { mutableStateOf(false) }
     // Phase 6: reply confirm — pkg + sender + draft; Haan par hi bhejne ka raasta chalega.
@@ -470,7 +473,8 @@ fun FloraApp(
                     return@launch
                 }
                 val result = com.flora.app.automation.MacroEngine.runMacro(
-                    appContext, service, macro, fromStep
+                    appContext, service, macro, fromStep,
+                    confirmedSteps = macroConfirmedSteps
                 ) { stepMsg ->
                     messages = messages + ChatMsg("Flora: $stepMsg", false)
                     voice.speak(stepMsg)
@@ -481,6 +485,7 @@ fun FloraApp(
                         messages = messages + ChatMsg("Flora: $msg", false)
                         voice.speak(msg)
                         macroPending = null
+                        macroConfirmedSteps = emptySet()
                         try { autoLogStore.add("Macro: ${macro.name} -> ho gaya") } catch (e: Exception) { }
                     }
                     is com.flora.app.automation.MacroOutcome.Failed -> {
@@ -488,6 +493,7 @@ fun FloraApp(
                         messages = messages + ChatMsg("Flora: $msg", false)
                         voice.speak(msg)
                         macroPending = null
+                        macroConfirmedSteps = emptySet()
                         try { autoLogStore.add("Macro: ${macro.name} -> fail (${result.reason})") } catch (e: Exception) { }
                     }
                     is com.flora.app.automation.MacroOutcome.NeedsConfirm -> {
@@ -2529,12 +2535,12 @@ fun FloraApp(
                             val service = com.flora.app.automation.FloraAutomationService.instance
                             if (service == null) {
                                 voice.speak("Form submit karne ke liye Accessibility service ON karni hogi, Settings me.")
-                            } else if (com.flora.app.automation.FormFiller.hasPasswordField(service)) {
-                                formSubmitPending = true
-                                voice.speak("Ye form me password field hai, isliye submit se pehle confirm chahiye — dialog me Haan dabao to submit karungi.")
                             } else {
-                                val ok = com.flora.app.automation.FormFiller.clickSubmit(service)
-                                voice.speak(if (ok) "Form submit kar diya hai." else "Submit button nahi mila.")
+                                // B1 G3: trigger submit-ness hai — password
+                                // field ho ya na ho, clickSubmit se pehle
+                                // confirm (submit = stop #2, irreversible).
+                                formSubmitPending = true
+                                voice.speak("Form submit karne se pehle confirm chahiye — form bahar bheja jayega, wapas nahi hoga. Dialog me Haan dabao to submit karungi.")
                             }
                         }
                         return
@@ -4651,13 +4657,20 @@ fun FloraApp(
             if (macroNeedsConfirm) {
                 val pending = macroPending
                 AlertDialog(
-                    onDismissRequest = { macroNeedsConfirm = false },
+                    onDismissRequest = {
+                        macroNeedsConfirm = false
+                        macroPending = null
+                        macroConfirmedSteps = emptySet()
+                    },
                     title = { Text("Macro ka sensitive step?") },
                     text = { Text("Macro '${pending?.first?.name}' ka agla step sensitive hai — Haan dabao to wahi step se aage badhungi, Ruko par macro ruk jayegi.") },
                     confirmButton = {
                         TextButton(onClick = {
                             macroNeedsConfirm = false
                             val p = macroPending
+                            // B1 G4: isi step ko confirmed mark karo,
+                            // warna resume hote hi wahi dialog wapas aata.
+                            if (p != null) macroConfirmedSteps = macroConfirmedSteps + p.second
                             if (p != null) runMacroFrom(p.first, p.second)
                         }) { Text("Haan, aage badho") }
                     },
@@ -4665,6 +4678,7 @@ fun FloraApp(
                         TextButton(onClick = {
                             macroNeedsConfirm = false
                             macroPending = null
+                            macroConfirmedSteps = emptySet()
                             voice.speak("Macro rok diya.")
                         }) { Text("Ruko") }
                     }
@@ -4675,7 +4689,7 @@ fun FloraApp(
                 AlertDialog(
                     onDismissRequest = { formSubmitPending = false },
                     title = { Text("Form submit karu?") },
-                    text = { Text("Ye form me password field hai — Haan dabao to submit karungi, Ruko par nahi karungi.") },
+                    text = { Text("Ye form bahar bheja jayega, wapas nahi hoga — Haan dabao to submit karungi, Ruko par nahi karungi.") },
                     confirmButton = {
                         TextButton(onClick = {
                             formSubmitPending = false

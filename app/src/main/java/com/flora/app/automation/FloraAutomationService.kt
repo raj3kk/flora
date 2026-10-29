@@ -172,9 +172,43 @@ class FloraAutomationService : AccessibilityService() {
         return findEditable(root)
     }
 
-    /** Sets text into the first editable node found. */
+    /**
+     * B1 G2/G8 — password-field pehchan, primitive level par:
+     * InputType password variation YA label/hint me "password".
+     * Sirf mask variation par bharosa nahi (phone par prove nahi
+     * hua) — label check fail-closed hai (password jaisa lage to
+     * type nahi hoga). Ye guard har caller par lagu hai — koi
+     * caller bina check ke password field me type nahi kar sakta.
+     */
+    fun isPasswordNode(node: AccessibilityNodeInfo?): Boolean {
+        if (node == null || !node.isEditable) return false
+        val variation = node.inputType and android.text.InputType.TYPE_MASK_VARIATION
+        if (variation == android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+            variation == android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        ) return true
+        val label = ((node.text?.toString() ?: "") + " " +
+            (node.contentDescription?.toString() ?: "")).lowercase()
+        val hint = try {
+            node.hintText?.toString()?.lowercase().orEmpty()
+        } catch (e: Exception) {
+            ""
+        }
+        return label.contains("password") || hint.contains("password")
+    }
+
+    /** Pehla editable field password ho to true. */
+    fun firstEditableIsPassword(): Boolean = isPasswordNode(findEditableNode())
+
+    /** Focused field password ho to true. */
+    fun focusedIsPassword(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        return isPasswordNode(root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT))
+    }
+
+    /** Sets text into the first editable node found. Password field me kabhi nahi (B1 G2). */
     fun setTextOnFirstEditable(text: String): Boolean {
         val field = findEditableNode() ?: return false
+        if (isPasswordNode(field)) return false
         val args = android.os.Bundle()
         args.putCharSequence(
             AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text
@@ -182,11 +216,12 @@ class FloraAutomationService : AccessibilityService() {
         return field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
     }
 
-    /** Types [text] into the currently focused editable field. */
+    /** Types [text] into the currently focused editable field. Password field me kabhi nahi (B1 G2). */
     fun typeIntoFocused(text: String): Boolean {
         val root = rootInActiveWindow ?: return false
         val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
         if (!focused.isEditable) return false
+        if (isPasswordNode(focused)) return false
         val args = android.os.Bundle()
         args.putCharSequence(
             AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text

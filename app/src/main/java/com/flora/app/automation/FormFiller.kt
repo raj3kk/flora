@@ -15,9 +15,9 @@ import android.view.accessibility.AccessibilityNodeInfo
  *
  * PASSWORD RULE (kabhi nahi tootega): password-type field me
  * Flora kabhi khud nahi likhegi — fillField PasswordRefused
- * dega aur user ko bolega ki wo khud bhare. Submit bhi tabhi
- * hoga jab screen par password field na ho, warna caller ko
- * pehle confirm dialog dikhana hoga (submitAllowed() check).
+ * dega aur user ko bolega ki wo khud bhare. Submit par caller
+ * ko pehle confirm dialog dikhana hoga (B1 G3: submit-ness
+ * trigger — password field ki maujoodgi par nirbhar nahi).
  */
 data class FormField(
     val label: String,
@@ -34,11 +34,17 @@ sealed class FillOutcome {
 
 object FormFiller {
 
+    // B1 G8: sirf InputType mask variation par bharosa nahi —
+    // label/hint me "password" dikhe to bhi password maano
+    // (fail-closed; phone par mask variation prove nahi hua hai).
     private fun isPasswordField(node: AccessibilityNodeInfo): Boolean {
         if (!node.isEditable) return false
         val variation = node.inputType and InputType.TYPE_MASK_VARIATION
-        return variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+        if (variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
             variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        ) return true
+        val label = (nodeText(node) + " " + hintText(node)).lowercase()
+        return label.contains("password")
     }
 
     private fun nodeText(node: AccessibilityNodeInfo?): String {

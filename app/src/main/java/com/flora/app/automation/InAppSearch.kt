@@ -53,6 +53,12 @@ object InAppSearch {
         service.clickText("Search")
         service.clickText("Khoj")
         delay(800)
+        // B1 G2: login screen par pehla editable password field ho
+        // to query usme type nahi hogi — bina-check type band hai.
+        // Primitive guard (service) bhi ise rokta hai; yahan pehle
+        // se check karke NoSearchBox dena imaandaar hai (TypedOnly
+        // ka jhootha daava nahi).
+        if (service.firstEditableIsPassword()) return InAppSearchOutcome.NoSearchBox
         val typed = service.setTextOnFirstEditable(query) || service.typeIntoFocused(query)
         if (!typed) return InAppSearchOutcome.NoSearchBox
         delay(500)

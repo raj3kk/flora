@@ -141,8 +141,13 @@ object MacroEngine {
     private fun isPasswordField(node: AccessibilityNodeInfo): Boolean {
         if (!node.isEditable) return false
         val variation = node.inputType and InputType.TYPE_MASK_VARIATION
-        return variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+        if (variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
             variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD
+        ) return true
+        // B1 G8: label me "password" dikhe to bhi password maano (fail-closed).
+        val label = ((node.text?.toString() ?: "") + " " +
+            (node.contentDescription?.toString() ?: "")).lowercase()
+        return label.contains("password")
     }
 
     fun hasPasswordField(service: FloraAutomationService): Boolean {
@@ -167,12 +172,36 @@ object MacroEngine {
         return SENSITIVE_TAP_WORDS.any { lower.contains(it) }
     }
 
+    /**
+     * B1 G3 — confirm ka mapping (pipeline stops se takrao nahi):
+     * login-like (login / sign in / log in) -> stop #3 (user login);
+     * baaki sensitive (submit / pay / buy / checkout / order) ->
+     * stop #2 (irreversible — form bahar bhejna / payment).
+     */
+    private fun sensitiveCategory(label: String): String {
+        val lower = label.lowercase()
+        return if (lower.contains("login") || lower.contains("sign in") ||
+            lower.contains("log in")
+        ) {
+            "login jaisa step (stop #3 — user login)"
+        } else {
+            "submit/payment jaisa step (stop #2 — irreversible)"
+        }
+    }
+
     suspend fun runMacro(
         context: Context,
         service: FloraAutomationService,
         macro: Macro,
         fromStep: Int,
         onStep: (String) -> Unit,
+        // B1 G4: jo step index user confirm kar chuka hai, us par
+        // dobara confirm dialog nahi aayega — warna Haan par wahi
+        // step se resume hote hi wahi NeedsConfirm wapas aata tha
+        // (dead-loop). Confirm ke baad step aage badhta hai;
+        // suraksha fail-closed hi hai (bina confirm koi sensitive
+        // step nahi chalta).
+        confirmedSteps: Set<Int> = emptySet(),
     ): MacroOutcome {
         var index = fromStep.coerceIn(0, macro.steps.size)
         while (index < macro.steps.size) {
@@ -211,10 +240,14 @@ object MacroEngine {
                     delay(1000)
                 }
                 is MacroStep.Tap -> {
-                    if (isSensitiveTap(step.label) && hasPasswordField(service)) {
+                    // B1 G3: trigger "submit-ness" hai — sensitive
+                    // tap par confirm, password field ki maujoodgi
+                    // par nirbhar nahi. B1 G4: confirm ho chuka
+                    // step dobara confirm nahi maangega.
+                    if (isSensitiveTap(step.label) && index !in confirmedSteps) {
                         return MacroOutcome.NeedsConfirm(
                             index,
-                            "password wali screen par '${step.label}' dabana sensitive hai"
+                            "'${step.label}' dabana sensitive hai — ${sensitiveCategory(step.label)}"
                         )
                     }
                     onStep("Step ${index + 1}: '${step.label}' daba rahi hun.")
@@ -224,7 +257,10 @@ object MacroEngine {
                     delay(800)
                 }
                 is MacroStep.Type -> {
-                    if (hasPasswordField(service)) {
+                    // B1 G4: confirm ho chuka step dobara confirm
+                    // nahi maangega (dead-loop fix). Password field
+                    // me type primitive guard (service) bhi rokta hai.
+                    if (hasPasswordField(service) && index !in confirmedSteps) {
                         return MacroOutcome.NeedsConfirm(
                             index,
                             "password field wali screen par likhna sensitive hai"
