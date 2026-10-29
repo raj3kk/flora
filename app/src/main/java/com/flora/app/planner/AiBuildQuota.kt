@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.flora.app.data.FloraPreferences
@@ -83,8 +84,10 @@ class AiBuildQuota(
     enum class ProState { PRO, FREE, UNKNOWN }
 
     private val dayKey = stringPreferencesKey("quota_day")
-    private val buildsKey = stringPreferencesKey("quota_builds")
-    private val planCallsKey = stringPreferencesKey("quota_plan_calls")
+    // B5 FIX 4: ye counters Int hain — stringPreferencesKey galat
+    // tha (CI compile error: String? vs Int mismatch, 4 errors).
+    private val buildsKey = intPreferencesKey("quota_builds")
+    private val planCallsKey = intPreferencesKey("quota_plan_calls")
 
     private fun today(): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
