@@ -315,6 +315,35 @@ class ProjectStore(
     suspend fun readProjectFile(projectId: String, fileId: String): Result<String> =
         fileStore.readText(projectId, fileId)
 
+    /**
+     * B4-DOCTOR rollback (DOC-P1-5) — sirf REUSE, dobara nahi likha:
+     * versions list index (ProjectFileMeta.versions) se, purana
+     * content readVersionText (strict) se, wapas save
+     * saveProjectFile se (jo maujooda content ka naya snapshot
+     * bhi bana deta hai — rollback khud bhi wapas liya ja sakta hai).
+     */
+    suspend fun listFileVersions(projectId: String, fileId: String): List<String> {
+        val current = index.first()
+        val project = current.projects.firstOrNull { it.id == projectId } ?: return emptyList()
+        val file = project.files.firstOrNull { it.id == fileId } ?: return emptyList()
+        return file.versions.map { it.name }
+    }
+
+    suspend fun restoreVersion(projectId: String, fileId: String, versionName: String): Result<Unit> {
+        val current = index.first()
+        val project = current.projects.firstOrNull { it.id == projectId }
+            ?: return Result.failure(IllegalStateException("project not found"))
+        val file = project.files.firstOrNull { it.id == fileId }
+            ?: return Result.failure(IllegalStateException("file not found"))
+        val old = fileStore.readVersionText(projectId, fileId, versionName)
+        if (old.isFailure) return Result.failure(old.exceptionOrNull() ?: IllegalStateException("version read failed"))
+        val oldContent = old.getOrNull() ?: return Result.failure(IllegalStateException("version read failed"))
+        val saved = saveProjectFile(projectId, file.name, oldContent)
+        return if (saved.isSuccess) Result.success(Unit) else Result.failure(
+            saved.exceptionOrNull() ?: IllegalStateException("restore save failed")
+        )
+    }
+
     /** Export: pehle saari files strictly decrypt karo — koi fail ho to ZIP banta hi nahi. */
     suspend fun exportProjectZip(projectId: String, outFile: File): Result<Unit> {
         val current = index.first()

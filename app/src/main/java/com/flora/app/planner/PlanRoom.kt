@@ -12,6 +12,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -99,9 +101,66 @@ interface PlanDao {
 
     @Query("DELETE FROM plan_steps WHERE planId = :planId")
     suspend fun deleteSteps(planId: String)
+
+    // B4-DOCTOR (DOC-P1-8 / DOC-P2-5): plan <-> project link +
+    // durable doctor events. PlanEntity ke columns chhue nahi —
+    // nayi tables hi judi hain, isliye purane plans salamat hain.
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDoctorLink(link: DoctorPlanLink)
+
+    @Query("SELECT * FROM doctor_plan_links WHERE planId = :planId LIMIT 1")
+    suspend fun getDoctorLink(planId: String): DoctorPlanLink?
+
+    @Insert
+    suspend fun insertDoctorEvent(event: DoctorEvent)
+
+    @Query("SELECT * FROM doctor_events WHERE projectId = :projectId ORDER BY createdAtMs DESC LIMIT 100")
+    suspend fun doctorEvents(projectId: String): List<DoctorEvent>
 }
 
-@Database(entities = [PlanEntity::class, StepEntity::class], version = 1, exportSchema = false)
+/**
+ * B4-DOCTOR: plan record ka project pointer — PlanEntity me
+ * column jodne ke bajay alag link table (schema bump ka risk
+ * purane plan rows par nahi padta; migration sirf CREATE TABLE).
+ */
+@Entity(tableName = "doctor_plan_links")
+data class DoctorPlanLink(
+    @PrimaryKey val planId: String,
+    val projectId: String,
+    val linkedAtMs: Long,
+)
+
+/** B4-DOCTOR durable proof (DOC-P2-5): AutoLog ke alawa Room me bhi. */
+@Entity(tableName = "doctor_events")
+data class DoctorEvent(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val projectId: String,
+    val text: String,
+    val createdAtMs: Long,
+)
+
+/** v1 -> v2: sirf doctor tables banti hain, maujooda tables chhui nahi jati. */
+val PLAN_MIGRATION_1_2: Migration = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `doctor_plan_links` " +
+                "(`planId` TEXT NOT NULL, `projectId` TEXT NOT NULL, " +
+                "`linkedAtMs` INTEGER NOT NULL, PRIMARY KEY(`planId`))"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `doctor_events` " +
+                "(`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`projectId` TEXT NOT NULL, `text` TEXT NOT NULL, " +
+                "`createdAtMs` INTEGER NOT NULL)"
+        )
+    }
+}
+
+@Database(
+    entities = [PlanEntity::class, StepEntity::class, DoctorPlanLink::class, DoctorEvent::class],
+    version = 2,
+    exportSchema = false,
+)
 abstract class PlanDatabase : RoomDatabase() {
     abstract fun planDao(): PlanDao
 }
@@ -146,7 +205,22 @@ class PlanRepository(context: Context) {
         context.applicationContext,
         PlanDatabase::class.java,
         "flora_plans.db",
-    ).build()
+    ).addMigrations(PLAN_MIGRATION_1_2).build()
+
+    /** B4-DOCTOR: plan ko project se jodo (link table, PlanEntity untouched). */
+    suspend fun linkPlanToProject(planId: String, projectId: String) {
+        dao.insertDoctorLink(DoctorPlanLink(planId, projectId, System.currentTimeMillis()))
+    }
+
+    suspend fun linkedProjectForPlan(planId: String): String? =
+        dao.getDoctorLink(planId)?.projectId
+
+    suspend fun insertDoctorEvent(projectId: String, text: String) {
+        dao.insertDoctorEvent(DoctorEvent(projectId = projectId, text = text, createdAtMs = System.currentTimeMillis()))
+    }
+
+    suspend fun doctorEvents(projectId: String): List<DoctorEvent> =
+        dao.doctorEvents(projectId)
     private val dao: PlanDao = db.planDao()
     private val json = Json { ignoreUnknownKeys = false }
 

@@ -90,7 +90,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -127,6 +127,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.PC_LINK -> "PC Link"
     Screen.BUILDER -> "Builder"
     Screen.PLANNER -> "Planner"
+    Screen.DOCTOR -> "Doctor"
 }
 
 private data class ChatMsg(val text: String, val fromUser: Boolean)
@@ -1241,6 +1242,12 @@ fun FloraApp(
                             text = { Text("Planner") },
                             // B4: plan banao/dekho/chalao — BuilderScreen ke bagal me.
                             onClick = { screen = Screen.PLANNER; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Doctor") },
+                            // B4-DOCTOR: alag route — scan/fix/verify/
+                            // rollback sirf builder projects par.
+                            onClick = { screen = Screen.DOCTOR; menuOpen = false },
                         )
                         DropdownMenuItem(
                             text = { Text("Home") },
@@ -4180,6 +4187,7 @@ fun FloraApp(
                             "pc link", "pc" -> Screen.PC_LINK
                             "builder" -> Screen.BUILDER
                             "planner" -> Screen.PLANNER
+                            "doctor" -> Screen.DOCTOR
                             else -> null
                         }
                         if (target != null) {
@@ -4860,7 +4868,11 @@ fun FloraApp(
             } else if (screen == Screen.BUILDER) {
                 BuilderScreen(projectStore, autoLogStore)
             } else if (screen == Screen.PLANNER) {
-                com.flora.app.planner.PlannerScreen(plannerEngine)
+                // B4-DOCTOR: PlannerScreen se doctor button sirf
+                // navigation hai — fix wiring DoctorScreen me hi.
+                com.flora.app.planner.PlannerScreen(plannerEngine) { screen = Screen.DOCTOR }
+            } else if (screen == Screen.DOCTOR) {
+                com.flora.app.doctor.DoctorScreen(projectStore, autoLogStore, plannerEngine)
             } else if (screen == Screen.WHITEBOARD) {
                 WhiteboardScreen()
             } else if (screen == Screen.HOME) {

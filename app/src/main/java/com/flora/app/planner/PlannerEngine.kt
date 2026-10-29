@@ -80,6 +80,45 @@ class PlannerEngine(
     private val appContext: Context = context.applicationContext
     private val repository = PlanRepository(appContext)
     private val tools = PlannerTools(prefs, projectStore)
+
+    /**
+     * B4-DOCTOR (DOC-P1-8): step-run ka failure kind — private
+     * StepRunResult se bahar nikalne ka public accessor. Kind
+     * Room step row me persist NAHI hota (schema change se
+     * bacha gaya), isliye ye map session-scoped hai: runOneStep
+     * ke Failed branch me bharta hai, VERIFIED par saaf hota
+     * hai. Durable reader failedSteps() hai (Room se).
+     */
+    private val lastFailureKindByStep = mutableMapOf<String, BuilderFailureKind>()
+
+    fun lastFailureKind(planId: String, stepIndex: Int): BuilderFailureKind? =
+        lastFailureKindByStep["$planId:$stepIndex"]
+
+    init {
+        // DOC-P0-2 registry: VERIFIED create-steps se allowed targets.
+        tools.allowedTargetsProvider = { allowedRemoteTargets() }
+    }
+
+    private suspend fun allowedRemoteTargets(): Set<String> {
+        val out = mutableSetOf<String>()
+        return try {
+            for (plan in repository.listPlans()) {
+                for (step in plan.steps) {
+                    if (step.status != StepStatus.VERIFIED) continue
+                    if (step.tool == PlanTool.GITHUB_CREATE_REPO && step.sideEffectId.isNotBlank()) {
+                        out += "github:${step.sideEffectId}"
+                    }
+                    if (step.tool == PlanTool.VERCEL_CREATE_PROJECT) {
+                        val createdName = step.input["name"] ?: ""
+                        if (createdName.isNotBlank()) out += "vercel:$createdName"
+                    }
+                }
+            }
+            out
+        } catch (e: Exception) {
+            out
+        }
+    }
     private val plannerBrain = PlannerBrain(prefs, licenceClient, brain, chatMemoryStore)
 
     /** Apna scope — lifecycleScope kabhi nahi (F03). */
@@ -110,6 +149,45 @@ class PlannerEngine(
     suspend fun loadPlan(planId: String): StoredPlan? = repository.loadPlan(planId)
 
     suspend fun listPlans(): List<StoredPlan> = repository.listPlans()
+
+    /** B4-DOCTOR step-results reader (DOC-P1-8): FAILED + BLOCKED steps, Room se. */
+    suspend fun failedSteps(planId: String): List<StoredStep> {
+        val plan = repository.loadPlan(planId) ?: return emptyList()
+        return plan.steps.filter { it.status == StepStatus.FAILED || it.status == StepStatus.BLOCKED }
+    }
+
+    /** B4-DOCTOR plan <-> project link (DOC-P1-8, Room link table). */
+    suspend fun linkPlanToProject(planId: String, projectId: String) {
+        repository.linkPlanToProject(planId, projectId)
+    }
+
+    suspend fun linkedProjectForPlan(planId: String): String? =
+        repository.linkedProjectForPlan(planId)
+
+    /**
+     * B4-DOCTOR log (DOC-P2-5): "[doctor:<projectId> ...]" prefix
+     * (planner "[plan:<id> step:<n>]" pattern par) + durable proof
+     * Room doctor_events me — sirf AutoLog (30-din prune + 500 cap)
+     * par nirbhar nahi. Text me kabhi file content/secret nahi.
+     */
+    suspend fun logDoctorEvent(projectId: String, text: String) {
+        try {
+            repository.insertDoctorEvent(projectId, text)
+        } catch (e: Exception) {
+        }
+        try {
+            autoLogStore.add("[doctor:$projectId] $text")
+        } catch (e: Exception) {
+        }
+    }
+
+    suspend fun doctorEvents(projectId: String): List<String> {
+        return try {
+            repository.doctorEvents(projectId).map { it.text }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
 
     suspend fun interruptedPlans(): List<StoredPlan> = repository.interruptedPlans()
 
@@ -578,6 +656,7 @@ class PlannerEngine(
                     continue
                 }
                 repository.updateStep(step.copy(status = StepStatus.FAILED, attempts = attempts, resultText = "timeout (120s)"), planId)
+                lastFailureKindByStep["$planId:${step.stepIndex}"] = BuilderFailureKind.NETWORK
                 return StepRunResult.Failed("step timeout: ${step.title}", BuilderFailureKind.NETWORK)
             }
             when (outcome) {
@@ -591,6 +670,7 @@ class PlannerEngine(
                         attempts = attempts,
                     )
                     repository.updateStep(done, planId)
+                    lastFailureKindByStep.remove("$planId:${step.stepIndex}")
                     if (step.stepIndex in transientInputs) transientInputs.remove(step.stepIndex)
                     log(planId, step.stepIndex, "VERIFIED: ${outcome.detail}")
                     return StepRunResult.Done(done)
@@ -619,6 +699,7 @@ class PlannerEngine(
                 is PlannerTools.StepOutcome.Failure -> {
                     lastKind = outcome.kind
                     lastDetail = outcome.detail
+                    lastFailureKindByStep["$planId:${step.stepIndex}"] = outcome.kind
                     // M11 backoff: rate-limit par exponential backoff + retry.
                     if (outcome.kind == BuilderFailureKind.RATE_LIMITED && attempts < 3) {
                         delay(2000L * attempts)
@@ -631,6 +712,7 @@ class PlannerEngine(
             }
         }
         repository.updateStep(step.copy(status = StepStatus.FAILED, attempts = attempts, resultText = lastDetail), planId)
+        lastFailureKindByStep["$planId:${step.stepIndex}"] = lastKind
         return StepRunResult.Failed(lastDetail, lastKind)
     }
 }

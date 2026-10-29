@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.speech.RecognizerIntent
 import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -376,7 +377,16 @@ fun BuilderScreen(projectStore: ProjectStore, autoLogStore: AutoLogStore) {
                 AndroidView(
                     factory = { ctx ->
                         WebView(ctx).apply {
+                            // B4-DOCTOR DOC-P2-1: BrowserScreen
+                            // :453-460 hardened baseline ke barabar —
+                            // explicit settings (pehle sirf JS on tha).
                             settings.javaScriptEnabled = true
+                            settings.allowFileAccess = false
+                            settings.allowContentAccess = false
+                            settings.allowFileAccessFromFileURLs = false
+                            settings.allowUniversalAccessFromFileURLs = false
+                            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                            settings.safeBrowsingEnabled = true
                             webViewClient = object : WebViewClient() {
                                 override fun shouldOverrideUrlLoading(
                                     view: WebView?,

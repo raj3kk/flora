@@ -43,7 +43,7 @@ import kotlinx.coroutines.launch
  * seekh: signature + call site dono check).
  */
 @Composable
-fun PlannerScreen(engine: PlannerEngine) {
+fun PlannerScreen(engine: PlannerEngine, onOpenDoctor: () -> Unit = {}) {
     val state by engine.state.collectAsState()
     val pendingGoal by engine.pendingGoal.collectAsState()
     val scope = rememberCoroutineScope()
@@ -66,6 +66,13 @@ fun PlannerScreen(engine: PlannerEngine) {
         modifier = Modifier.fillMaxSize().verticalScroll(scrollState).padding(16.dp)
     ) {
         Text(text = "Planner — plan banao, dekho, chalao")
+        Spacer(modifier = Modifier.height(8.dp))
+        // B4-DOCTOR: sirf navigation — fix wiring DoctorScreen me hi.
+        Row {
+            OutlinedButton(onClick = { onOpenDoctor() }) {
+                Text(text = "Doctor kholo (project scan/fix)")
+            }
+        }
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
             value = goal,

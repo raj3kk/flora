@@ -6,9 +6,14 @@ import com.flora.app.automation.MacroStep
 import com.flora.app.data.BuilderService
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.ProjectStore
+import com.flora.app.doctor.DoctorCategory
+import com.flora.app.doctor.DoctorScanner
+import com.flora.app.doctor.DoctorSeverity
 import com.flora.app.tools.BuilderFailureKind
+import com.flora.app.tools.BuilderHttp
 import com.flora.app.tools.BuilderOutcome
 import com.flora.app.tools.GitHubClient
+import com.flora.app.tools.KeyInputGuard
 import com.flora.app.tools.SupabaseProjectClient
 import com.flora.app.tools.VercelClient
 import org.json.JSONObject
@@ -43,6 +48,22 @@ class PlannerTools(
     prefs: FloraPreferences,
     private val projectStore: ProjectStore,
 ) {
+    /**
+     * B4-DOCTOR allowlist (DOC-P0-2): builder-project remote
+     * targets ("github:owner/repo", "vercel:name") ka set.
+     * Engine hi ise set karta hai — PlannerTools sirf engine
+     * se banta hai (ek hi construction site), isliye provider
+     * null = koi target allowed nahi (fail-closed), kabhi
+     * "sab allowed" default nahi. Set Room plans ke VERIFIED
+     * create-steps se banta hai (engine me) — naye repo/project
+     * banane wale steps khud gate nahi hote, wahi registry ka
+     * entry point hain.
+     */
+    var allowedTargetsProvider: (suspend () -> Set<String>)? = null
+
+    private suspend fun allowedTargets(): Set<String> =
+        allowedTargetsProvider?.invoke() ?: emptySet()
+
     private val github = GitHubClient(prefs)
     private val vercel = VercelClient(prefs)
     private val supabase = SupabaseProjectClient(prefs)
@@ -162,6 +183,25 @@ class PlannerTools(
                 if (owner.isBlank() || repo.isBlank() || path.isBlank()) {
                     return StepOutcome.Failure(BuilderFailureKind.BAD_REQUEST, "owner/repo/path me se koi khali hai")
                 }
+                // DOC-P1-7 + GitHubClient.pushFile caller-zimmedari:
+                // planner caller hi KeyInputGuard se guzra content
+                // bhejega — key jaisa content yahan refuse hota hai
+                // (BuilderScreen saveCurrent :98-107 wala pattern).
+                if (KeyInputGuard.looksKeyLike(content)) {
+                    return StepOutcome.Failure(
+                        BuilderFailureKind.BAD_REQUEST,
+                        KeyInputGuard.PROJECT_FILE_REFUSAL_MESSAGE,
+                    )
+                }
+                // DOC-P0-2 allowlist: sirf builder-project repo par push.
+                if ("github:$owner/$repo" !in allowedTargets()) {
+                    return StepOutcome.Failure(
+                        BuilderFailureKind.BAD_REQUEST,
+                        "Ye repo builder-project ka nahi lag raha — push refuse hua. " +
+                            "Pehle isi builder se repo banao (planner create step se), phir push karo. " +
+                            BuilderHttp.dashboardFallback(BuilderService.GITHUB),
+                    )
+                }
                 when (val res = github.pushFile(owner, repo, path, content, input["message"] ?: "Flora planner update")) {
                     is BuilderOutcome.Ok -> StepOutcome.Ok(res.value, "File push hui: $path")
                     is BuilderOutcome.Failure -> StepOutcome.Failure(res.kind, res.detail)
@@ -193,6 +233,38 @@ class PlannerTools(
                     .mapKeys { it.key.removePrefix("file:") }
                 if (projectName.isBlank() || files.isEmpty()) {
                     return StepOutcome.Failure(BuilderFailureKind.BAD_REQUEST, "projectName ya files (file:<path>) khali hain")
+                }
+                // DOC-P0-2 allowlist: sirf builder-project par deploy.
+                if ("vercel:$projectName" !in allowedTargets()) {
+                    return StepOutcome.Failure(
+                        BuilderFailureKind.BAD_REQUEST,
+                        "Ye project builder-project ka nahi lag raha — deploy refuse hua. " +
+                            "Pehle isi builder se Vercel project banao (planner create step se), phir deploy karo. " +
+                            BuilderHttp.dashboardFallback(BuilderService.VERCEL),
+                    )
+                }
+                // DOC-P0-1 pre-deploy gate (DOC-P1-6 ka mandatory
+                // trigger — yehi ek raasta hai, doosra nahi):
+                // createDeployment se PEHLE files map par text-only
+                // scan. Critical security issue mile to deploy RUKE
+                // + wajah — leak ke saath deploy KABHI nahi. Ye gate
+                // builder-project deploy par hai; Flora ki apni
+                // CI/combined deploy par gate NAHI lagaya gaya.
+                // Report me sirf file:line + pattern naam — koi
+                // secret value kabhi nahi.
+                val preScan = DoctorScanner.scanFiles(files)
+                val critical = preScan.issues.filter { issue ->
+                    issue.category == DoctorCategory.SECURITY && issue.severity == DoctorSeverity.CRITICAL
+                }
+                if (critical.isNotEmpty()) {
+                    val listed = critical.take(5).joinToString("; ") { issue ->
+                        "${issue.file}:${issue.line} (${issue.pattern})"
+                    }
+                    return StepOutcome.Failure(
+                        BuilderFailureKind.BAD_REQUEST,
+                        "Doctor pre-deploy gate: deploy RUKA — critical security issue mile: $listed. " +
+                            "Leak ke saath deploy kabhi nahi hoga — pehle Doctor screen se fix karo, phir deploy karo.",
+                    )
                 }
                 when (val res = vercel.createDeployment(projectName, files)) {
                     is BuilderOutcome.Ok -> StepOutcome.Ok(res.value.id, "Deploy hua: ${res.value.url}")
@@ -261,6 +333,14 @@ class PlannerTools(
         val fileName = input["fileName"] ?: ""
         val content = input["content"] ?: ""
         if (fileName.isBlank()) return StepOutcome.Failure(BuilderFailureKind.BAD_REQUEST, "fileName khali hai")
+        // DOC-P1-7: BuilderScreen saveCurrent jaisa KeyInputGuard
+        // check planner-save path par bhi — key jaisa content refuse.
+        if (KeyInputGuard.looksKeyLike(content)) {
+            return StepOutcome.Failure(
+                BuilderFailureKind.BAD_REQUEST,
+                KeyInputGuard.PROJECT_FILE_REFUSAL_MESSAGE,
+            )
+        }
         val saved = try {
             projectStore.saveProjectFile(projectId, fileName, content)
         } catch (e: Exception) {
