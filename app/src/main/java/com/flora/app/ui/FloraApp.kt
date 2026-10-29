@@ -474,11 +474,16 @@ fun FloraApp(
                 }
                 val result = com.flora.app.automation.MacroEngine.runMacro(
                     appContext, service, macro, fromStep,
-                    confirmedSteps = macroConfirmedSteps
-                ) { stepMsg ->
-                    messages = messages + ChatMsg("Flora: $stepMsg", false)
-                    voice.speak(stepMsg)
-                }
+                    // B1 STEP-0 FIX (CI fail 40833693752): onStep bhi
+                    // named param hai — trailing lambda + named last
+                    // param ka clash tha (lambda confirmedSteps se
+                    // bandh gaya tha, onStep ko value nahi mili thi).
+                    onStep = { stepMsg ->
+                        messages = messages + ChatMsg("Flora: $stepMsg", false)
+                        voice.speak(stepMsg)
+                    },
+                    confirmedSteps = macroConfirmedSteps,
+                )
                 when (result) {
                     is com.flora.app.automation.MacroOutcome.Done -> {
                         val msg = "Macro '${macro.name}' poora ho gaya."
