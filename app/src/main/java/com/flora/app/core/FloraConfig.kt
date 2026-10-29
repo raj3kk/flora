@@ -47,6 +47,15 @@ object FloraConfig {
     const val FEATURE_FLAGS_PATH = "/functions/v1/feature-flags"
     const val HEARTBEAT_PATH = "/functions/v1/heartbeat"
 
+    // Public settings (Wave B, D1): website pay page + app Pro
+    // screen ka EK UPI source — admin panel se set hota hai
+    // (admin-settings function), no-auth read.
+    const val PUBLIC_SETTINGS_PATH = "/functions/v1/public-settings"
+
+    // Flora website (stable domain, Supabase Auth Site URL bhi
+    // yahi hai). In-app browser isi se pay page kholta hai.
+    const val WEBSITE_URL = "https://flora-henna-alpha.vercel.app"
+
     // Kokoro neural voice model (Phase 8, user-final: hf_alpha).
     // PUBLIC HuggingFace URLs (hexgrad/Kokoro-82M v1.0) — APK me
     // bundle nahi, runtime download (KokoroModelManager). SHA

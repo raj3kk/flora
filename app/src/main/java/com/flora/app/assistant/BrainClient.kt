@@ -47,6 +47,17 @@ class BrainClient(private val prefs: FloraPreferences) {
     private data class PostResult(val code: Int, val body: String?)
 
     suspend fun ask(prompt: String, memoryContext: String = "", history: List<ChatTurn> = emptyList()): String = withContext(Dispatchers.IO) {
+        // Wave B, D8 "dono gate": direct provider calls se PEHLE
+        // app-side licence gate (server gate proxy lane par hai,
+        // LFMS server builder). Blocked ho to koi provider call
+        // nahi, koi kharcha nahi — imaandaar message hi jawab hai.
+        // BasicTalk local hai, isliye gate ke baad bhi chalta hai
+        // (no-keys path) — gate sirf provider use rokta hai.
+        when (val gate = com.flora.app.data.LicenceGate.check(prefs)) {
+            is com.flora.app.data.LicenceGate.Result.Blocked ->
+                return@withContext gate.message
+            else -> {}
+        }
         val cappedHistory = capHistory(history)
         val keys = listOf(
             prefs.geminiApiKey().trim(),

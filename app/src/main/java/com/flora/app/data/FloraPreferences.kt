@@ -36,6 +36,16 @@ class FloraPreferences(private val context: Context) {
         val FACE_LOCK = booleanPreferencesKey("face_lock")
         val ADMIN_UPI_VPA = stringPreferencesKey("admin_upi_vpa")
         val LAST_UTR = stringPreferencesKey("last_utr")
+        val LICENCE_KEY = stringPreferencesKey("licence_key")
+        // Wave B (LFMS): admin se mili licence key (FLORA-XXXX
+        // format) — user ki apni key, sirf isi phone par, app ke
+        // private prefs me (LAST_UTR jaisi hi jagah). Server par
+        // key plaintext-with-controls design hai (jab mann tab
+        // copy chahiye, isliye hash nahi) — phone par bhi key
+        // sirf is app ke private storage me rehti hai, kabhi
+        // log/chat/backup me nahi jati. Unlink par clear NAHI
+        // hoti (key account link se alag hai — device-bound
+        // licence hai).
         val CALL_ANNOUNCE = booleanPreferencesKey("call_announce")
         val EVENT_ANNOUNCE = booleanPreferencesKey("event_announce")
         val DRIVING_MODE = booleanPreferencesKey("driving_mode")
@@ -374,6 +384,18 @@ class FloraPreferences(private val context: Context) {
     suspend fun setLastUtr(value: String) {
         context.floraDataStore.edit { it[Keys.LAST_UTR] = value }
     }
+
+    /** Wave B: saved licence key (khali = koi key fill nahi hui). */
+    suspend fun licenceKey(): String =
+        context.floraDataStore.data.map { it[Keys.LICENCE_KEY] ?: "" }.first()
+
+    suspend fun setLicenceKey(value: String) {
+        context.floraDataStore.edit { it[Keys.LICENCE_KEY] = value }
+    }
+
+    /** Wave B: pehle se stored stable device id (khali = abhi set nahi hua). */
+    suspend fun storedDeviceId(): String =
+        context.floraDataStore.data.map { it[Keys.DEVICE_ID] ?: "" }.first()
 
     /** Call announcement toggle (video #65 ka Flora version). Default OFF. */
     suspend fun callAnnounce(): Boolean =

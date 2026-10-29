@@ -3,6 +3,8 @@ package com.flora.app.data
 import com.flora.app.core.FloraConfig
 import com.flora.app.core.PinnedTrust
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -10,6 +12,61 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
+
+/**
+ * In-memory user-JWT cache (Wave B, LFMS v2 JWT gate).
+ *
+ * Linked users ko licence-verify / usage-count par apna user JWT
+ * bhejna hai (anon-only v2 par 401 dega — server builder note).
+ * Access token memory me hi rehta hai (kabhi save nahi), 55 minute
+ * tak reuse hota hai (Supabase default 1 ghanta) — har verify par
+ * refresh nahi hoga (rotation churn + reuse-detection ka khatra
+ * nahi). Mutex se ek waqt par ek hi refresh (race nahi).
+ * Refresh fail ho to null (caller anon fallback lega).
+ */
+private object SessionTokenCache {
+    private val mutex = Mutex()
+    private var access: String = ""
+    private var expiresAtMs = 0L
+
+    suspend fun accessToken(
+        prefs: FloraPreferences,
+        client: LicenceClient,
+    ): String? {
+        var result: String? = null
+        mutex.withLock {
+            val now = System.currentTimeMillis()
+            if (access.isNotEmpty() && now < expiresAtMs) {
+                result = access
+                return@withLock
+            }
+            val rt = try {
+                prefs.linkedRefreshToken()
+            } catch (e: Exception) {
+                ""
+            }
+            if (rt.isEmpty()) {
+                return@withLock
+            }
+            val pair = try {
+                client.refreshAccessToken(rt)
+            } catch (e: Exception) {
+                null
+            } ?: return@withLock
+            access = pair.first
+            expiresAtMs = now + 55L * 60L * 1000L
+            val next = pair.second
+            if (!next.isNullOrEmpty() && next != rt) {
+                try {
+                    prefs.setLink(prefs.linkedUserId(), prefs.linkedEmail(), next)
+                } catch (e: Exception) {
+                }
+            }
+            result = access
+        }
+        return result
+    }
+}
 
 /** Server-authoritative licence result. Local free mode is the fallback. */
 data class LicenceStatus(
@@ -33,6 +90,10 @@ data class LicenceStatus(
     val features: List<String> = emptyList(),
     // v2: expiry timestamp (khali ho sakta hai).
     val expiresAt: String = "",
+    // Wave B: server ka device lock (15 din se pehle nayi
+    // device par) + transfer ki date (khali ho sakta hai).
+    val deviceLocked: Boolean = false,
+    val deviceChangeAvailableAt: String = "",
 ) {
     /**
      * v2 status par imaandaar Hindi message; null = koi khaas
@@ -52,6 +113,10 @@ data class LicenceStatus(
             "Licence ki expiry ho gayi hai — Pro band hai, renew karo."
         "superseded" ->
             "Ye licence nayi licence se badal di gayi hai — nayi licence check karo."
+        "device_locked" ->
+            "Device lock hai — ye licence abhi kisi aur device par chal rahi hai." +
+                (if (deviceChangeAvailableAt.isNotEmpty()) " Transfer ${deviceChangeAvailableAt.take(10)} ko hoga." else "") +
+                " Admin se turant rebind bhi kara sakte ho."
         else -> null
     }
 }
@@ -159,7 +224,7 @@ class LicenceClient(private val prefs: FloraPreferences) {
     @Volatile
     private var lastPlan: String? = null
 
-    private fun post(path: String, body: JSONObject, anonKey: String): JSONObject? {
+    private fun post(path: String, body: JSONObject, anonKey: String, userJwt: String? = null): JSONObject? {
         // G17 (Phase 8): Supabase host pin-checked connection.
         val conn = (PinnedTrust.openConnection(URL(FloraConfig.SUPABASE_URL + path)) as HttpURLConnection)
         return try {
@@ -170,7 +235,11 @@ class LicenceClient(private val prefs: FloraPreferences) {
             conn.setRequestProperty("Content-Type", "application/json")
             if (anonKey.isNotEmpty()) {
                 conn.setRequestProperty("apikey", anonKey)
-                conn.setRequestProperty("Authorization", "Bearer $anonKey")
+                // Wave B: linked user ka JWT ho to Authorization
+                // wahi hoga (v2 function gate isi se user nikaalta
+                // hai); nahi to anon key (v1 + unlinked path).
+                val auth = if (!userJwt.isNullOrEmpty()) userJwt else anonKey
+                conn.setRequestProperty("Authorization", "Bearer $auth")
             }
             conn.outputStream.use { it.write(body.toString().toByteArray(StandardCharsets.UTF_8)) }
             val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
@@ -189,16 +258,61 @@ class LicenceClient(private val prefs: FloraPreferences) {
             return@withContext LicenceStatus("free", "local_free", false)
         }
         val body = JSONObject().put("user_id", userId).put("device_id", deviceId)
+        // Wave B, LFMS v2 JWT gate (server builder must-do):
+        // linked users apna user JWT bhejen — anon-only v2 par
+        // 401 dega. JWT v1 ko nahi todta (v1 header padhta hi
+        // nahi). Unlinked (koi refresh token nahi) anon hi
+        // bhejega (v2 401 → error status → local mode).
+        val jwt = try {
+            SessionTokenCache.accessToken(prefs, this@LicenceClient)
+        } catch (e: Exception) {
+            null
+        }
+        val res = post(FloraConfig.LICENCE_FUNCTION_PATH, body, key, jwt)
+            ?: return@withContext LicenceStatus("free", "error", false)
+        parseVerifyResponse(res)
+    }
+
+    // Wave B: admin se mili licence key se verify (key + device).
+    // Key server par user se judi hai; server hi faisla karta hai
+    // (status/binding/expiry). Server key support LFMS v2 me hai
+    // (deploy pending) — tab tak error shape aaye to error status
+    // milega, crash nahi.
+    // Key path par JWT NAHI bheja jata: key khud credential hai
+    // (bearer) — linked JWT ka user-match galat user ki key ko
+    // reject kar dega (admin ne key kisi aur account ke liye
+    // banayi ho to bhi key chalni chahiye). OPEN QUESTION (parent
+    // + server builder ko): agar server key path par bhi JWT
+    // maangta hai to unlinked key users tootenge — server ko key
+    // path bearer-authed rakhna hoga.
+    suspend fun verifyWithKey(licenceKey: String, deviceId: String): LicenceStatus = withContext(Dispatchers.IO) {
+        val key = prefs.supabaseAnonKey()
+        if (key.isEmpty() || licenceKey.isEmpty()) {
+            return@withContext LicenceStatus("free", "local_free", false)
+        }
+        val body = JSONObject().put("licence_key", licenceKey).put("device_id", deviceId)
         val res = post(FloraConfig.LICENCE_FUNCTION_PATH, body, key)
             ?: return@withContext LicenceStatus("free", "error", false)
-        // Licence-verify v2 (Phase 8 coordination): response
-        // {valid, status, plan, features[], expires_at,
-        // bound_device_short, reason?}. Device binding rule:
-        // ek licence ek time me ek device par — first claim
-        // bind karta hai, auto-rebind kabhi nahi (rebind sirf
-        // admin panel se). App khud rebind ki koshish kabhi
-        // nahi karti — sirf deviceId bhejti hai, faisla server
-        // ka hai.
+        parseVerifyResponse(res)
+    }
+
+    // Licence-verify v2 response parser (verify + verifyWithKey
+    // dono isi se — ek hi parsing, do jagah nahi).
+    // Response: {valid, status, plan, features[], expires_at,
+    // bound_device_short, reason?, device_locked,
+    // device_change_available_at}. Device binding rule: ek
+    // licence ek time me ek device par — first claim bind karta
+    // hai; 15 din poore par server transfer karta hai (purana
+    // device free); 15 din se pehle device_locked; admin rebind
+    // turant. App khud rebind ki koshish kabhi nahi karti —
+    // sirf deviceId bhejti hai, faisla server ka hai.
+    // Error body ({error} bina status ke) ko free/active NAHI
+    // mana jata — wo "error" status hai (pehle galat parse
+    // hota tha: error body bhi free/active dikhti thi).
+    private fun parseVerifyResponse(res: JSONObject): LicenceStatus {
+        if (res.has("error") && !res.has("status")) {
+            return LicenceStatus("free", "error", false)
+        }
         val rawStatus = res.optString("status", "active")
         val valid = if (res.has("valid")) {
             res.optBoolean("valid", false)
@@ -225,20 +339,61 @@ class LicenceClient(private val prefs: FloraPreferences) {
             boundDeviceShort = res.optString("bound_device_short", ""),
             reason = res.optString("reason", ""),
             features = features,
-            expiresAt = res.optString("expires_at", "")
+            expiresAt = res.optString("expires_at", ""),
+            deviceLocked = res.optBoolean("device_locked", false),
+            deviceChangeAvailableAt = res.optString("device_change_available_at", "")
         )
-        lastPlan = plan
-        status
+        // v1 shape: status "free" + device_locked flag — use
+        // device_locked status banao taaki honestMessage chale.
+        val fixed = if (status.deviceLocked && status.status == "free") {
+            status.copy(status = "device_locked")
+        } else {
+            status
+        }
+        lastPlan = fixed.plan
+        // Wave B: plan features har verify par refresh (admin
+        // panel se badli hui list turant lagu ho).
+        com.flora.app.core.PlanFeatures.updateFrom(fixed.features)
+        return fixed
     }
 
-    suspend fun countUsage(userId: String, seconds: Long): UsageResult = withContext(Dispatchers.IO) {
-        if (lastPlan == "pro") return@withContext UsageResult(false, "pro unlimited")
+    suspend fun countUsage(userId: String, seconds: Long): UsageResult = withContext(Dispatchers.IO) {        if (lastPlan == "pro") return@withContext UsageResult(false, "pro unlimited")
         val key = prefs.supabaseAnonKey()
         if (key.isEmpty()) return@withContext UsageResult(false, "no anon key configured")
         val body = JSONObject().put("user_id", userId).put("seconds", seconds)
-        val res = post(FloraConfig.USAGE_FUNCTION_PATH, body, key)
+        // Wave B (server builder note): unlinked reporting ke liye
+        // device_id bhejo (warna counted:false); linked path par
+        // user JWT bhi (v2 gate). Signature nahi badli — device
+        // stored prefs se liya (MainActivity call site waisa hi).
+        val dev = try {
+            prefs.storedDeviceId()
+        } catch (e: Exception) {
+            ""
+        }
+        if (dev.isNotEmpty()) body.put("device_id", dev)
+        val jwt = try {
+            SessionTokenCache.accessToken(prefs, this@LicenceClient)
+        } catch (e: Exception) {
+            null
+        }
+        val res = post(FloraConfig.USAGE_FUNCTION_PATH, body, key, jwt)
             ?: return@withContext UsageResult(false, "server unreachable")
         UsageResult(res.optBoolean("counted", false), res.optString("detail", ""))
+    }
+
+    // Wave B, D1: server UPI (public-settings, no-auth read) —
+    // Pro screen + website pay page ka EK source. Khali mile to
+    // caller imaandaar fallback dikhaye (local VPA kabhi nahi).
+    // NOTE (audit D10 correction): usage-count sirf REPORT
+    // karta hai — cap yahan enforce NAHI hota. Cap proxy gates
+    // (brain-proxy v5 / tts-proxy v3, server) + app gate
+    // (LicenceGate, BrainClient.ask se pehle) me hai.
+    suspend fun fetchServerUpi(): String = withContext(Dispatchers.IO) {
+        val key = prefs.supabaseAnonKey()
+        if (key.isEmpty()) return@withContext ""
+        val res = post(FloraConfig.PUBLIC_SETTINGS_PATH, JSONObject(), key)
+            ?: return@withContext ""
+        res.optString("upi_vpa", "")
     }
 
     /**

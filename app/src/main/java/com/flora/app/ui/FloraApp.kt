@@ -358,12 +358,19 @@ fun FloraApp(
     // path). Ye helper sirf FloraApp ke andar (chat/router)
     // use hota hai; SettingsScreen/HomeScreen seedha
     // FeatureFlags.isEnabled() dekhte hain.
+    // Wave B: admin toggle (flags) AUR plan features (licence
+    // verify se mili list) dono allow karein tabhi feature chale.
+    // Plan list na mili ho to fail-open (PlanFeatures) — purana
+    // vyavhaar waisa hi rahega.
     fun gateFeature(key: String): Boolean {
-        if (com.flora.app.core.FeatureFlags.isEnabled(key)) return true
-        val msg = "Ye feature abhi band hai."
-        messages = messages + ChatMsg("Flora: $msg", false)
-        voice.speak(msg)
-        return false
+        if (!com.flora.app.core.FeatureFlags.isEnabled(key) ||
+            !com.flora.app.core.PlanFeatures.isAllowed(key)) {
+            val msg = "Ye feature abhi band hai."
+            messages = messages + ChatMsg("Flora: $msg", false)
+            voice.speak(msg)
+            return false
+        }
+        return true
     }
 
     // Phase 6: macro chalao — step-by-step bol kar + Auto Log.
@@ -650,7 +657,8 @@ fun FloraApp(
         // Phase 8: routines flag OFF ho to poori queue saaf +
         // imaandaar message (koi step nahi chalega). Call/SMS/
         // browser steps apne-apne flag se bhi gate hain.
-        if (!com.flora.app.core.FeatureFlags.isEnabled("routines")) {
+        if (!com.flora.app.core.FeatureFlags.isEnabled("routines") ||
+            !com.flora.app.core.PlanFeatures.isAllowed("routines")) {
             voice.speak("Routines abhi band hain.")
             routineQueue = emptyList()
             routineRunning = false
@@ -658,11 +666,14 @@ fun FloraApp(
         }
         val stepBlocked = when {
             lower.startsWith("call ") &&
-                !com.flora.app.core.FeatureFlags.isEnabled("calls") -> true
+                (!com.flora.app.core.FeatureFlags.isEnabled("calls") ||
+                    !com.flora.app.core.PlanFeatures.isAllowed("calls")) -> true
             lower.startsWith("sms ") &&
-                !com.flora.app.core.FeatureFlags.isEnabled("sms") -> true
+                (!com.flora.app.core.FeatureFlags.isEnabled("sms") ||
+                    !com.flora.app.core.PlanFeatures.isAllowed("sms")) -> true
             (lower.startsWith("chrome me ") || lower.startsWith("website ")) &&
-                !com.flora.app.core.FeatureFlags.isEnabled("browser") -> true
+                (!com.flora.app.core.FeatureFlags.isEnabled("browser") ||
+                    !com.flora.app.core.PlanFeatures.isAllowed("browser")) -> true
             else -> false
         }
         when {
@@ -913,6 +924,17 @@ fun FloraApp(
                     if (continuousOn) return@launch
                     val key = prefs.deepgramApiKey()
                     if (key.isEmpty()) return@launch
+                    // Wave B, D8: Deepgram streaming start se pehle
+                    // bhi wahi licence gate (blocked ho to stream
+                    // shuru hi nahi — message yahan nahi bolenge,
+                    // warna har utterance par spam hoga; chat path
+                    // ka gate user ko blocked message de dega).
+                    val gate = try {
+                        com.flora.app.data.LicenceGate.check(prefs)
+                    } catch (e: Exception) {
+                        null
+                    }
+                    if (gate is com.flora.app.data.LicenceGate.Result.Blocked) return@launch
                     bargeIn.start(key) { transcript ->
                         scope.launch {
                             bargeIn.stop()
@@ -1183,6 +1205,9 @@ fun FloraApp(
                     // par imaandaar message header me bhi dikhega.
                     it.honestMessage()?.let { hm -> Text(hm) }
                 }
+                // Wave B, A3: free-limit "kitna bacha hai" (gate
+                // wala hi counter — do sach nahi).
+                FreeRemainingText(prefs, licence)
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
@@ -4364,13 +4389,20 @@ fun FloraApp(
                         } catch (e: Exception) { }
                         if (value) AutoModeNotifier.show(appContext) else AutoModeNotifier.cancel(appContext)
                     }
-                }, { screen = Screen.AUTO_LOG })
+                }, { screen = Screen.AUTO_LOG }, licence)
             } else if (screen == Screen.PERMISSIONS) {
                 PermissionsScreen(onShowWizard = { showGate = true })
             } else if (screen == Screen.LICENCE) {
                 LicenceScreen(prefs, licenceClient, licence, { status ->
                     licence = status
-                }, onGoSettings = { screen = Screen.SETTINGS })
+                }, onGoSettings = { screen = Screen.SETTINGS }, onOpenWebsitePay = {
+                    // Wave B, A6: website pay page in-app browser
+                    // me (asli UTR submit wahi hota hai).
+                    com.flora.app.tools.BrowserNav.request(
+                        url = com.flora.app.core.FloraConfig.WEBSITE_URL + "/pay"
+                    )
+                    screen = Screen.BROWSER
+                })
             } else if (screen == Screen.AUTO_LOG) {
                 AutoLogScreen(autoLogStore)
             } else if (screen == Screen.MODELS) {
@@ -4698,6 +4730,7 @@ private fun SettingsScreen(
     autoMode: Boolean,
     onAutoModeChange: (Boolean) -> Unit,
     onShowAutoLog: () -> Unit,
+    licence: LicenceStatus? = null,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -5702,6 +5735,9 @@ private fun SettingsScreen(
                     note = "Licence check ho gaya (upar status dekho)."
                 }
             }) { Text("Licence check karo") }
+            // Wave B, A3: free-limit "kitna bacha hai" (gate wala
+            // hi counter — do sach nahi).
+            FreeRemainingText(prefs, licence)
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 "Pro activation (₹199/month): UPI deep link se payment karne ke baad " +

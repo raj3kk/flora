@@ -3,6 +3,7 @@ package com.flora.app.tools
 import android.content.Context
 import android.provider.Settings
 import com.flora.app.core.FeatureFlags
+import com.flora.app.core.PlanFeatures
 import com.flora.app.core.FloraConfig
 import com.flora.app.core.PinnedTrust
 import com.flora.app.data.FloraPreferences
@@ -39,7 +40,8 @@ object HomeSyncClient {
                 val anon = prefs.supabaseAnonKey()
                 if (anon.isEmpty()) return@withContext null
                 // Home flag OFF ho to sync hi nahi (panel control).
-                if (!FeatureFlags.isEnabled("home")) return@withContext null
+                // Wave B: plan features bhi allow karein tabhi sync.
+                if (!FeatureFlags.isEnabled("home") || !PlanFeatures.isAllowed("home")) return@withContext null
                 val linkedUid = prefs.linkedUserId()
                 if (linkedUid.isEmpty()) return@withContext null
                 val rt = prefs.linkedRefreshToken()

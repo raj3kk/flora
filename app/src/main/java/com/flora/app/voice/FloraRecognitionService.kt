@@ -13,6 +13,7 @@ import android.speech.RecognitionService
 import android.speech.SpeechRecognizer
 import androidx.core.content.ContextCompat
 import com.flora.app.data.FloraPreferences
+import com.flora.app.data.LicenceGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -79,6 +80,18 @@ class FloraRecognitionService : RecognitionService() {
             }
             if (mySession != sessionId) return@launch
             if (key.isEmpty()) {
+                failOnMain(SpeechRecognizer.ERROR_CLIENT)
+                return@launch
+            }
+            // Wave B, D8: Deepgram streaming start se pehle wahi
+            // licence gate (blocked ho to stream shuru hi nahi —
+            // system ko ERROR_CLIENT milega, transcript nahi).
+            val gate = try {
+                LicenceGate.check(FloraPreferences(applicationContext))
+            } catch (e: Exception) {
+                null
+            }
+            if (gate is LicenceGate.Result.Blocked) {
                 failOnMain(SpeechRecognizer.ERROR_CLIENT)
                 return@launch
             }
