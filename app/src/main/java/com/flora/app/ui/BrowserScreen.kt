@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.flora.app.assistant.VoiceEngine
+import com.flora.app.core.FloraConfig
 import com.flora.app.tools.BrowserController
 import com.flora.app.tools.BrowserNav
 import kotlinx.coroutines.delay
@@ -79,6 +80,25 @@ fun BrowserScreen(voice: VoiceEngine) {
     var pendingDownload by remember { mutableStateOf<Triple<String, String, String>?>(null) }
     var showHistory by remember { mutableStateOf(false) }
     val sessionHistory = remember { mutableStateListOf<String>() }
+    // Cycle 2, APP-C1-021 (/pay entry lock): LicenceScreen se
+    // website-submit payment ke liye /pay par aaye to ye browser
+    // sirf pay-host (Flora website) tak lock rehta hai — /pay
+    // EXCEPTION BARKARAAR hai (payment path par koi gate nahi),
+    // sirf uske baad ka escape band hai: URL bar, back/forward/
+    // reload buttons aur history-tap chhup jate hain, voice se
+    // aaya bahar ka URL load nahi hota, aur page ke andar ke
+    // link bhi bahar ke host par nahi khulte. Screen chhodte hi
+    // ye lock khatam (state composition ke saath jata hai) —
+    // normal browser entry par ye lock lagta hi nahi.
+    val payLockedState = remember { mutableStateOf(false) }
+    val payHost = remember { Uri.parse(FloraConfig.WEBSITE_URL).host }
+    fun isPayEntry(url: String): Boolean {
+        val u = try { Uri.parse(url) } catch (e: Exception) { return false }
+        return u.host == payHost && u.path == "/pay"
+    }
+    fun isPayHostUrl(url: String): Boolean {
+        return try { Uri.parse(url).host == payHost } catch (e: Exception) { false }
+    }
 
     // Chat se aaya kaam (url kholo / wapas / aage / reload /
     // padho / link kholo) — screen khuli ho ya abhi khuli ho,
@@ -89,6 +109,13 @@ fun BrowserScreen(voice: VoiceEngine) {
         BrowserNav.pendingUrl = null
         BrowserNav.pendingAction = null
         if (url != null) {
+            // APP-C1-021: /pay entry par lock lagao; lock ke
+            // baad bahar ke host ka URL (voice se bhi) nahi khulega.
+            if (isPayEntry(url)) payLockedState.value = true
+            if (payLockedState.value && !isPayHostUrl(url)) {
+                voice.speak("Payment page se bahar nahi ja sakte — sirf Flora ki site khuli hai.")
+                return@LaunchedEffect
+            }
             urlBar = url
             currentUrl = url
             pageError = null
@@ -116,6 +143,17 @@ fun BrowserScreen(voice: VoiceEngine) {
                 }
                 return@LaunchedEffect
             }
+        }
+        // APP-C1-021: lock me voice se back/forward/link se bhi
+        // pay-host se bahar nahi nikla ja sakta (history me
+        // lock se pehle ka page ho sakta hai). Read/links
+        // read-only hain, isliye wahi rehte hain.
+        if (payLockedState.value &&
+            (action == "back" || action == "forward" ||
+                (action != null && action.startsWith("link:")))
+        ) {
+            voice.speak("Payment page se bahar nahi ja sakte — sirf Flora ki site khuli hai.")
+            return@LaunchedEffect
         }
         when (action) {
             "back" -> BrowserController.goBack { ok ->
@@ -153,32 +191,41 @@ fun BrowserScreen(voice: VoiceEngine) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            TextField(
-                value = urlBar,
-                onValueChange = { urlBar = it },
-                label = { Text("Site ya khoj likho") },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
+        // APP-C1-021: pay-lock me URL bar + nav + history nahi —
+        // entry-mode ke hisaab se ye controls band hain.
+        if (payLockedState.value) {
+            Text(
+                "Payment page — sirf Flora ki site khuli hai. URL bar aur bahar ke links band hain.",
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
             )
-            Button(onClick = {
-                val url = BrowserController.normalize(urlBar)
-                urlBar = url
-                currentUrl = url
-                pageError = null
-                BrowserController.load(url)
-            }) { Text("Jao") }
-        }
-        Row(modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(onClick = {
-                BrowserController.goBack { }
-            }) { Text("◀") }
-            OutlinedButton(onClick = {
-                BrowserController.goForward { }
-            }) { Text("▶") }
-            OutlinedButton(onClick = { BrowserController.reload() }) { Text("Reload") }
-            OutlinedButton(onClick = { showHistory = !showHistory }) {
-                Text(if (showHistory) "History band" else "History")
+        } else {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                TextField(
+                    value = urlBar,
+                    onValueChange = { urlBar = it },
+                    label = { Text("Site ya khoj likho") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                Button(onClick = {
+                    val url = BrowserController.normalize(urlBar)
+                    urlBar = url
+                    currentUrl = url
+                    pageError = null
+                    BrowserController.load(url)
+                }) { Text("Jao") }
+            }
+            Row(modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = {
+                    BrowserController.goBack { }
+                }) { Text("◀") }
+                OutlinedButton(onClick = {
+                    BrowserController.goForward { }
+                }) { Text("▶") }
+                OutlinedButton(onClick = { BrowserController.reload() }) { Text("Reload") }
+                OutlinedButton(onClick = { showHistory = !showHistory }) {
+                    Text(if (showHistory) "History band" else "History")
+                }
             }
         }
         if (progress in 1..99) {
@@ -203,7 +250,7 @@ fun BrowserScreen(voice: VoiceEngine) {
                 }) { Text("Dobara koshish karo") }
             }
         }
-        if (showHistory) {
+        if (showHistory && !payLockedState.value) {
             LazyColumn(modifier = Modifier.fillMaxWidth().weight(0.3f)) {
                 items(sessionHistory.reversed()) { h ->
                     TextButton(onClick = {
@@ -230,8 +277,35 @@ fun BrowserScreen(voice: VoiceEngine) {
                     settings.builtInZoomControls = true
                     settings.displayZoomControls = false
                     webViewClient = object : WebViewClient() {
+                        // APP-C1-021: pay-lock me page ke andar ke
+                        // link/redirect bhi bahar ke host par nahi
+                        // khulenge (same-host pay flow waisa hi).
+                        // Non-http scheme (jaise upi://) ka purana
+                        // vyavhaar waisa hi rehta hai.
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView?,
+                            request: WebResourceRequest?
+                        ): Boolean {
+                            val target = request?.url?.toString() ?: return false
+                            if (!payLockedState.value) return false
+                            val scheme = request.url?.scheme
+                            if (scheme != "http" && scheme != "https") return false
+                            return !isPayHostUrl(target)
+                        }
+
                         override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                             super.onPageStarted(view, url, favicon)
+                            // Defence-in-depth: koi navigation lock
+                            // ko chhupa kar bahar le jaye to use roko
+                            // aur pay page par wapas lao.
+                            if (payLockedState.value && url != null &&
+                                !isPayHostUrl(url) &&
+                                (url.startsWith("http://") || url.startsWith("https://"))
+                            ) {
+                                view?.stopLoading()
+                                view?.loadUrl(FloraConfig.WEBSITE_URL + "/pay")
+                                return
+                            }
                             if (url != null) {
                                 currentUrl = url
                                 urlBar = url

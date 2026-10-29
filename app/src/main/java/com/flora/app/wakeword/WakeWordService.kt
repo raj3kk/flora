@@ -6,10 +6,10 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.IBinder
-import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.flora.app.MainActivity
+import com.flora.app.assistant.NeuralSpeaker
 import com.flora.app.data.FloraPreferences
 import com.flora.app.security.BiometricTemplates
 import com.flora.app.voice.MicOwner
@@ -20,7 +20,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 /**
  * Hey Flora wake-word listener — v2.4 v0, default OFF.
@@ -35,7 +34,7 @@ import java.util.Locale
  *   badal sakta hai (Kam 0.70 / Medium 0.60 / Zyada 0.50);
  *   phone par asli speech se tune hona abhi bhi baaki hai,
  *   isliye v0 me false trigger ho sakta hai.
- * - Wake par sirf TTS "Haan, boliye" bolta hai, phir 10 second
+ * - Wake par sirf NeuralSpeaker se "Haan, boliye" bolta hai, phir 10 second
  *   cooldown — koi action, koi unlock, koi posting nahi karta.
  * - Template sirf encrypted on-device hai (BiometricTemplates),
  *   audio sample kabhi save nahi hota, kabhi server nahi jata.
@@ -51,7 +50,6 @@ class WakeWordService : Service() {
 
     private val scope = CoroutineScope(Dispatchers.Default + Job())
     private var listenJob: Job? = null
-    private var tts: TextToSpeech? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -62,11 +60,10 @@ class WakeWordService : Service() {
             CHANNEL_ID, "Flora Wake Word", NotificationManager.IMPORTANCE_LOW
         )
         manager?.createNotificationChannel(channel)
-        tts = TextToSpeech(this) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale("hi", "IN")
-            }
-        }
+        // Cycle 2, Q-NEU-001: wake ack ka apna system-TTS field
+        // hata diya gaya — ack ab NeuralSpeaker.speakFixed se
+        // bolta hai (engine ho to neural, warna system fallback
+        // waisa hi; fallback ka QUEUE_FLUSH behaviour barkaraar).
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -123,7 +120,11 @@ class WakeWordService : Service() {
                 val now = System.currentTimeMillis()
                 if (now - lastWakeMs > 10_000) {
                     lastWakeMs = now
-                    tts?.speak("Haan, boliye", TextToSpeech.QUEUE_FLUSH, null, "wake")
+                    // Q-NEU-001: NeuralSpeaker.speakFixed — engine
+                    // ho to neural ack, warna system TTS fallback
+                    // (usme QUEUE_FLUSH hai, isliye wake ack
+                    // interrupt karta hai, pehle jaisa hi).
+                    NeuralSpeaker.speakFixed(this@WakeWordService, "Haan, boliye")
                     // Background baat (v2.14): app ko aage lao taaki
                     // continuous mic se baat shuru ho jaye. MainActivity
                     // "flora_wake" dekh kar isi session ke liye sunna
@@ -180,8 +181,6 @@ class WakeWordService : Service() {
     override fun onDestroy() {
         listenJob?.cancel()
         scope.cancel()
-        tts?.stop()
-        tts?.shutdown()
         super.onDestroy()
     }
 }

@@ -102,9 +102,18 @@ class FloraPreferences(private val context: Context) {
      * - readSecret: ciphertext mile to decrypt karke do; purana
      *   plaintext mile to ek baar encrypted save karo (migration)
      *   aur wahi value do — phir plaintext DataStore me nahi
-     *   bachega. Decrypt fail + plaintext jaisa na lage to bhi
-     *   raw hi do (data kabhi lose nahi hoga — MemoryCrypto
-     *   decodeStored wala hi niyam).
+     *   bachega.
+     * - Cycle 2, APP-C1-024: decrypt fail par farq karo. (a)
+     *   Raw legacy plaintext lage (printable, provider-key
+     *   format jaisa, ciphertext-blob shape ka nahi) to migrate
+     *   karo (encrypt + return, Cycle 1 wali migration
+     *   barkaraar). (b) Doosre phone ka ciphertext blob lage
+     *   (Base64 blob shape: lamba, sirf Base64 chars, decoded
+     *   size IV+GCM tag se zyada) to KHALI do + stored blob ko
+     *   bhi khali karo — re-wrap mat karo, blob ko key maan
+     *   kar caller ko mat do. Khali = maujooda missing-key UI
+     *   ka re-enter signal hai. Koi key value kabhi log nahi
+     *   hoti (yahan sirf shape check hota hai, value nahi).
      * - writeSecret: encrypt karke save karo; encrypt fail ho to
      *   plaintext fallback (data safe); khali ho to key hata do.
      * KeyStore key isi phone + isi app se bandhi hai — naye
@@ -122,6 +131,13 @@ class FloraPreferences(private val context: Context) {
             null
         }
         if (decrypted != null) return decrypted
+        if (looksLikeForeignCiphertext(raw)) {
+            // Doosre phone ka blob: is phone ki KeyStore se kabhi
+            // nahi khulega — ise key maan kar caller ko dena galat
+            // hoga. Stored blob hatao, khali = re-enter signal.
+            context.floraDataStore.edit { it.remove(key) }
+            return ""
+        }
         try {
             val encrypted = MemoryCrypto.encrypt(raw)
             if (encrypted != null) {
@@ -130,6 +146,27 @@ class FloraPreferences(private val context: Context) {
         } catch (e: Exception) {
         }
         return raw
+    }
+
+    /**
+     * APP-C1-024 blob-shape check (sirf shape, value kabhi
+     * log/compare nahi hoti): MemoryCrypto blob = IV (12) +
+     * ciphertext + GCM tag (16), Base64 NO_WRAP — isliye lamba,
+     * sirf Base64 chars, length 4 ka multiple, decoded size
+     * kam se kam 28. Legacy plaintext keys me aam taur par
+     * prefix/separator (jaise '_' '-' '.') hota hai ya length
+     * is shape se match nahi karti — wo migrate raaste par
+     * jayengi, blob raaste par nahi.
+     */
+    private fun looksLikeForeignCiphertext(raw: String): Boolean {
+        if (raw.length < 44 || raw.length % 4 != 0) return false
+        if (!raw.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it == '+' || it == '/' || it == '=' }) return false
+        return try {
+            val decoded = android.util.Base64.decode(raw, android.util.Base64.NO_WRAP)
+            decoded.size >= 28
+        } catch (e: Exception) {
+            false
+        }
     }
 
     private suspend fun writeSecret(key: Preferences.Key<String>, value: String) {
@@ -200,6 +237,11 @@ class FloraPreferences(private val context: Context) {
             it[Keys.LINKED_EMAIL] = email
             if (encRefresh.isEmpty()) it.remove(Keys.LINKED_REFRESH_TOKEN)
             else it[Keys.LINKED_REFRESH_TOKEN] = encRefresh
+            // APP-C1-020: naya link = naya account — purana
+            // "home sync ho gaya" daava yahan nahi chalega.
+            // linkServerConfirmed wala pattern: fresh link par
+            // ye flag false hota hai.
+            it[Keys.HOME_SERVER_SYNCED] = false
         }
     }
 
@@ -209,6 +251,9 @@ class FloraPreferences(private val context: Context) {
             it.remove(Keys.LINKED_EMAIL)
             it.remove(Keys.LINKED_REFRESH_TOKEN)
             it.remove(Keys.LINK_SERVER_CONFIRMED)
+            // APP-C1-020: account badla/hataya to purana
+            // "home sync ho gaya" daava bhi khatam.
+            it[Keys.HOME_SERVER_SYNCED] = false
         }
     }
 
@@ -248,20 +293,25 @@ class FloraPreferences(private val context: Context) {
 
     /** Home box code (v2.22, P5-F22 phone half): box ka join code
      *  sirf phone par save hota hai. Server sync (S4) abhi baaki
-     *  hai — code save hona control nahi hai. */
+     *  hai — code save hona control nahi hai.
+     *  Cycle 2, APP-C1-025: baaki 12 secrets jaisa hi
+     *  readSecret/writeSecret se KeyStore-encrypted (app-private
+     *  + rotatable hone se risk Low tha, consistency ke liye).
+     *  Purana plaintext pehli read par migrate ho jayega. */
     suspend fun homeBoxCode(): String =
-        context.floraDataStore.data.map { it[Keys.HOME_BOX_CODE] ?: "" }.first()
+        readSecret(Keys.HOME_BOX_CODE)
 
     suspend fun setHomeBoxCode(value: String) {
-        context.floraDataStore.edit { it[Keys.HOME_BOX_CODE] = value }
+        writeSecret(Keys.HOME_BOX_CODE, value)
     }
 
-    /** PC pairing code (v2.22, Phase 5, G13) — sirf is phone par. */
+    /** PC pairing code (v2.22, Phase 5, G13) — sirf is phone par.
+     *  Cycle 2, APP-C1-025: homeBoxCode jaisa hi encrypted. */
     suspend fun pcPairCode(): String =
-        context.floraDataStore.data.map { it[Keys.PC_PAIR_CODE] ?: "" }.first()
+        readSecret(Keys.PC_PAIR_CODE)
 
     suspend fun setPcPairCode(value: String) {
-        context.floraDataStore.edit { it[Keys.PC_PAIR_CODE] = value }
+        writeSecret(Keys.PC_PAIR_CODE, value)
     }
 
     /** Avatar style id (v2.22, S2): gulabi/neela/hara/baingani/

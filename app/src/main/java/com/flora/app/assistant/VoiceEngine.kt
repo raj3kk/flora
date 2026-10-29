@@ -30,8 +30,17 @@ class VoiceEngine(context: Context) {
     // utterance ka late callback nayi utterance ko count nahi
     // karega. startMs onStart par lagta hai (sachhi shuruaat),
     // neural path me speak() waqt fallback ke taur par.
+    // Cycle 2, APP-C1-023: system-TTS listener block me bhi
+    // neural jaisa capture kiya hua seq use hota hai — onStart
+    // par listenerSeq pakda jata hai, onDone/onError wahi seq
+    // dete hain (live utteranceSeq nahi), taaki tez flush par
+    // purani utterance ka late callback nayi ka elapsed galat
+    // na gine. Core counting (011) ka matlab waisa hi hai.
     @Volatile
     private var utteranceSeq = 0
+
+    @Volatile
+    private var listenerSeq = 0
 
     @Volatile
     private var utteranceStartMs = 0L
@@ -112,6 +121,9 @@ class VoiceEngine(context: Context) {
                     object : android.speech.tts.UtteranceProgressListener() {
                         override fun onStart(utteranceId: String?) {
                             if (utteranceId == "flora-reply") {
+                                // APP-C1-023: isi utterance ka seq
+                                // capture karo — done/error isi ko denge.
+                                listenerSeq = utteranceSeq
                                 utteranceStartMs = System.currentTimeMillis()
                                 utteranceCounted = false
                                 onSpeechStart?.invoke()
@@ -119,14 +131,14 @@ class VoiceEngine(context: Context) {
                         }
                         override fun onError(utteranceId: String?) {
                             if (utteranceId == "flora-reply") {
-                                finishUtterance(utteranceSeq)
+                                finishUtterance(listenerSeq)
                                 onSpeechDone?.invoke()
                             }
                         }
 
                         override fun onDone(utteranceId: String?) {
                             if (utteranceId == "flora-reply") {
-                                finishUtterance(utteranceSeq)
+                                finishUtterance(listenerSeq)
                                 onSpeechDone?.invoke()
                             }
                         }

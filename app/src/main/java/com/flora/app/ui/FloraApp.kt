@@ -5725,14 +5725,14 @@ private fun SettingsScreen(
                     }
                 })
             }
-            Text("Guardian ON ho to ye kaam PIN verify ke baad hi honge: Keys save, PIN change, Guardian/Face Lock band karna, website link/unlink, VPA/UTR save, aur Auto Mode ke call/SMS/app-kholo. Ek session me ek baar PIN verify ho jaye to baaki kaam seedha chalenge. Chat lock ka PIN + awaaz check alag se chalta hai.")
+            Text("Guardian ON ho to ye kaam PIN verify ke baad hi honge: Keys save, PIN change, Guardian/Face Lock band karna, website link/unlink, VPA/UTR save, aur Auto Mode ke call/SMS/app-kholo. PIN verify ke baad session 15 minute idle tak chalta hai — 15 minute koi gated kaam na ho to agla gated kaam dobara PIN maangega. Chat lock ka PIN + awaaz check alag se chalta hai.")
             Spacer(modifier = Modifier.height(12.dp))
             var verifyPin by remember { mutableStateOf("") }
             var faceLock by remember { mutableStateOf(false) }
             LaunchedEffect(Unit) { faceLock = prefs.faceLock() }
             OutlinedTextField(
                 value = verifyPin, onValueChange = { verifyPin = it },
-                label = { Text("PIN verify karo (session unlock ke liye)") },
+                label = { Text("PIN verify karo (15 minute idle tak unlock)") },
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -5740,7 +5740,7 @@ private fun SettingsScreen(
             Button(onClick = {
                 if (pinVault.verify(verifyPin)) {
                     guardian.markPinVerified()
-                    note = "PIN sahi hai — is session ke liye unlock ho gaya."
+                    note = "PIN sahi hai — 15 minute idle tak unlock rahega, phir dobara PIN maanga jayega."
                 } else {
                     note = "Galat PIN."
                 }

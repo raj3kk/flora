@@ -82,6 +82,8 @@ class BackgroundMicService : Service() {
         const val ACTION_STANDBY = "com.flora.app.STANDBY"
         private const val CHANNEL_ID = "flora_bg_mic"
         private const val NOTIF_ID = 2002
+        /** APP-C1-022: cachedPlan TTL — 15 minute (LicenceGate cache jaisa). */
+        private const val PLAN_CACHE_TTL_MS = 15L * 60L * 1000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -92,11 +94,20 @@ class BackgroundMicService : Service() {
     private var wanted = false
     private var active = false
     private var cachedPlan: String? = null
-    // Licence plan cache (service lifetime): Pro = unlimited, isliye
-    // free-limit sirf tab jab plan pro na ho. Pehle sawaal par ek
-    // baar server se verify, phir cache — har sawaal par network
-    // call nahi. Pro khareedne par mute karke mic dobara ON karo
-    // taaki cache refresh ho jaye.
+    private var cachedPlanAtMs = 0L
+    // Licence plan cache (service lifetime, TTL ke saath):
+    // Pro = unlimited, isliye free-limit sirf tab jab plan pro
+    // na ho. Pehle sawaal par ek baar server se verify, phir
+    // cache — har sawaal par network call nahi.
+    // Cycle 2, APP-C1-022: cachedPlan par TTL hai — 15 minute
+    // (LicenceGate ke 15-minute cache jaisa, wahi value yahan
+    // document hai). TTL beette hi agla sawaal dobara verify
+    // karega, isliye expire/revoke ya nayi Pro service restart
+    // tak galat nahi rahegi (service restart par cache waise hi
+    // khatam ho jata hai). TTL ke andar ka stale window (max
+    // 15 min) is design ka jaana hua trade-off hai — fail-open
+    // ke liye verify fail ho to purana cached plan hi use hoga
+    // aur agle sawaal par dobara verify ki koshish hogi.
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -358,17 +369,21 @@ class BackgroundMicService : Service() {
             return
         }
         // Free talk limit (activity jaisa hi): Pro nahi to 600s/day.
-        // Plan ek baar server se verify karke cache hota hai.
-        if (cachedPlan == null) {
-            cachedPlan = try {
+        // Plan server se verify karke TTL-cache hota hai (APP-C1-022).
+        val nowMs = System.currentTimeMillis()
+        if (cachedPlan == null || nowMs - cachedPlanAtMs > PLAN_CACHE_TTL_MS) {
+            try {
                 val androidId = Settings.Secure.getString(
                     applicationContext.contentResolver, Settings.Secure.ANDROID_ID
                 ) ?: "flora-device"
-                licenceClient.verify(
+                cachedPlan = licenceClient.verify(
                     prefs.effectiveUserId(), prefs.deviceId(androidId)
                 ).plan
+                cachedPlanAtMs = nowMs
             } catch (e: Exception) {
-                null
+                // Verify fail: purana cached plan hi use hoga
+                // (fail-open); timestamp update nahi, taaki agla
+                // sawaal dobara verify ki koshish kare.
             }
         }
         val today = java.text.SimpleDateFormat(
