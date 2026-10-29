@@ -40,6 +40,30 @@ object BrowserNav {
 object BrowserController {
     var webView: WebView? = null
 
+    /**
+     * B1 G9 — /pay lock ka persistent hissa (composition ke
+     * saath nahi marta): BrowserScreen is flag ko padh kar
+     * lock wapas lagati hai, taaki screen dispose + restore par
+     * unlocked page na dikhe. Clear sirf lock UI ke "Payment ho
+     * gaya — browser unlock karo" button se hota hai (ya naya
+     * pay entry lock dobara lagne par overwrite). upi:// jaisa
+     * non-http scheme exception barkaraar hai (BrowserScreen
+     * shouldOverrideUrlLoading me).
+     */
+    var payLocked: Boolean = false
+    var payEntryUrl: String? = null
+        private set
+
+    fun setPayLock(url: String) {
+        payLocked = true
+        payEntryUrl = url
+    }
+
+    fun clearPayLock() {
+        payLocked = false
+        payEntryUrl = null
+    }
+
     /** Bola hua site naam/URL -> kholne layak URL. */
     fun normalize(input: String): String {
         val t = input.trim()
@@ -68,9 +92,13 @@ object BrowserController {
      * URL queue me jata hai (onResult(false)); taiyaar hote hi
      * flushQueued() use khol deta hai. Post ke dauraan WebView
      * hat jaye to bhi dobara queue hota hai, chupchaap blank nahi.
+     *
+     * B1 G12: lastUrl sirf tab set hota hai jab loadUrl asal me
+     * chala (ya queuedUrl ke through flush hone par) — kabhi na
+     * khula URL agle open par lastUrl restore se nahi dikhega.
+     * Queued URL ka restore queuedUrl se hota hai, lastUrl se nahi.
      */
     fun load(url: String, onResult: ((Boolean) -> Unit)? = null) {
-        lastUrl = url
         val w = webView
         if (w == null) {
             queuedUrl = url
@@ -84,6 +112,7 @@ object BrowserController {
                 onResult?.invoke(false)
             } else {
                 current.loadUrl(url)
+                lastUrl = url
                 onResult?.invoke(true)
             }
         }
@@ -189,6 +218,161 @@ object BrowserController {
                 "(function(){var ls=document.links;if(ls.length>$index){ls[$index].click();return true;}return false;})()",
                 null
             )
+        }
+    }
+
+    /** B1 G6 — page ka varg: wall page ko content ki tarah kabhi mat dikhao/sunao. */
+    enum class PageClass { Content, LoginWall, Captcha, Unsupported }
+
+    fun classifyPageText(text: String?): PageClass {
+        val t = text?.lowercase() ?: return PageClass.Content
+        return when {
+            t.contains("captcha") || t.contains("verify you are human") ||
+                t.contains("verify you're human") || t.contains("not a robot") ||
+                t.contains("human verification") -> PageClass.Captcha
+            t.contains("sign in to continue") || t.contains("log in to continue") ||
+                t.contains("login to continue") || t.contains("sign in to view") ||
+                t.contains("log in to view") || t.contains("create an account to continue") ||
+                t.contains("sign up to continue") || t.contains("please sign in") ||
+                t.contains("please log in") -> PageClass.LoginWall
+            t.contains("browser not supported") || t.contains("unsupported browser") ||
+                t.contains("this browser is not supported") ||
+                t.contains("please update your browser") -> PageClass.Unsupported
+            else -> PageClass.Content
+        }
+    }
+
+    fun wallReason(cls: PageClass): String {
+        return when (cls) {
+            PageClass.Captcha -> "captcha/human-verification par ruka hai"
+            PageClass.LoginWall -> "login wall par ruka hai (aage badhne ke liye user khud login kare)"
+            PageClass.Unsupported -> "unsupported page hai (ye browser is page ko nahi chala sakta)"
+            PageClass.Content -> ""
+        }
+    }
+
+    /** B1 G1/G8 — WebView DOM ka ek form field (label/type/name/id + password flag). */
+    data class WebFormField(
+        val label: String,
+        val type: String,
+        val name: String,
+        val id: String,
+        val isPassword: Boolean,
+    )
+
+    sealed class WebFillOutcome {
+        data class Filled(val label: String) : WebFillOutcome()
+        data class NotFound(val label: String) : WebFillOutcome()
+        data class PasswordRefused(val label: String) : WebFillOutcome()
+        object NoWebView : WebFillOutcome()
+    }
+
+    private fun webFieldLabel(
+        lab: String, placeholder: String, name: String, id: String, index: Int,
+    ): String {
+        return when {
+            lab.isNotBlank() -> lab.trim().take(40)
+            placeholder.isNotBlank() -> placeholder.trim().take(40)
+            name.isNotBlank() -> name.trim().take(40)
+            id.isNotBlank() -> id.trim().take(40)
+            else -> "field ${index + 1}"
+        }
+    }
+
+    /** Page ke pehle 30 form fields detect karo (DOM par, WebView JS se). */
+    fun detectFields(onDone: (List<WebFormField>?) -> Unit) {
+        val w = webView
+        if (w == null) {
+            onDone(null)
+            return
+        }
+        val js = "(function(){var out=[];var els=document.querySelectorAll('input,textarea,select');" +
+            "for(var i=0;i<els.length&&i<30;i++){var el=els[i];" +
+            "var type=((el.type||el.tagName)||'').toLowerCase();" +
+            "var id=el.id||'';var name=el.name||'';var ph=el.placeholder||'';var lab='';" +
+            "if(id){var l=document.querySelector('label[for=\"'+id+'\"]');if(l)lab=l.innerText||'';}" +
+            "if(!lab){var p=el.closest('label');if(p)lab=p.innerText||'';}" +
+            "var ac=(el.getAttribute('autocomplete')||'').toLowerCase();" +
+            "var isPw=(type==='password'||ac.indexOf('password')>=0);" +
+            "out.push({label:lab,type:type,name:name,id:id,placeholder:ph,isPassword:isPw});}" +
+            "return JSON.stringify(out);})()"
+        w.post {
+            w.evaluateJavascript(js) { raw ->
+                val text = decodeJsString(raw) ?: run {
+                    onDone(null)
+                    return@evaluateJavascript
+                }
+                try {
+                    val arr = JSONArray(text)
+                    val out = mutableListOf<WebFormField>()
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        val lab = o.optString("label", "")
+                        val ph = o.optString("placeholder", "")
+                        val nm = o.optString("name", "")
+                        val idv = o.optString("id", "")
+                        out.add(
+                            WebFormField(
+                                webFieldLabel(lab, ph, nm, idv, i),
+                                o.optString("type", ""),
+                                nm,
+                                idv,
+                                o.optBoolean("isPassword", false),
+                            )
+                        )
+                    }
+                    onDone(out)
+                } catch (e: Exception) {
+                    onDone(null)
+                }
+            }
+        }
+    }
+
+    /**
+     * B1 G1 — DOM field me value bharo. Guards (FormFiller
+     * jaisi, WebView DOM par): type=password YA autocomplete
+     * me password ho to PasswordRefused — password field me
+     * Flora kabhi type nahi karegi. Sirf Android InputType
+     * mask variation par bharosa nahi (B1 G8: DOM-level
+     * type=password check hi asli pehchan hai; code-review +
+     * CI se verify, phone-test ka daava nahi).
+     */
+    fun fillWebField(labelOrName: String, value: String, onDone: (WebFillOutcome) -> Unit) {
+        val w = webView
+        if (w == null) {
+            onDone(WebFillOutcome.NoWebView)
+            return
+        }
+        val wanted = org.json.JSONObject.quote(labelOrName.trim().lowercase())
+        val jsValue = org.json.JSONObject.quote(value)
+        val js = "(function(){var want=$wanted;var val=$jsValue;" +
+            "var els=document.querySelectorAll('input,textarea,select');" +
+            "for(var i=0;i<els.length;i++){var el=els[i];" +
+            "var type=((el.type||el.tagName)||'').toLowerCase();" +
+            "var id=el.id||'';var name=el.name||'';var ph=el.placeholder||'';var lab='';" +
+            "if(id){var l=document.querySelector('label[for=\"'+id+'\"]');if(l)lab=l.innerText||'';}" +
+            "if(!lab){var p=el.closest('label');if(p)lab=p.innerText||'';}" +
+            "var hay=(lab+' '+ph+' '+name+' '+id).toLowerCase();" +
+            "if(hay.indexOf(want)<0)continue;" +
+            "var ac=(el.getAttribute('autocomplete')||'').toLowerCase();" +
+            "if(type==='password'||ac.indexOf('password')>=0)return 'PASSWORD_REFUSED';" +
+            "try{el.focus();el.value=val;" +
+            "el.dispatchEvent(new Event('input',{bubbles:true}));" +
+            "el.dispatchEvent(new Event('change',{bubbles:true}));" +
+            "return 'FILLED:'+(lab||ph||name||id);}catch(e){return 'SET_FAILED';}}" +
+            "return 'NOT_FOUND';})()"
+        w.post {
+            w.evaluateJavascript(js) { raw ->
+                val text = decodeJsString(raw) ?: ""
+                when {
+                    text.startsWith("FILLED:") -> onDone(
+                        WebFillOutcome.Filled(text.removePrefix("FILLED:").ifEmpty { labelOrName })
+                    )
+                    text == "PASSWORD_REFUSED" -> onDone(WebFillOutcome.PasswordRefused(labelOrName))
+                    else -> onDone(WebFillOutcome.NotFound(labelOrName))
+                }
+            }
         }
     }
 }
