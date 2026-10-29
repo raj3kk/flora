@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import com.flora.app.assistant.VoiceEngine
 import com.flora.app.voice.BackgroundMicService
 import com.flora.app.voice.ContinuousListener
+import com.flora.app.voice.NotchState
 import com.flora.app.voice.FloraCommandBus
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
@@ -277,6 +278,21 @@ class MainActivity : ComponentActivity() {
         } else {
             stopBgService()
         }
+        // N1/R-N-2 foreground island tap: bolte waqt tap =
+        // interrupt + listen (continuous ho to wahi listener
+        // dobara, warna mic dialog); warna kuch nahi (app
+        // pehle se aage hai). Kabhi mute toggle nahi.
+        NotchState.onIslandTap = {
+            if (speakingState.value) {
+                voice.stop()
+                NotchState.interrupted = true
+                if (continuousWanted) {
+                    startContinuous()
+                } else {
+                    startMicRecognition()
+                }
+            }
+        }
     }
 
     override fun onPause() {
@@ -286,6 +302,10 @@ class MainActivity : ComponentActivity() {
         continuousListener?.stop()
         listeningState.value = false
         mainHandler.removeCallbacks(restartRunnable)
+        // Island tap ab background service ka hoga (TAKEOVER
+        // par wahi handler lagayega); yahan sirf clear karo
+        // taaki foreground handler background me na chale.
+        NotchState.onIslandTap = null
         if (continuousWanted) {
             bgService(BackgroundMicService.ACTION_TAKEOVER)
         } else {
@@ -298,6 +318,7 @@ class MainActivity : ComponentActivity() {
         continuousListener?.stop()
         voice.stop()
         voice.shutdown()
+        NotchState.onIslandTap = null
         super.onDestroy()
     }
 }

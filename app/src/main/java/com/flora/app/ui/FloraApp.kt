@@ -191,6 +191,24 @@ fun FloraApp(
     // fun baad me declare hota hai, isliye effect holder se call
     // karta hai — hook order ke liye effect yahan, call holder se).
     var continuousOn by remember { mutableStateOf(false) }
+    // N1–N5 notch batch: island wave ke liye Compose state
+    // (NotchState volatile hai — 120ms poll se yahan aata hai,
+    // koi fake animation nahi, sirf asli amplitude dikhta hai).
+    var notchAmplitude by remember { mutableStateOf(0f) }
+    // System-STT interrupt listener (N5) — bolte waqt alag
+    // recognizer; Deepgram path chale to ye banta hi nahi.
+    var interruptListener by remember {
+        mutableStateOf<com.flora.app.voice.ContinuousListener?>(null)
+    }
+    // Island dikha hua hai ya nahi (HIDE intent sirf tab
+    // bhejo jab SHOW bheja tha — warna service bekaar me
+    // start ho kar button dikha degi).
+    var notchShown by remember { mutableStateOf(false) }
+    // Key-khali fallback ki imaandaar guidance — ek session
+    // me ek baar, bolte waqt kabhi nahi (QUEUE_FLUSH current
+    // utterance kaat dega, isliye speech-done par bolenge).
+    var notchGuidancePending by remember { mutableStateOf(false) }
+    var notchGuidanceSpoken by remember { mutableStateOf(false) }
     // Voice-first Baat view (v2.15): default ON — baat-cheet me
     // likha hua transcript nahi dikhega, sirf orb + mic. Chat
     // sirf tab jab user khud "Chat kholo" dabaye.
@@ -203,6 +221,21 @@ fun FloraApp(
     var messages by remember { mutableStateOf(listOf(ChatMsg("Namaste! Main Flora hun. Kya madad kar sakti hun?", false))) }
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    // N4 commit gate (shared): Flora ki apni awaaz speaker se
+    // mic me aakar transcript ban jaye to use ignore karo —
+    // warna Flora apni hi baat par dobara bolegi (repeat loop).
+    // Yehi check Deepgram FINAL + system interrupt FINAL dono
+    // par lagta hai, aur partial par sirf stop ka gate hai.
+    val isEchoLike: (String) -> Boolean = { rawTranscript ->
+        val spoken = rawTranscript.trim().lowercase()
+        val lastFlora = messages.lastOrNull { !it.fromUser }
+            ?.text?.removePrefix("Flora:")?.trim()?.lowercase() ?: ""
+        val words = spoken.split(" ").filter { it.isNotBlank() }
+        val overlap = if (words.isEmpty()) 0 else
+            words.count { it in lastFlora.split(" ") }
+        spoken.isNotEmpty() && lastFlora.isNotEmpty() &&
+            (lastFlora.contains(spoken) || overlap * 2 >= words.size)
+    }
     // Attachments (v1.7, local — journal PASS ke baad push): ye states
     // launcher se PEHLE declare hain (order trap se bachne ke liye).
     var attachedUri by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -356,6 +389,61 @@ fun FloraApp(
     var wizardBack by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    // N5 system-STT interrupt listener: Deepgram path na chale
+    // (key khali / gate blocked / barge-in fail / continuous
+    // mic ka guard) to bolte waqt ye sunta hai. Beginning-of-
+    // speech sirf ARM karta hai — stop sirf non-blank,
+    // non-echo PARTIAL par hota hai (speaker bleed se Flora
+    // khud ko na roke). FINAL aate hi echo gate + sendChat
+    // (commit), warna koi turn nahi banta. Listener khud
+    // restart kabhi nahi karta (ek baar ka interrupt hai).
+    fun startSystemInterrupt() {
+        try {
+            interruptListener?.stop()
+        } catch (e: Exception) {
+        }
+        interruptListener = null
+        val listener = com.flora.app.voice.ContinuousListener(
+            appContext,
+            onResult = { text ->
+                try {
+                    interruptListener?.stop()
+                } catch (e: Exception) {
+                }
+                interruptListener = null
+                val clean = text.trim()
+                if (clean.isNotBlank() && !isEchoLike(clean)) {
+                    com.flora.app.voice.NotchState.interrupted = false
+                    sendChatHolder[0]?.invoke(clean)
+                } else {
+                    com.flora.app.voice.NotchState.interrupted = false
+                }
+            },
+            onError = {
+                interruptListener = null
+                if (continuousOn) {
+                    try {
+                        onContinuousStart()
+                    } catch (e: Exception) {
+                    }
+                }
+            },
+            onPartial = { partial ->
+                if (partial.isNotBlank() && !isEchoLike(partial)) {
+                    com.flora.app.voice.NotchState.interrupted = true
+                    try {
+                        voice.stop()
+                    } catch (e: Exception) {
+                    }
+                }
+            },
+        )
+        interruptListener = listener
+        try {
+            listener.start()
+        } catch (e: Exception) {
+        }
+    }
     val vision = remember { VisionClient() }
     // Guardian PIN re-ask (Guardian enforcement build, 2026-10-29):
     // Guardian ON ho aur is session me PIN verify na hua ho, tab gated
@@ -1023,41 +1111,86 @@ fun FloraApp(
         val prevDone = voice.onSpeechDone
         voice.onSpeechStart = {
             try { prevStart?.invoke() } catch (e: Exception) { }
+            // Nayi utterance: pichhla interrupt khatam.
+            com.flora.app.voice.NotchState.interrupted = false
             scope.launch {
                 try {
-                    if (continuousOn) return@launch
-                    val key = prefs.deepgramApiKey()
-                    if (key.isEmpty()) return@launch
-                    // Wave B, D8: Deepgram streaming start se pehle
-                    // bhi wahi licence gate (blocked ho to stream
-                    // shuru hi nahi — message yahan nahi bolenge,
-                    // warna har utterance par spam hoga; chat path
-                    // ka gate user ko blocked message de dega).
-                    val gate = try {
-                        com.flora.app.data.LicenceGate.check(prefs)
-                    } catch (e: Exception) {
-                        null
-                    }
-                    if (gate is com.flora.app.data.LicenceGate.Result.Blocked) return@launch
-                    bargeIn.start(key) { transcript ->
-                        scope.launch {
-                            bargeIn.stop()
-                            voice.stop()
-                            // Echo guard (v2.22): Flora ki apni awaaz
-                            // speaker se mic me aakar transcript ban
-                            // jaye to use ignore karo — warna Flora
-                            // apni hi baat par dobara bolegi (repeat
-                            // loop). Aakhri Flora message se milao.
-                            val spoken = transcript.trim().lowercase()
-                            val lastFlora = messages.lastOrNull { !it.fromUser }
-                                ?.text?.removePrefix("Flora:")?.trim()?.lowercase() ?: ""
-                            val words = spoken.split(" ").filter { it.isNotBlank() }
-                            val overlap = if (words.isEmpty()) 0 else
-                                words.count { it in lastFlora.split(" ") }
-                            val echo = spoken.isNotEmpty() && lastFlora.isNotEmpty() &&
-                                (lastFlora.contains(spoken) || overlap * 2 >= words.size)
-                            if (!echo) sendChatHolder[0]?.invoke(transcript)
+                    // N4 Deepgram path (v2.22 guard waisa hi):
+                    // continuous mic ON ho to AudioRecord mic
+                    // uska hai, isliye Deepgram barge-in shuru
+                    // hi nahi hota — neeche system fallback
+                    // chalega (continuous recognizer bolte
+                    // waqt idle hota hai, isliye usse takkar
+                    // nahi; 45s restart edge par listener ka
+                    // onError sirf use rokta hai, crash nahi).
+                    var deepgramRunning = false
+                    if (!continuousOn) {
+                        val key = prefs.deepgramApiKey()
+                        if (key.isEmpty()) {
+                            // N5 key-absent: chupchaap nahi —
+                            // system fallback + ek baar ki
+                            // imaandaar guidance (speech-done
+                            // par, bolte waqt kabhi nahi).
+                            if (!notchGuidanceSpoken) {
+                                notchGuidancePending = true
+                            }
+                        } else {
+                            // Wave B, D8: Deepgram streaming start
+                            // se pehle bhi wahi licence gate
+                            // (blocked ho to stream shuru hi nahi
+                            // — message yahan nahi bolenge, warna
+                            // har utterance par spam hoga; chat
+                            // path ka gate user ko blocked
+                            // message de dega).
+                            val gate = try {
+                                com.flora.app.data.LicenceGate.check(prefs)
+                            } catch (e: Exception) {
+                                null
+                            }
+                            if (gate !is com.flora.app.data.LicenceGate.Result.Blocked) {
+                                deepgramRunning = bargeIn.start(
+                                    key = key,
+                                    onFinal = { transcript ->
+                                        scope.launch {
+                                            try {
+                                                bargeIn.stop()
+                                            } catch (e: Exception) {
+                                            }
+                                            try {
+                                                voice.stop()
+                                            } catch (e: Exception) {
+                                            }
+                                            // Commit gate: echo gate
+                                            // ke bina koi turn nahi.
+                                            com.flora.app.voice.NotchState.interrupted = false
+                                            if (!isEchoLike(transcript)) {
+                                                sendChatHolder[0]?.invoke(transcript)
+                                            }
+                                        }
+                                    },
+                                    onPartial = { partial ->
+                                        // ARM only: TTS turant roko
+                                        // (interrupt latency), par
+                                        // stream band mat karo —
+                                        // FINAL aane tak khula
+                                        // rahega, warna turn hi
+                                        // kho jayega. Echo-like
+                                        // partial (speaker bleed)
+                                        // par kuch nahi hota.
+                                        if (partial.isNotBlank() && !isEchoLike(partial)) {
+                                            com.flora.app.voice.NotchState.interrupted = true
+                                            try {
+                                                voice.stop()
+                                            } catch (e: Exception) {
+                                            }
+                                        }
+                                    },
+                                )
+                            }
                         }
+                    }
+                    if (!deepgramRunning) {
+                        startSystemInterrupt()
                     }
                 } catch (e: Exception) {
                 }
@@ -1066,6 +1199,80 @@ fun FloraApp(
         voice.onSpeechDone = {
             try { prevDone?.invoke() } catch (e: Exception) { }
             try { bargeIn.stop() } catch (e: Exception) { }
+            // Interrupt armed hai to listener ko FINAL tak
+            // zinda rehne do (use rokne se turn kho jayega);
+            // warna cleanup. Guidance ek session me ek baar,
+            // speech-done ke baad (bolte waqt kabhi nahi).
+            if (!com.flora.app.voice.NotchState.interrupted) {
+                try {
+                    interruptListener?.stop()
+                } catch (e: Exception) {
+                }
+                interruptListener = null
+            }
+            if (notchGuidancePending && !notchGuidanceSpoken) {
+                notchGuidancePending = false
+                notchGuidanceSpoken = true
+                try {
+                    voice.speak("Baat ke beech me rokne ke liye main ab seedhe phone se sun raha hun.")
+                } catch (e: Exception) {
+                }
+            }
+        }
+    }
+    // N1/N3/N8 island sync (R-N-4): state session flag se
+    // (continuousOn) + maujooda signals se banta hai, raw
+    // listener callback se nahi. Conversation khulte hi
+    // button hat kar island aata hai, band hote hi button
+    // wapas (R-N-1). Permission na ho to kuch nahi hota —
+    // na crash, na bekaar service (guidance notch command
+    // par milti hai, har state change par spam nahi).
+    LaunchedEffect(continuousOn, speakingState.value, busy, listeningState.value) {
+        val islandState = com.flora.app.voice.NotchAmplitude.stateFor(
+            conversationOpen = continuousOn,
+            listening = listeningState.value,
+            speaking = speakingState.value,
+            thinking = busy,
+        )
+        com.flora.app.voice.NotchState.setState(islandState)
+        try {
+            if (continuousOn) {
+                if (android.provider.Settings.canDrawOverlays(appContext)) {
+                    val show = android.content.Intent(
+                        appContext,
+                        com.flora.app.automation.OverlayMicService::class.java,
+                    ).apply {
+                        action = com.flora.app.automation.OverlayMicService.ACTION_NOTCH_SHOW
+                        putExtra(
+                            com.flora.app.automation.OverlayMicService.EXTRA_NOTCH_STATE,
+                            islandState.name,
+                        )
+                    }
+                    appContext.startForegroundService(show)
+                    notchShown = true
+                }
+            } else if (notchShown) {
+                val hide = android.content.Intent(
+                    appContext,
+                    com.flora.app.automation.OverlayMicService::class.java,
+                ).apply {
+                    action = com.flora.app.automation.OverlayMicService.ACTION_NOTCH_HIDE
+                }
+                try {
+                    appContext.startForegroundService(hide)
+                } catch (e: Exception) {
+                }
+                notchShown = false
+            }
+        } catch (e: Exception) {
+        }
+    }
+    // Orb wave ke liye amplitude poll (120ms, sirf padhna —
+    // koi animation timer nahi, wave asli value se hilti hai).
+    LaunchedEffect(Unit) {
+        while (true) {
+            notchAmplitude = com.flora.app.voice.NotchState.amplitude
+            delay(120)
         }
     }
     LaunchedEffect(screen) {
@@ -1551,7 +1758,20 @@ fun FloraApp(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("PIN bhool gaye ho to Settings me naya PIN set kar sakte ho (Chat ke alawa baaki screens khuli hain).")
                 } else {
-                FloraOrb(busy, avatarStyle)
+                // N3: orb ab 4 haalat + conversation-open dikhata
+                // hai (rang wahi), wave asli amplitude se hilti hai.
+                val orbState = if (speakingState.value) {
+                    FloraOrbState.SPEAKING
+                } else if (busy) {
+                    FloraOrbState.THINKING
+                } else if (listeningState.value) {
+                    FloraOrbState.LISTENING
+                } else if (continuousOn) {
+                    FloraOrbState.CONVERSATION_OPEN
+                } else {
+                    FloraOrbState.IDLE
+                }
+                FloraOrb(busy, avatarStyle, state = orbState, amplitude = notchAmplitude)
                 Spacer(modifier = Modifier.height(8.dp))
                 // Baat view (v2.15): transcript nahi dikhega — sirf
                 // orb + mic, taaki baat-cheet lage, chat nahi.
@@ -4069,6 +4289,56 @@ fun FloraApp(
                         }
                         return
                     }
+                    // N1 notch commands (overlay wale pattern par):
+                    // permission na ho to settings + imaandaar
+                    // guidance, kabhi crash nahi. "Chalu" ka
+                    // matlab cold-start entry taiyaar — island
+                    // khud baat-cheet khulte hi upar aayega.
+                    if (lower == "notch chalu karo") {
+                        input = ""
+                        if (!android.provider.Settings.canDrawOverlays(appContext)) {
+                            try {
+                                val intent = android.content.Intent(
+                                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    android.net.Uri.parse("package:" + appContext.packageName)
+                                )
+                                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                appContext.startActivity(intent)
+                            } catch (e: Exception) { }
+                            voice.speak("Notch ke liye ek baar permission chahiye — settings khol raha hun, Flora ko doosri app ke upar dikhne ki permission do, phir dobara bolo.")
+                        } else {
+                            try {
+                                appContext.startForegroundService(
+                                    android.content.Intent(appContext, com.flora.app.automation.OverlayMicService::class.java)
+                                )
+                                voice.speak("Notch chalu ho gaya — baat shuru hote hi upar dikhega, tab mic button chhup jayega.")
+                            } catch (e: Exception) {
+                                voice.speak("Notch chalu nahi ho paya, dobara koshish karo.")
+                            }
+                        }
+                        return
+                    }
+                    if (lower == "notch band karo") {
+                        input = ""
+                        if (!notchShown) {
+                            voice.speak("Notch pehle se band hai.")
+                        } else {
+                            try {
+                                val hide = android.content.Intent(
+                                    appContext,
+                                    com.flora.app.automation.OverlayMicService::class.java,
+                                ).apply {
+                                    action = com.flora.app.automation.OverlayMicService.ACTION_NOTCH_HIDE
+                                }
+                                appContext.startForegroundService(hide)
+                                notchShown = false
+                                voice.speak("Notch band kar diya, mic button wapas aa gaya.")
+                            } catch (e: Exception) {
+                                voice.speak("Notch band nahi ho paya.")
+                            }
+                        }
+                        return
+                    }
                     // In-app browser (v2.22, Phase 5, G7): Flora ke
                     // andar ka browser. "browser me <site> kholo"
                     // se site khulti hai; wapas/aage/reload/padho/
@@ -4769,13 +5039,22 @@ fun FloraApp(
                     Spacer(modifier = Modifier.padding(4.dp))
                     }
                     Button(onClick = {
+                        // N4 shared interrupted state: user N4 se
+                        // pehle hi interrupt kar chuka ho to Stop
+                        // prompt taaza utterance ke upar NAHI
+                        // bolega — sirf roko, poochho mat.
+                        val wasInterrupted =
+                            com.flora.app.voice.NotchState.interrupted
                         voice.stop()
                         try { bargeIn.stop() } catch (e: Exception) { }
+                        try { interruptListener?.stop() } catch (e: Exception) { }
+                        interruptListener = null
+                        com.flora.app.voice.NotchState.interrupted = false
                         // Interrupt (v2.14): continuous mode me Stop
                         // dabana matlab user kuch kehna chahta hai —
                         // casually poochho, phir sunna apne aap shuru
                         // hoga (TTS-done par). Manual mode me sirf roko.
-                        if (continuousOn) {
+                        if (continuousOn && !wasInterrupted) {
                             val msg = "Ruk, kuch bol rahe the?"
                             messages = messages + ChatMsg("Flora: $msg", false)
                             voice.speak(msg)

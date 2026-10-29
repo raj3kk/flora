@@ -32,12 +32,25 @@ class OverlayMicService : Service() {
 
     companion object {
         const val ACTION_STOP = "com.flora.app.action.OVERLAY_STOP"
+
+        /**
+         * N1/N8: island actions. Island isi service ke FGS +
+         * notification (1002) par chalta hai — notch ke liye
+         * doosra FGS kabhi nahi banta. SHOW par button hat
+         * jata hai, HIDE par wapas aata hai (R-N-1: ek waqt
+         * par ek hi visual entry).
+         */
+        const val ACTION_NOTCH_SHOW = "com.flora.app.action.NOTCH_SHOW"
+        const val ACTION_NOTCH_HIDE = "com.flora.app.action.NOTCH_HIDE"
+        const val EXTRA_NOTCH_STATE = "notch_state"
         private const val CHANNEL_ID = "flora_overlay"
         private const val NOTIF_ID = 1002
     }
 
     private var windowManager: WindowManager? = null
     private var buttonView: View? = null
+    private var islandView: View? = null
+    private var islandShown = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -76,8 +89,78 @@ class OverlayMicService : Service() {
             startForeground(NOTIF_ID, notification)
         } catch (e: Exception) {
         }
-        addButton()
+        when (intent?.action) {
+            ACTION_NOTCH_SHOW -> {
+                val stateName = intent?.getStringExtra(EXTRA_NOTCH_STATE)
+                val state = try {
+                    com.flora.app.voice.IslandState.valueOf(stateName ?: "")
+                } catch (e: Exception) {
+                    com.flora.app.voice.IslandState.CONVERSATION_OPEN
+                }
+                showIsland(state)
+            }
+            ACTION_NOTCH_HIDE -> hideIsland()
+            else -> {
+                if (!islandShown) addButton()
+            }
+        }
         return START_STICKY
+    }
+
+    /**
+     * N1: top-center pill host (Gravity.TOP | CENTER_HORIZONTAL,
+     * FLAG_NOT_FOCUSABLE mandatory). Button hata kar island
+     * lagao — dono ek saath kabhi nahi (R-N-1). Island view
+     * khud NotchState se state/amplitude leta hai, isliye
+     * dobara SHOW sirf state update hai, naya view nahi.
+     */
+    private fun showIsland(state: com.flora.app.voice.IslandState) {
+        if (!android.provider.Settings.canDrawOverlays(this)) return
+        if (islandView != null) {
+            islandShown = true
+            return
+        }
+        try {
+            val wm = getSystemService(WindowManager::class.java) ?: return
+            removeButton()
+            val density = resources.displayMetrics.density
+            val width = (resources.displayMetrics.widthPixels -
+                (32 * density).toInt()).coerceAtLeast((200 * density).toInt())
+            val height = (72 * density).toInt()
+            val params = WindowManager.LayoutParams(
+                width, height,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                y = (24 * density).toInt()
+            }
+            val island = NotchIslandView(this, state)
+            wm.addView(island, params)
+            windowManager = wm
+            islandView = island
+            islandShown = true
+        } catch (e: Exception) {
+        }
+    }
+
+    private fun hideIsland() {
+        try {
+            islandView?.let { windowManager?.removeView(it) }
+        } catch (e: Exception) {
+        }
+        islandView = null
+        islandShown = false
+        addButton()
+    }
+
+    private fun removeButton() {
+        try {
+            buttonView?.let { windowManager?.removeView(it) }
+        } catch (e: Exception) {
+        }
+        buttonView = null
     }
 
     private fun addButton() {
@@ -123,6 +206,12 @@ class OverlayMicService : Service() {
     }
 
     override fun onDestroy() {
+        try {
+            islandView?.let { windowManager?.removeView(it) }
+        } catch (e: Exception) {
+        }
+        islandView = null
+        islandShown = false
         try {
             buttonView?.let { windowManager?.removeView(it) }
         } catch (e: Exception) {

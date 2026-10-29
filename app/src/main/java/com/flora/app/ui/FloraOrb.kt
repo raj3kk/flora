@@ -21,9 +21,30 @@ import androidx.compose.ui.unit.dp
  * static rehta hai taaki battery par bojh na pade.
  * Avatar (v2.22, S2): sirf rang badalta hai — gulabi (default),
  * neela, hara, baingani, sunehra.
+ *
+ * N3/NOTCH-03: rang-jodi BILKUL wahi hai (badli nahi gayi).
+ * Naya: state (listening/thinking/speaking/idle/conversation)
+ * aur amplitude. Pulse bolne/sochne par hi rehta hai; wave
+ * ring sirf asli amplitude par dikhta hai (chuppi me nahi) —
+ * pehle wala time-based pulse wave NAHI hai, ye additional hai.
+ * state/amplitude na diye hon to purana busy-only behaviour
+ * waisa hi rehta hai (purane callers bina badle chalte hain).
  */
+enum class FloraOrbState {
+    IDLE,
+    LISTENING,
+    THINKING,
+    SPEAKING,
+    CONVERSATION_OPEN,
+}
+
 @Composable
-fun FloraOrb(busy: Boolean, avatar: String = "gulabi") {
+fun FloraOrb(
+    busy: Boolean,
+    avatar: String = "gulabi",
+    state: FloraOrbState? = null,
+    amplitude: Float = 0f,
+) {
     val (outer, inner) = when (avatar) {
         "neela" -> Color(0xFF1E3A8A) to Color(0xFF93C5FD)
         "hara" -> Color(0xFF14532D) to Color(0xFF86EFAC)
@@ -31,7 +52,10 @@ fun FloraOrb(busy: Boolean, avatar: String = "gulabi") {
         "sunehra" -> Color(0xFF713F12) to Color(0xFFFDE68A)
         else -> Color(0xFF7C4A03) to Color(0xFFFFC978)
     }
-    if (busy) {
+    val showBusy = busy || state == FloraOrbState.SPEAKING ||
+        state == FloraOrbState.THINKING
+    val waveAmp = amplitude.coerceIn(0f, 1f)
+    if (showBusy) {
         val transition = rememberInfiniteTransition()
         val pulse by transition.animateFloat(
             initialValue = 0.85f,
@@ -43,6 +67,13 @@ fun FloraOrb(busy: Boolean, avatar: String = "gulabi") {
         )
         Canvas(modifier = Modifier.size(64.dp)) {
             val r = (size.minDimension / 2.5f) * pulse
+            if (waveAmp > 0.02f) {
+                drawCircle(
+                    color = outer.copy(alpha = 0.35f),
+                    radius = r * (1f + waveAmp * 0.45f),
+                    center = Offset(size.width / 2f, size.height / 2f)
+                )
+            }
             drawCircle(
                 color = outer,
                 radius = r,
@@ -57,6 +88,13 @@ fun FloraOrb(busy: Boolean, avatar: String = "gulabi") {
     } else {
         Canvas(modifier = Modifier.size(64.dp)) {
             val r = size.minDimension / 2.5f
+            if (waveAmp > 0.02f) {
+                drawCircle(
+                    color = outer.copy(alpha = 0.35f),
+                    radius = r * (1f + waveAmp * 0.45f),
+                    center = Offset(size.width / 2f, size.height / 2f)
+                )
+            }
             drawCircle(
                 color = outer,
                 radius = r,

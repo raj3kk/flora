@@ -27,10 +27,23 @@ import androidx.core.content.ContextCompat
  * save, log ya server par nahi jata — sirf pehchana hua text
  * chat pipeline ko milta hai.
  */
+/**
+ * N2/N5: system path ke naye callbacks (sabke default khali
+ * hain, purane callers bina badle chalte hain):
+ * - onSpeechStarted: bolna shuru hua (sirf ARM — bina text
+ *   ke stop nahi, warna Flora ki apni awaaz bleed karke
+ *   khud ko rok degi).
+ * - onPartial: aadha pehchana text (non-blank, non-echo
+ *   hone par hi caller TTS rokega).
+ * - RMS har frame par NotchState ko jata hai (R-N-6: system
+ *   path active ho to yehi wave ka source hai).
+ */
 class ContinuousListener(
     context: Context,
     private val onResult: (String) -> Unit,
     private val onError: () -> Unit,
+    private val onSpeechStarted: () -> Unit = {},
+    private val onPartial: (String) -> Unit = {},
 ) {
     private val appContext = context.applicationContext
     private var recognizer: SpeechRecognizer? = null
@@ -102,11 +115,31 @@ class ContinuousListener(
             val rec = SpeechRecognizer.createSpeechRecognizer(appContext)
             rec.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {}
-                override fun onBeginningOfSpeech() {}
-                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBeginningOfSpeech() {
+                    try {
+                        onSpeechStarted()
+                    } catch (e: Exception) {
+                    }
+                }
+                override fun onRmsChanged(rmsdB: Float) {
+                    try {
+                        NotchState.reportRms(rmsdB)
+                    } catch (e: Exception) {
+                    }
+                }
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {}
-                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val partial = partialResults
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()
+                    if (!partial.isNullOrBlank()) {
+                        try {
+                            onPartial(partial)
+                        } catch (e: Exception) {
+                        }
+                    }
+                }
                 override fun onEvent(eventType: Int, params: Bundle?) {}
 
                 override fun onResults(results: Bundle?) {
@@ -156,5 +189,9 @@ class ContinuousListener(
         recognizer = null
         listening = false
         unmuteBeeps()
+        try {
+            NotchState.clearAmplitude()
+        } catch (e: Exception) {
+        }
     }
 }

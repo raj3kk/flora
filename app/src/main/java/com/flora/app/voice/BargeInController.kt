@@ -45,7 +45,18 @@ class BargeInController(private val context: Context) {
     // Suspend isliye hai taaki LicenceGate (suspend) stream
     // start se pehle chal sake — ekmatra caller FloraApp
     // pehle se scope.launch ke andar se bulata hai.
-    suspend fun start(key: String, onFinal: (String) -> Unit): Boolean {
+    /**
+     * N4/NOTCH-04 + N2: onPartial = interim transcript (sirf
+     * TTS rokne ke liye, turn FINAL par hi banta hai). PCM
+     * RMS har read chunk par NotchState ko jata hai (R-N-6:
+     * Deepgram path active ho to yehi wave ka source hai) —
+     * notch apna recorder kabhi nahi kholta.
+     */
+    suspend fun start(
+        key: String,
+        onFinal: (String) -> Unit,
+        onPartial: (String) -> Unit = {},
+    ): Boolean {
         if (running || key.isEmpty()) return false
         if (ContextCompat.checkSelfPermission(
                 context, Manifest.permission.RECORD_AUDIO
@@ -88,6 +99,10 @@ class BargeInController(private val context: Context) {
                 onFinal(text)
             }
 
+            override fun onPartial(text: String) {
+                onPartial(text)
+            }
+
             override fun onError() {
                 stop()
             }
@@ -106,6 +121,7 @@ class BargeInController(private val context: Context) {
                 while (running && System.currentTimeMillis() < deadline) {
                     val n = recorder.read(buf, 0, buf.size)
                     if (n > 0) {
+                        NotchState.reportPcm(buf, n)
                         stream.sendPcm(buf.copyOf(n))
                     } else if (n < 0) {
                         break
@@ -128,5 +144,6 @@ class BargeInController(private val context: Context) {
         job = null
         try { client?.stop() } catch (e: Exception) { }
         client = null
+        NotchState.clearAmplitude()
     }
 }

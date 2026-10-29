@@ -23,6 +23,16 @@ class DeepgramStreamClient {
     interface Listener {
         fun onFinal(text: String)
         fun onError()
+
+        /**
+         * N4/NOTCH-04: interim (non-final) transcript. Default
+         * khali hai taaki purane implementer (jaise
+         * FloraRecognitionService) bina badle compile hon.
+         * Caller is par sirf TTS rokta hai (ARM) — naya turn
+         * tabhi banta hai jab non-echo FINAL aaye (commit
+         * gate wahi hai, speaker bleed se false turn nahi).
+         */
+        fun onPartial(text: String) {}
     }
 
     private val client = OkHttpClient.Builder()
@@ -49,6 +59,8 @@ class DeepgramStreamClient {
                         ?.optString("transcript", "") ?: ""
                     if (isFinal && transcript.isNotBlank()) {
                         listener.onFinal(transcript)
+                    } else if (!isFinal && transcript.isNotBlank()) {
+                        listener.onPartial(transcript)
                     }
                 } catch (e: Exception) {
                 }

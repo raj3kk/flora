@@ -51,6 +51,17 @@ object NeuralSpeaker {
      * bulata hai, isliye Stop button + barge-in stop path dono
      * neural raaste par bhi lagenge (jab engine aayega).
      */
+    /**
+     * N4/NOTCH-06: speakFixed ke system-TTS branch ka handle.
+     * Pehle ye private instance kisi stop ke haath nahi aata
+     * tha (wake ack / call / event announcement ruk nahi sakta
+     * tha). Ab VoiceEngine.stop() -> NeuralSpeaker.stop() isi
+     * handle ko bhi rokta hai — ek hi stop sab raaston ka
+     * malik hai (R-N-3, route: NeuralSpeaker-owned handle).
+     */
+    @Volatile
+    private var fixedTts: TextToSpeech? = null
+
     fun stop() {
         try {
             engine?.stop()
@@ -58,6 +69,18 @@ object NeuralSpeaker {
             // Engine stop fail: awaaz rokne ki koshish kabhi
             // caller ko crash nahi degi; system stop alag se
             // VoiceEngine.stop() me chalta hai.
+        }
+        val fixed = fixedTts
+        fixedTts = null
+        if (fixed != null) {
+            try {
+                fixed.stop()
+            } catch (e: Exception) {
+            }
+            try {
+                fixed.shutdown()
+            } catch (e: Exception) {
+            }
         }
     }
 
@@ -132,5 +155,9 @@ object NeuralSpeaker {
                 tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "flora-announce")
             }
         }
+        // NOTCH-06: system branch ka handle bachao taaki
+        // VoiceEngine.stop() ise bhi rok sake (pehle ye
+        // instance caller ke haath se nikal jata tha).
+        fixedTts = tts
     }
 }

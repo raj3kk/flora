@@ -14,6 +14,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.flora.app.MainActivity
 import com.flora.app.assistant.BrainClient
+import com.flora.app.automation.OverlayMicService
+import com.flora.app.data.ChatMemoryStore
 import com.flora.app.assistant.VisionClient
 import com.flora.app.assistant.VoiceEngine
 import com.flora.app.automation.FloraAutomationService
@@ -93,6 +95,8 @@ class BackgroundMicService : Service() {
     private var voice: VoiceEngine? = null
     private var wanted = false
     private var active = false
+    // N1 background island tap ke liye: bol rahi hai ya nahi.
+    private var bgSpeaking = false
     private var cachedPlan: String? = null
     private var cachedPlanAtMs = 0L
     // Licence plan cache (service lifetime, TTL ke saath):
@@ -125,8 +129,23 @@ class BackgroundMicService : Service() {
         val licenceClient = LicenceClient(prefs)
         val engine = VoiceEngine(applicationContext)
         voice = engine
+        // N1 background island drive (sirf TAKEOVER/active me):
+        // bolte waqt SPEAKING, khatam par CONVERSATION_OPEN.
+        // STANDBY me foreground FloraApp island chalata hai.
+        engine.onSpeechStart = {
+            if (active) {
+                bgSpeaking = true
+                NotchState.setState(IslandState.SPEAKING)
+                syncNotchShow()
+            }
+        }
         engine.onSpeechDone = {
-            if (wanted && active) startListening()
+            bgSpeaking = false
+            if (wanted && active) {
+                NotchState.setState(IslandState.CONVERSATION_OPEN)
+                syncNotchShow()
+                startListening()
+            }
         }
         engine.onSpoken = { seconds ->
             scope.launch {
@@ -177,15 +196,63 @@ class BackgroundMicService : Service() {
         when (intent?.action) {
             ACTION_TAKEOVER -> {
                 active = true
+                // N1/R-N-2 background island tap: bolte waqt
+                // tap = interrupt (speech-done par sunna apne
+                // aap wapas shuru hoga), warna chat aage lao.
+                NotchState.onIslandTap = {
+                    val v = voice
+                    if (bgSpeaking && v != null) {
+                        v.stop()
+                        NotchState.interrupted = true
+                    } else {
+                        try {
+                            val launch = Intent(this, MainActivity::class.java).apply {
+                                addFlags(
+                                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                )
+                            }
+                            startActivity(launch)
+                        } catch (e: Exception) {
+                        }
+                    }
+                }
+                NotchState.setState(IslandState.CONVERSATION_OPEN)
+                syncNotchShow()
                 startListening()
             }
             ACTION_STANDBY -> {
                 active = false
                 mainHandler.removeCallbacks(restartRunnable)
                 listener?.stop()
+                // Handler yahan clear NAHI karte — MainActivity
+                // onResume ka foreground handler baad me aata
+                // hai (service call async hai); clear sirf
+                // onPause/onDestroy se hota hai.
             }
         }
         return START_STICKY
+    }
+
+    /**
+     * N1: island OverlayMicService ke FGS par dikhao (koi
+     * doosra FGS nahi). Permission na ho to chupchaap kuch
+     * nahi — background me guidance spam nahi karenge.
+     */
+    private fun syncNotchShow() {
+        try {
+            if (!Settings.canDrawOverlays(this)) return
+            val show = Intent(this, OverlayMicService::class.java).apply {
+                action = OverlayMicService.ACTION_NOTCH_SHOW
+                putExtra(
+                    OverlayMicService.EXTRA_NOTCH_STATE,
+                    NotchState.islandState.name,
+                )
+            }
+            startForegroundService(show)
+        } catch (e: Exception) {
+        }
     }
 
     private fun startListening() {
@@ -423,10 +490,30 @@ class BackgroundMicService : Service() {
             voice?.speak("Aaj ka free talk time (10 minute) khatam ho gaya hai. Kal phir milega, ya Pro (₹199/month) lijiye.")
             return
         }
+        // N5/NOTCH-07: foreground jaisi history — persisted
+        // store se (cap BrainClient.ask ke andar hi lagta hai:
+        // 12 turns / ~1500 chars, foreground wala hi cap).
+        // Router divergence yahan CHHUA NAHI gaya (R-N-5) —
+        // sirf history argument juda hai, route wahi hai.
+        val bgHistory = try {
+            ChatMemoryStore(applicationContext).loadAll()
+                .map { BrainClient.ChatTurn(it.fromUser, it.text) }
+        } catch (e: Exception) {
+            emptyList()
+        }
         val reply = try {
-            brain.ask(question)
+            brain.ask(question, history = bgHistory)
         } catch (e: Exception) {
             "Brain se baat nahi ho payi, dobara boliye."
+        }
+        // Background turn bhi yaad rahe (warna agla foreground
+        // turn is baat-cheet ko bhool jayega) — user turn +
+        // bola gaya jawab dono persisted store me.
+        try {
+            val store = ChatMemoryStore(applicationContext)
+            store.addTurn(true, question)
+            store.addTurn(false, reply)
+        } catch (e: Exception) {
         }
         voice?.speak(reply)
     }
@@ -450,6 +537,9 @@ class BackgroundMicService : Service() {
     override fun onDestroy() {
         wanted = false
         active = false
+        bgSpeaking = false
+        NotchState.onIslandTap = null
+        NotchState.clearAmplitude()
         mainHandler.removeCallbacks(restartRunnable)
         listener?.stop()
         voice?.stop()
