@@ -32,8 +32,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.flora.app.data.AutoLogStore
 import com.flora.app.data.BuilderAuthKind
+import com.flora.app.data.BuilderGrantOnce
 import com.flora.app.data.BuilderService
 import com.flora.app.data.FloraPreferences
+import com.flora.app.tools.BuilderFailureKind
 import com.flora.app.tools.BuilderHttp
 import com.flora.app.tools.BuilderHosts
 import com.flora.app.tools.BuilderOAuth
@@ -63,7 +65,7 @@ import kotlinx.coroutines.launch
  * - (B) MANUAL INTEGRATION: secure paste field (masked) —
  *   voice/chat se key kabhi nahi li jati (KeyInputGuard).
  * - (D) CLIPBOARD CAPTURE: "clipboard se key loon?" prompt ke
- *   baad hi foreground read (system read-toast dikhega),
+ *   baad hi foreground read (modern Android par system read-toast dikhega),
  *   shape-validate, encrypted save, auto-clear (opt-out ke
  *   saath). Cookies kabhi nahi.
  * Vercel: scope-string/OAuth authorize model hi nahi hai —
@@ -107,6 +109,9 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
     var oauthService by remember { mutableStateOf<BuilderService?>(null) }
     var oauthVerifier by remember { mutableStateOf("") }
     var oauthCode by remember { mutableStateOf<String?>(null) }
+    var oauthState by remember { mutableStateOf("") }
+    var supabaseRefPrompt by remember { mutableStateOf(false) }
+    var supabaseProjects by remember { mutableStateOf<List<SupabaseProjectClient.Project>>(emptyList()) }
 
     fun log(msg: String) {
         scope.launch {
@@ -129,8 +134,164 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
         }
     }
 
+    fun expiryFromExpiresIn(expiresInSec: Long): Long =
+        if (expiresInSec > 0L) System.currentTimeMillis() + expiresInSec * 1000L else 0L
+
+    /**
+     * B3 follow-up wiring: prefs se StoredGrant banao (refresh
+     * token ki VALUE kabhi nahi — sirf maujoodgi). Koi bhi prefs
+     * read fail ho to NOT_CONNECTED grant (fail-closed).
+     */
+    suspend fun grantFor(service: BuilderService): BuilderGrantOnce.StoredGrant {
+        return try {
+            BuilderGrantOnce.StoredGrant(
+                connected = prefs.builderConnected(service),
+                hasToken = prefs.builderToken(service).isNotEmpty(),
+                expiresAtMs = prefs.builderExpiresAtMs(service),
+                authKind = prefs.builderAuthKind(service),
+                hasRefreshToken = prefs.builderRefreshToken(service).isNotEmpty()
+            )
+        } catch (e: Exception) {
+            BuilderGrantOnce.StoredGrant(false, false, 0L, null, false)
+        }
+    }
+
+    /**
+     * REFRESH_SILENTLY branch ka asli execution: OAuth + refresh
+     * token + persisted client ID ho to silent refresh attempt,
+     * naya token + nayi expiry save (Supabase ka baseUrl/ref
+     * pehle wala barkaraar). Vercel ka refresh concept hi nahi
+     * — wahan hamesha false. False = caller Regrant/Repaste
+     * branch par jata hai, kabhi silent failure nahi.
+     */
+    suspend fun trySilentRefresh(service: BuilderService): Boolean {
+        if (service == BuilderService.VERCEL) return false
+        val clientId = try { prefs.builderOAuthClientId(service) } catch (e: Exception) { "" }
+        if (clientId.isEmpty()) return false
+        return try {
+            val existing = prefs.builderConnection(service)
+            if (service == BuilderService.GITHUB) {
+                when (val res = GitHubClient(prefs).refreshSilently(clientId)) {
+                    is BuilderOutcome.Ok -> prefs.setBuilderToken(
+                        service, res.value.accessToken, BuilderAuthKind.OAUTH,
+                        res.value.refreshToken,
+                        expiresAtMs = expiryFromExpiresIn(res.value.expiresInSec)
+                    )
+                    is BuilderOutcome.Failure -> false
+                }
+            } else {
+                when (val res = SupabaseProjectClient(prefs).refreshSilently(clientId)) {
+                    is BuilderOutcome.Ok -> prefs.setBuilderToken(
+                        service, res.value.accessToken, BuilderAuthKind.OAUTH,
+                        res.value.refreshToken,
+                        expiresAtMs = expiryFromExpiresIn(res.value.expiresInSec),
+                        baseUrl = existing.baseUrl, projectRef = existing.projectRef
+                    )
+                    is BuilderOutcome.Failure -> false
+                }
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Grant-once open check — WHY YAHAN: Services screen hi
+     * token-use ka entry point hai (user yahan aakar hi grant
+     * validate karta hai). Screen khulte hi har connected
+     * service ka decide() chalta hai: REFRESH_SILENTLY par
+     * silent refresh attempt (fail -> Regrant note, kabhi
+     * chupchaap nahi), REPROMPT_ONCE par ek baar re-paste/
+     * grant note (loop nahi — ye check sirf open par chalta
+     * hai), REUSE/NOT_CONNECTED par kuch nahi. Supabase ka
+     * ref khaali ho to ref prompt bhi yahin se khulta hai.
+     */
+    fun checkGrantOnceOnOpen() {
+        scope.launch {
+            for (service in listOf(BuilderService.GITHUB, BuilderService.VERCEL, BuilderService.SUPABASE)) {
+                val decision = BuilderGrantOnce.decide(grantFor(service), System.currentTimeMillis())
+                when (decision) {
+                    BuilderGrantOnce.Decision.REFRESH_SILENTLY -> {
+                        if (!trySilentRefresh(service)) {
+                            note = "Is service ka connection expire ho gaya hai — guided login se dobara grant karo (refresh nahi ho paya)."
+                            detail = BuilderHttp.dashboardFallback(service)
+                        }
+                    }
+                    BuilderGrantOnce.Decision.REPROMPT_ONCE -> {
+                        note = "Is service ka token expire ho gaya hai — ek baar dobara paste ya grant karo."
+                        detail = BuilderHttp.dashboardFallback(service)
+                    }
+                    else -> {}
+                }
+            }
+            try {
+                if (prefs.builderConnected(BuilderService.SUPABASE) &&
+                    prefs.builderProjectRef(BuilderService.SUPABASE).isEmpty()
+                ) {
+                    supabaseRefPrompt = true
+                }
+            } catch (e: Exception) {
+            }
+        }
+    }
+
+    /**
+     * Connection-check failure ka wired branch (B3-05/B3-08):
+     * grant se authFailureFor nikalta hai — SilentRefresh par
+     * ek baar silent refresh + ek baar whoAmI retry (fail par
+     * Regrant note, kabhi loop nahi), WiderScopeRegrant par
+     * wider-scope grant note, Regrant/Repaste par ek baar wala
+     * note, Blocked par warm + dashboard fallback. Koi branch
+     * chupchaap fail nahi hoti, koi jhootha success nahi.
+     */
+    suspend fun <T> applyFailureBranch(
+        service: BuilderService,
+        kind: BuilderFailureKind,
+        retry: suspend () -> BuilderOutcome<T>,
+        okNote: (T) -> String,
+        okDetail: (T) -> String
+    ) {
+        val grant = grantFor(service)
+        when (BuilderHttp.authFailureFor(service, kind, grant.authKind, grant.hasRefreshToken)) {
+            BuilderAuthFailure.SilentRefresh -> {
+                if (trySilentRefresh(service)) {
+                    when (val retried = retry()) {
+                        is BuilderOutcome.Ok -> {
+                            note = okNote(retried.value)
+                            detail = okDetail(retried.value)
+                        }
+                        is BuilderOutcome.Failure -> {
+                            note = BuilderHttp.warmMessage(retried.kind) + " Guided login se dobara grant karo."
+                            detail = BuilderHttp.dashboardFallback(service)
+                        }
+                    }
+                } else {
+                    note = BuilderHttp.warmMessage(kind) + " Guided login se dobara grant karo (refresh nahi ho paya)."
+                    detail = BuilderHttp.dashboardFallback(service)
+                }
+            }
+            BuilderAuthFailure.WiderScopeRegrant -> {
+                note = BuilderHttp.warmMessage(BuilderFailureKind.SCOPE_SHORT) + " Wider scope ke saath guided login se dobara grant karo."
+                detail = BuilderHttp.dashboardFallback(service)
+            }
+            BuilderAuthFailure.RegrantOnce -> {
+                note = BuilderHttp.warmMessage(kind) + " Guided login se dobara grant karo."
+                detail = BuilderHttp.dashboardFallback(service)
+            }
+            BuilderAuthFailure.RepasteOnce -> {
+                note = BuilderHttp.warmMessage(kind) + " Ek baar dobara paste karo."
+                detail = BuilderHttp.dashboardFallback(service)
+            }
+            BuilderAuthFailure.Blocked -> {
+                note = BuilderHttp.warmMessage(kind)
+                detail = BuilderHttp.dashboardFallback(service)
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         refreshFlags()
+        checkGrantOnceOnOpen()
     }
 
     Column(
@@ -223,7 +384,8 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
                         when (result) {
                             is ClipboardCapture.Result.Saved -> {
                                 log("Builder services: GitHub connected (clipboard)")
-                                note = "GitHub jud gaya — clipboard clear ho gaya hai."
+                                val cleared = try { prefs.builderClipboardAutoClear() } catch (e: Exception) { true }
+                                note = "GitHub jud gaya" + if (cleared) " — clipboard clear ho gaya hai." else " — clipboard jaisa tha waisa hi chhoda gaya hai."
                                 detail = ""
                             }
                             is ClipboardCapture.Result.Invalid -> {
@@ -244,7 +406,7 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
                 }, modifier = Modifier.padding(end = 4.dp)) { Text("Haan, lo") }
                 Button(onClick = { clipAskGithub = false }) { Text("Nahi") }
             }
-            Text("Note: padhte waqt Android ka clipboard-read toast dikhega — kuch chhupa hua nahi hota.")
+            Text("Note: modern Android par padhte waqt foreground clipboard-read toast dikhega; Android 12 se pehle is toast ki visibility version par depend karti hai — kuch chhupa hua nahi hota.")
         }
         Button(onClick = {
             oauthService = BuilderService.GITHUB
@@ -260,8 +422,7 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
                         detail = "User: " + res.value
                     }
                     is BuilderOutcome.Failure -> {
-                        note = BuilderHttp.warmMessage(res.kind)
-                        detail = BuilderHttp.dashboardFallback(BuilderService.GITHUB)
+                        applyFailureBranch(BuilderService.GITHUB, res.kind, { client.whoAmI() }, { "GitHub connection theek hai." }, { v -> "User: $v" })
                     }
                 }
             }
@@ -336,7 +497,8 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
                         when (result) {
                             is ClipboardCapture.Result.Saved -> {
                                 log("Builder services: Vercel connected (clipboard)")
-                                note = "Vercel jud gaya — clipboard clear ho gaya hai."
+                                val cleared = try { prefs.builderClipboardAutoClear() } catch (e: Exception) { true }
+                                note = "Vercel jud gaya" + if (cleared) " — clipboard clear ho gaya hai." else " — clipboard jaisa tha waisa hi chhoda gaya hai."
                                 detail = ""
                             }
                             is ClipboardCapture.Result.Invalid -> {
@@ -367,8 +529,7 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
                         detail = "User: " + res.value
                     }
                     is BuilderOutcome.Failure -> {
-                        note = BuilderHttp.warmMessage(res.kind)
-                        detail = BuilderHttp.dashboardFallback(BuilderService.VERCEL)
+                        applyFailureBranch(BuilderService.VERCEL, res.kind, { client.whoAmI() }, { "Vercel connection theek hai." }, { v -> "User: $v" })
                     }
                 }
             }
@@ -453,8 +614,16 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
                         when (result) {
                             is ClipboardCapture.Result.Saved -> {
                                 log("Builder services: Supabase connected (clipboard)")
-                                note = "Supabase jud gaya — clipboard clear ho gaya hai."
+                                val cleared = try { prefs.builderClipboardAutoClear() } catch (e: Exception) { true }
+                                note = "Supabase jud gaya" + if (cleared) " — clipboard clear ho gaya hai." else " — clipboard jaisa tha waisa hi chhoda gaya hai."
                                 detail = ""
+                                try {
+                                    if (prefs.builderProjectRef(BuilderService.SUPABASE).isEmpty()) {
+                                        supabaseRefPrompt = true
+                                        note = note + " Project ref abhi set nahi hai — neeche se chuno ya daalo."
+                                    }
+                                } catch (e: Exception) {
+                                }
                             }
                             is ClipboardCapture.Result.Invalid -> {
                                 note = result.message
@@ -489,8 +658,7 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
                         detail = "Projects mile: " + res.value
                     }
                     is BuilderOutcome.Failure -> {
-                        note = BuilderHttp.warmMessage(res.kind)
-                        detail = BuilderHttp.dashboardFallback(BuilderService.SUPABASE)
+                        applyFailureBranch(BuilderService.SUPABASE, res.kind, { client.whoAmI() }, { "Supabase connection theek hai." }, { v -> "Projects mile: $v" })
                     }
                 }
             }
@@ -511,6 +679,68 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
         }
         Spacer(modifier = Modifier.height(16.dp))
 
+        // ---- Supabase project ref (P2-8) ----
+        // Clipboard/OAuth save ke baad ref khaali ho to ye
+        // prompt dikhta hai — list-projects (Management API,
+        // ab bare-array parse ke saath) se chuno ya ref daalo.
+        // Ref set hue bina Supabase ka project wala kaam poora
+        // nahi mana jata; token save barkaraar rehta hai.
+        if (supabaseRefPrompt) {
+            Text("Supabase project ref set karo — list se chuno ya ref daalo.")
+            OutlinedTextField(
+                value = supabaseRef, onValueChange = { supabaseRef = it },
+                label = { Text("Project ref") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Button(onClick = {
+                scope.launch {
+                    when (val res = SupabaseProjectClient(prefs).listProjects()) {
+                        is BuilderOutcome.Ok -> {
+                            supabaseProjects = res.value
+                            note = if (res.value.isEmpty()) "Koi project nahi mila — dashboard se project banao, phir dobara lao." else "Projects mil gaye — apna project chuno."
+                            detail = ""
+                        }
+                        is BuilderOutcome.Failure -> {
+                            applyFailureBranch(BuilderService.SUPABASE, res.kind, { SupabaseProjectClient(prefs).whoAmI() }, { "Supabase connection theek hai." }, { v -> "Projects mile: $v" })
+                        }
+                    }
+                }
+            }) { Text("List se projects lao") }
+            for (project in supabaseProjects) {
+                Button(onClick = {
+                    scope.launch {
+                        try {
+                            prefs.setBuilderSupabaseRef(project.ref)
+                        } catch (e: Exception) {
+                        }
+                        supabaseRefPrompt = false
+                        note = "Supabase project ref set ho gaya."
+                        detail = ""
+                        refreshFlags()
+                    }
+                }) { Text("Project chuno: " + if (project.name.isEmpty()) project.ref else project.name) }
+            }
+            Button(onClick = {
+                val ref = supabaseRef.trim()
+                if (ref.isEmpty()) {
+                    note = "Project ref khaali hai — list se chuno ya ref daalo."
+                    detail = ""
+                } else {
+                    scope.launch {
+                        try {
+                            prefs.setBuilderSupabaseRef(ref)
+                        } catch (e: Exception) {
+                        }
+                        supabaseRefPrompt = false
+                        note = "Supabase project ref set ho gaya."
+                        detail = ""
+                        refreshFlags()
+                    }
+                }
+            }) { Text("Ref save karo") }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
         // ---- Guided login (GitHub / Supabase) ----
         if (oauthService != null) {
             val service = oauthService!!
@@ -528,6 +758,7 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
             )
             Button(onClick = {
                 val pair = BuilderOAuth.newPkcePair()
+                oauthState = BuilderOAuth.newState()
                 oauthVerifier = pair.verifier
                 val endpoint = if (service == BuilderService.GITHUB) {
                     BuilderOAuth.GITHUB_AUTHORIZE_URL
@@ -541,7 +772,7 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
                 }
                 oauthUrl = BuilderOAuth.buildAuthorizeUrl(
                     endpoint, oauthClientId.trim(), oauthRedirect.trim(),
-                    scopeText, pair.challenge, "flora-b3"
+                    scopeText, pair.challenge, oauthState
                 )
                 oauthCode = null
                 note = "Apne haathon se login karo — Flora sirf wapas aane wale code ko pakdegi."
@@ -551,6 +782,8 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
                 oauthService = null
                 oauthUrl = null
                 oauthCode = null
+                oauthState = ""
+                oauthVerifier = ""
             }) { Text("Guided login band karo") }
         }
         if (oauthUrl != null && oauthService != null) {
@@ -573,7 +806,7 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
                                 request: WebResourceRequest?
                             ): Boolean {
                                 val url = request?.url?.toString() ?: return false
-                                val code = BuilderOAuth.parseCodeFromRedirect(url, redirect)
+                                val code = BuilderOAuth.parseCodeFromRedirect(url, redirect, oauthState)
                                 if (code != null) {
                                     oauthCode = code
                                     oauthUrl = null
@@ -602,8 +835,14 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
                                 val saved = try {
                                     prefs.setBuilderToken(
                                         BuilderService.GITHUB, res.value.accessToken,
-                                        BuilderAuthKind.OAUTH, res.value.refreshToken
-                                    )
+                                        BuilderAuthKind.OAUTH, res.value.refreshToken,
+                                        expiresAtMs = expiryFromExpiresIn(res.value.expiresInSec)
+                                    ) && run {
+                                        try {
+                                            prefs.setBuilderOAuthClientId(BuilderService.GITHUB, oauthClientId.trim())
+                                            true
+                                        } catch (e: Exception) { false }
+                                    }
                                 } catch (e: Exception) {
                                     false
                                 }
@@ -619,8 +858,14 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
                                 val saved = try {
                                     prefs.setBuilderToken(
                                         BuilderService.SUPABASE, res.value.accessToken,
-                                        BuilderAuthKind.OAUTH, res.value.refreshToken
-                                    )
+                                        BuilderAuthKind.OAUTH, res.value.refreshToken,
+                                        expiresAtMs = expiryFromExpiresIn(res.value.expiresInSec)
+                                    ) && run {
+                                        try {
+                                            prefs.setBuilderOAuthClientId(BuilderService.SUPABASE, oauthClientId.trim())
+                                            true
+                                        } catch (e: Exception) { false }
+                                    }
                                 } catch (e: Exception) {
                                     false
                                 }
@@ -633,15 +878,47 @@ fun ConnectServicesScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
                         log("Builder services: connected via guided login")
                         note = "Guided login se jud gaya."
                         detail = ""
+                        // P2-3: verifier single-use hai — use ke baad
+                        // turant clear. Client ID composition se
+                        // clear hoti hai, par persisted copy
+                        // (setBuilderOAuthClientId) silent refresh
+                        // ke liye rehti hai — client ID public
+                        // identifier hai, secret nahi. Redirect URI
+                        // refresh me chahiye hi nahi, isliye wo
+                        // persist nahi hoti, composition se clear.
+                        val doneService = service
+                        oauthVerifier = ""
+                        oauthState = ""
+                        oauthClientId = ""
+                        oauthRedirect = ""
                         oauthCode = null
                         oauthService = null
+                        if (doneService == BuilderService.SUPABASE) {
+                            try {
+                                if (prefs.builderProjectRef(BuilderService.SUPABASE).isEmpty()) {
+                                    supabaseRefPrompt = true
+                                    note = "Guided login se jud gaya — project ref abhi set nahi hai, neeche se chuno ya daalo."
+                                }
+                            } catch (e: Exception) {
+                            }
+                        }
                     } else if (outcome == "save-fail") {
                         note = "Token save nahi ho paya — dobara koshish karo."
                         detail = ""
+                        oauthVerifier = ""
+                        oauthState = ""
+                        oauthCode = null
                     } else {
                         note = "Login poora nahi ho paya — manual paste ya clipboard se jodo."
                         detail = "Wajah: " + outcome +
                             ". Dashboard se token bana kar manual raasta bhi chalega."
+                        // Code + verifier dono single-use hain —
+                        // fail ke baad bhi linger nahi karte;
+                        // client ID/redirect re-login ke liye
+                        // composition me rehte hain.
+                        oauthVerifier = ""
+                        oauthState = ""
+                        oauthCode = null
                     }
                     refreshFlags()
                 }
