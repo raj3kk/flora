@@ -39,6 +39,7 @@ import com.flora.app.automation.ShizukuBridge
 import com.flora.app.data.AutoLogStore
 import com.flora.app.data.ProjectStore
 import com.flora.app.tools.ImageTools
+import com.flora.app.tools.KeyInputGuard
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.Composable
@@ -1841,6 +1842,18 @@ fun FloraApp(
                 fun sendChat(questionRaw: String) {
                     val question = questionRaw.trim()
                     if (question.isEmpty() || busy) return
+                    // B3-06 key guard (EK jagah, yahi): chat/voice
+                    // input me key jaisi cheez ho to na message
+                    // judta hai, na memory me jata hai, na brain
+                    // prompt/history me — sirf Settings redirect
+                    // wala warm message bolta/dikhta hai.
+                    if (KeyInputGuard.looksKeyLike(question)) {
+                        input = ""
+                        val guardMsg = KeyInputGuard.REFUSAL_MESSAGE
+                        messages = messages + ChatMsg("Flora: $guardMsg", false)
+                        voice.speak(guardMsg)
+                        return
+                    }
                     // Cycle 3, F1 (a/b): Face Lock gate — typed,
                     // voice, continuous-mic, barge-in, pending-task
                     // saare raaste isi sendChat se jaate hain,

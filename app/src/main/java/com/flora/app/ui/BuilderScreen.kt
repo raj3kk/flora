@@ -36,6 +36,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import com.flora.app.data.AutoLogStore
 import com.flora.app.data.ProjectMeta
+import com.flora.app.tools.KeyInputGuard
 import com.flora.app.data.ProjectStore
 import com.flora.app.data.extractFirstTextEntry
 import kotlinx.coroutines.launch
@@ -82,6 +83,10 @@ fun BuilderScreen(projectStore: ProjectStore, autoLogStore: AutoLogStore) {
     var newProjectName by remember { mutableStateOf("") }
     var newFileName by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
+    // B3: Services screen toggle — baaki saare states + saveCurrent
+    // + launchers isse PEHLE declare hain (declaration-order trap
+    // se bachne ke liye); screen swap LaunchedEffect ke baad hota hai.
+    var showServices by remember { mutableStateOf(false) }
 
     val selectedProject = projects.firstOrNull { it.id == selectedProjectId }
     val selectedFile = selectedProject?.files?.firstOrNull { it.name == selectedFileName }
@@ -95,6 +100,11 @@ fun BuilderScreen(projectStore: ProjectStore, autoLogStore: AutoLogStore) {
         val fname = selectedFileName
         if (pid == null || fname == null) {
             note = "Pehle koi project aur file chuno, phir save karo."
+        } else if (KeyInputGuard.looksKeyLike(editorText)) {
+            // B3-11: builder token/key kabhi project file me nahi
+            // likha jata — save rok do, key hata kar dobara save
+            // karne ko bolo (Services screen se jodna sahi raasta hai).
+            note = KeyInputGuard.PROJECT_FILE_REFUSAL_MESSAGE
         } else {
             val textToSave = editorText
             scope.launch {
@@ -129,6 +139,11 @@ fun BuilderScreen(projectStore: ProjectStore, autoLogStore: AutoLogStore) {
                 ?.firstOrNull() ?: ""
             if (spoken.isBlank()) {
                 note = "Kuch sunai nahi diya — dobara bolo."
+            } else if (KeyInputGuard.looksKeyLike(spoken)) {
+                // B3-06: boli hui key kabhi editor me nahi judti,
+                // kabhi project file me save nahi hoti, kabhi
+                // memory/brain prompt me nahi jati.
+                note = KeyInputGuard.REFUSAL_MESSAGE
             } else if (selectedFileName == null || selectedProjectId == null) {
                 note = "Pehle koi project aur file chuno, phir bolo."
             } else {
@@ -166,6 +181,10 @@ fun BuilderScreen(projectStore: ProjectStore, autoLogStore: AutoLogStore) {
                             val extracted = extractFirstTextEntry(bytes)
                             if (extracted == null) {
                                 note = "Is zip me koi text file nahi mili."
+                            } else if (KeyInputGuard.looksKeyLike(extracted.content)) {
+                                // B3-11: chuni hui file me key jaisi
+                                // cheez ho to project file me save nahi hoti.
+                                note = KeyInputGuard.PROJECT_FILE_REFUSAL_MESSAGE
                             } else {
                                 val pid = selectedProjectId ?: projectStore.createProject("Mera project").id
                                 val saved = projectStore.saveProjectFile(pid, extracted.name, extracted.content)
@@ -185,6 +204,10 @@ fun BuilderScreen(projectStore: ProjectStore, autoLogStore: AutoLogStore) {
                             }
                         } else if (bytes.contains(0.toByte())) {
                             note = "Ye file text jaisi nahi lagi — text ya zip file chuno."
+                        } else if (KeyInputGuard.looksKeyLike(String(bytes, Charsets.UTF_8))) {
+                            // B3-11: chuni hui file me key jaisi
+                            // cheez ho to project file me save nahi hoti.
+                            note = KeyInputGuard.PROJECT_FILE_REFUSAL_MESSAGE
                         } else {
                             val content = String(bytes, Charsets.UTF_8)
                             val pid = selectedProjectId ?: projectStore.createProject("Mera project").id
@@ -218,6 +241,15 @@ fun BuilderScreen(projectStore: ProjectStore, autoLogStore: AutoLogStore) {
         }
     }
 
+    // B3 (R-B3-5): Services screen BuilderScreen se khulti hai —
+    // saare hooks upar unconditional chal chuke hain, isliye ye
+    // swap hook order nahi todta. FloraApp me iske liye koi
+    // bada wiring nahi hai.
+    if (showServices) {
+        ConnectServicesScreen(autoLogStore) { showServices = false }
+        return
+    }
+
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)
     ) {
@@ -226,6 +258,8 @@ fun BuilderScreen(projectStore: ProjectStore, autoLogStore: AutoLogStore) {
         Text("Projects sirf is phone par encrypted save hote hain — file manager se nahi khulenge.")
         Spacer(modifier = Modifier.height(4.dp))
         Text("Preview abhi sirf ek file ka dikhta hai — poora project ek saath preview karna baad me aayega.")
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(onClick = { showServices = true }) { Text("Services jodo (GitHub / Vercel / Supabase)") }
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedTextField(
             value = newProjectName, onValueChange = { newProjectName = it },
