@@ -145,11 +145,16 @@ class PlannerBrain(
             "\"stops\":[],\"noDo\":[],\"rollback\":\"...\"} " +
             "Niyam: dependsOn me sirf pehle wale step index; side-effect step me " +
             "sideEffectPreview me 'kya banega, kahan, kis naam se' likho; " +
-            "input me password/db_pass/secret/token key kabhi mat do; " +
+            "input me password/db_pass/secret/token/apiKey key kabhi mat do; " +
             "Supabase project ke liye db password mat maango, wo step user se alag milega."
-        val memoryPart = if (memory.isBlank()) "" else " Pichhla context (sirf kaam ka ho to istemal karo): $memory."
-        val failPart = if (failureNote.isBlank()) "" else " Note: $failureNote"
-        return ("Goal: $goal.$memoryPart$failPart $schema").take(3800)
+        // A3 (e): ek take(3800) poore prompt par schema ka tail
+        // kaat deta tha (schema sabse aakhir me tha). Ab har hissa
+        // alag cap hota hai aur schema POORA aakhir me judta hai —
+        // schema/rules kabhi nahi katenge. Total ~3550 < 3800.
+        val goalPart = "Goal: ${goal.take(800)}."
+        val memoryPart = if (memory.isBlank()) "" else " Pichhla context (sirf kaam ka ho to istemal karo): ${memory.take(1500)}."
+        val failPart = if (failureNote.isBlank()) "" else " Note: ${failureNote.take(500)}"
+        return "$goalPart$memoryPart$failPart $schema"
     }
 
     /** Prose ke andar lapeta JSON bhi nikaal kar strict parse karo; fail = null (reject). */

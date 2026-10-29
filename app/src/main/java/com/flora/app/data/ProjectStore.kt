@@ -32,12 +32,13 @@ private val Context.projectDataStore: DataStore<Preferences> by preferencesDataS
  * kabhi DataStore me nahi jate (B2-16 split).
  *
  * Encryption-proof / fail-closed (B2-06): ye store MemoryCrypto
- * ke shared fail-open fallback ko CHHUTA BHI NAHI.
- * File content sirf strict encrypt/decrypt se guzarta hai: decrypt
- * null de to file khulti hi nahi — raw bytes kabhi content ki
- * tarah nahi padhe jate, aur tampered file refuse hoti hai, chupchaap
- * khul nahi jati. MemoryCrypto ka shared fallback baaki stores
- * (Docs/AutoLog/ChatMemory) ke liye waisa hi barkaraar hai.
+ * ke strict encrypt/decrypt par hi chalta hai — encrypt fail par
+ * null (koi plaintext fallback nahi), decrypt fail par file khulti
+ * hi nahi. MemoryCrypto.decodeStored ka raw-read sirf legacy
+ * migration READ hai (purana plaintext padhna), fail-open WRITE
+ * fallback kabhi nahi hai — ye store us read ko call bhi nahi
+ * karta (index flow me seedha decrypt). Baaki stores
+ * (Docs/AutoLog/ChatMemory) ka legacy-read vyavhaar waisa hi hai.
  *
  * Network: is file me koi network import/call nahi hai (B2-15).
  * Server project code kabhi nahi dekhta — B2 me backup bhi nahi
@@ -119,7 +120,13 @@ class ProjectFileStore(val root: File, val cipher: ProjectCipher) {
                 val oldBytes = target.readBytes()
                 val vdir = versionDir(projectId, fileId)
                 if (!vdir.exists()) vdir.mkdirs()
-                val next = (listVersionNames(projectId, fileId).size + 1)
+                // A3 P2-9: naam kabhi dobara istemal nahi — max + 1
+                // (size + 1 nahi, warna bahar se hati version file
+                // ka naam dobara ban kar purana snapshot overwrite
+                // ho jata). Normal flow me naam format wahi (vN).
+                val next = (listVersionNames(projectId, fileId)
+                    .mapNotNull { it.removePrefix("v").toIntOrNull() }
+                    .maxOrNull() ?: 0) + 1
                 versionName = "v$next"
                 File(vdir, "$versionName.enc").writeBytes(oldBytes)
             }
@@ -257,16 +264,46 @@ class ProjectStore(
         }
     }
 
-    private suspend fun saveIndex(index: ProjectIndex) {
+    /**
+     * A3 P2-7: encode fail par chupchaap skip nahi — caller ko
+     * false milta hai (koi signal na hone se metadata loss chhup
+     * jata tha). Caller is par failure dikhata hai.
+     */
+    private suspend fun saveIndex(index: ProjectIndex): Boolean {
         val encoded = MemoryCrypto.encodeStored(json.encodeToString(ProjectIndex.serializer(), index))
-        if (encoded != null) {
-            appContext.projectDataStore.edit { it[indexKey] = encoded }
+            ?: return false
+        appContext.projectDataStore.edit { it[indexKey] = encoded }
+        return true
+    }
+
+    /**
+     * A3 P2-8 (R-A3-A7, fail-closed only): stored index maujood
+     * hai par decrypt/parse nahi hota to true — khaali index
+     * (koi index abhi bana hi nahi) corrupt nahi hai. FilesDir
+     * ko dobara scan karke recover karne ki koshish is fix me
+     * NAHI hai (alag item banega agar kabhi chahiye to).
+     */
+    suspend fun isIndexCorrupt(): Boolean {
+        val raw = appContext.projectDataStore.data.first()[indexKey] ?: ""
+        if (raw.isBlank()) return false
+        val decrypted = MemoryCrypto.decrypt(raw) ?: return true
+        return try {
+            json.decodeFromString(ProjectIndex.serializer(), decrypted)
+            false
+        } catch (e: Exception) {
+            true
         }
     }
 
     suspend fun listProjects(): List<ProjectMeta> = index.first().projects
 
     suspend fun createProject(name: String): ProjectMeta {
+        if (isIndexCorrupt()) {
+            // Fail-closed: corrupt index par overwrite rok do —
+            // is index ko padh kar save karna purane projects ka
+            // metadata orphan kar dega. Recovery = backup restore.
+            throw IllegalStateException("project index kharab hai — naya project banane se purana index overwrite ho jayega, isliye roka gaya")
+        }
         val clean = name.trim().take(100).ifBlank { "Mera project" }
         val current = index.first()
         val meta = ProjectMeta(
@@ -274,12 +311,20 @@ class ProjectStore(
             name = clean,
             createdAtMs = System.currentTimeMillis(),
         )
-        saveIndex(current.copy(projects = current.projects + meta))
+        if (!saveIndex(current.copy(projects = current.projects + meta))) {
+            throw IllegalStateException("project index save nahi hua — project bana par list me nahi dikhega, dobara koshish karo")
+        }
         return meta
     }
 
     /** Nayi file ya maujooda file ka naya version — index + snapshot dono update hote hain. */
     suspend fun saveProjectFile(projectId: String, fileName: String, content: String): Result<ProjectFileMeta> {
+        if (isIndexCorrupt()) {
+            // Fail-closed (A3 P2-8): corrupt index par file likhne
+            // se pehle hi roko — warna save ke baad ka index
+            // overwrite purana metadata orphan kar dega.
+            return Result.failure(IllegalStateException("project index kharab hai — save karne se purana index overwrite ho jayega, isliye roka gaya"))
+        }
         val current = index.first()
         val project = current.projects.firstOrNull { it.id == projectId }
             ?: return Result.failure(IllegalStateException("project not found"))
@@ -308,7 +353,12 @@ class ProjectStore(
                 project.files + updatedMeta
             }
         )
-        saveIndex(current.copy(projects = current.projects.map { if (it.id == projectId) updatedProject else it }))
+        if (!saveIndex(current.copy(projects = current.projects.map { if (it.id == projectId) updatedProject else it }))) {
+            // A3 P2-7: index save fail ko chhupaya nahi — file
+            // bytes likh chuke hain, par metadata (version list)
+            // save nahi hui, isliye caller ko failure milega.
+            return Result.failure(IllegalStateException("project index save nahi hua"))
+        }
         return Result.success(updatedMeta)
     }
 
@@ -404,7 +454,12 @@ class ProjectStore(
                     files = project.files.map { it.copy(versions = emptyList()) },
                 )
             }
-            saveIndex(ProjectIndex(projects = restored))
+            // A3 P2-7: index save fail = restore fail (caller
+            // BackupFailure dega, success ka jhootha daava nahi).
+            // NOTE: ye jaanboojh kar replace hai — B6 restore
+            // khud intentional full-replace hai, P2-8 corrupt-gate
+            // is par lagu nahi hota (wahi recovery raasta hai).
+            if (!saveIndex(ProjectIndex(projects = restored))) return false
             true
         } catch (e: Exception) {
             false

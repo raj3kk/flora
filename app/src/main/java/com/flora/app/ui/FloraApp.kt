@@ -442,6 +442,17 @@ fun FloraApp(
                 } else {
                     com.flora.app.voice.NotchState.interrupted = false
                 }
+                // A3 N1-P2-1 (doosra hissa): interrupt FINAL ke
+                // baad continuous dobara shuru — MainActivity ka
+                // onSpeechDone interrupted rehte skip karta hai,
+                // isliye restart yahin se (onError wala raasta
+                // pehle se tha, onResult par nahi tha).
+                if (continuousOn) {
+                    try {
+                        onContinuousStart()
+                    } catch (e: Exception) {
+                    }
+                }
             },
             onError = {
                 interruptListener = null
@@ -777,15 +788,21 @@ fun FloraApp(
             // rakho. Fail ho to chupchaap local mode — app-start
             // kabhi nahi rukega. Naya token mile to save karo
             // (rotation). Access token kabhi save nahi hota.
+            // A3 F3-SURF (R-A3-A4, site 1/2): refresh fail par
+            // Auto Log entry — kabhi blocking nahi, app-start
+            // kabhi nahi rukega, token logic/gate untouched.
             try {
                 val rt = prefs.linkedRefreshToken()
                 if (rt.isNotEmpty()) {
                     val next = licenceClient.refreshSession(rt)
                     if (!next.isNullOrEmpty() && next != rt) {
                         prefs.setLink(prefs.linkedUserId(), prefs.linkedEmail(), next)
+                    } else if (next.isNullOrEmpty()) {
+                        try { autoLogStore.add("Licence session renew nahi ho paya — local mode me chal raha hai (agli baar app kholne par dobara koshish hogi).") } catch (e2: Exception) { }
                     }
                 }
             } catch (e: Exception) {
+                try { autoLogStore.add("Licence session renew nahi ho paya — local mode me chal raha hai (agli baar app kholne par dobara koshish hogi).") } catch (e2: Exception) { }
             }
             // 30-din retention (v2.9): app-start par journal +
             // memories ki purani date-wali entries auto-delete.
@@ -853,9 +870,15 @@ fun FloraApp(
                         com.flora.app.tools.HeartbeatClient.send(
                             linkedUid, pair.first, prefs.supabaseAnonKey()
                         )
+                    } else {
+                        // A3 F3-SURF (R-A3-A4, site 2/2): heartbeat
+                        // ke liye token refresh fail = Auto Log entry,
+                        // kabhi blocking nahi.
+                        try { autoLogStore.add("Heartbeat ke liye access token refresh nahi ho paya — heartbeat skip hua, local mode barkaraar.") } catch (e2: Exception) { }
                     }
                 }
             } catch (e: Exception) {
+                try { autoLogStore.add("Heartbeat ke liye access token refresh nahi ho paya — heartbeat skip hua, local mode barkaraar.") } catch (e2: Exception) { }
             }
         } catch (e: Exception) {
             // Offline/server fail: licence null = free, kaam rukta nahi.
@@ -1234,7 +1257,12 @@ fun FloraApp(
                 }
                 interruptListener = null
             }
-            if (notchGuidancePending && !notchGuidanceSpoken) {
+            // A3 N1-P2-2 (candidate (a)): interrupt pending ho to
+            // guidance ABHI mat bolo — iska onSpeechStart interrupt
+            // listener ko re-arm karke FINAL kho deta tha. Pending
+            // waisa hi rahega, agle speech-done par (bina interrupt
+            // ke) bolega; normal path (bina interrupt) waisa hi.
+            if (notchGuidancePending && !notchGuidanceSpoken && !com.flora.app.voice.NotchState.interrupted) {
                 notchGuidancePending = false
                 notchGuidanceSpoken = true
                 try {

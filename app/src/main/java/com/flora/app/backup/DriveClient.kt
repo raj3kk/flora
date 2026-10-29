@@ -209,8 +209,29 @@ class DriveClient(private val prefs: FloraPreferences) {
     /** "Flora Backups" folder dhoondhta hai, na mile to banata hai. */
     suspend fun ensureFolder(): String? {
         val token = validAccessToken() ?: return null
+        // A3 M1-3: cached ID par bina check ke bharosa nahi —
+        // user Drive se folder delete kar de to stale ID milta
+        // tha. Pehle files.get se existence re-check karo; na
+        // mile/trashed ho to neeche find-or-create + cache update.
+        // "Drive hatao" manual reset waisa hi barkaraar hai.
         val stored = prefs.driveFolderId()
-        if (stored.isNotEmpty()) return stored
+        if (stored.isNotEmpty()) {
+            val alive = try {
+                val check = driveRequest(
+                    "$DRIVE_API/files/$stored?fields=id,trashed", token
+                ).build()
+                val resp = client(false).newCall(check).execute()
+                val body = resp.body?.string() ?: ""
+                val ok = resp.isSuccessful &&
+                    JSONObject(body).optString("id", "").isNotEmpty() &&
+                    !JSONObject(body).optBoolean("trashed", false)
+                resp.close()
+                ok
+            } catch (e: Exception) {
+                false
+            }
+            if (alive) return stored
+        }
         return try {
             val query = URLEncoder.encode(
                 "name = '$DEFAULT_FOLDER_NAME' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",

@@ -132,7 +132,11 @@ object PlanEstimateCalc {
 object PlanValidator {
     const val MAX_STEPS = 20
 
-    private val FORBIDDEN_INPUT_KEYS = listOf("password", "db_pass", "secret", "token", "passwd")
+    // A3 (h): apiKey class bhi forbidden — teeno layers ek
+    // jaise (denylist + amend transient filter + DoctorScanner
+    // regex, jisme apiKey pehle se tha). Stored plan me apiKey
+    // kabhi nahi jayega.
+    private val FORBIDDEN_INPUT_KEYS = listOf("password", "db_pass", "secret", "token", "passwd", "api_key", "apikey", "api-key")
 
     /** B5-03: project-memory save path bhi isi list se gate hota hai (ek source, duplicate nahi). */
     fun isForbiddenKey(key: String): Boolean {
@@ -141,7 +145,7 @@ object PlanValidator {
     }
 
     private val FORBIDDEN_ASSIGNMENT = Regex(
-        "(?i)\\b(password|db_pass|secret|token|passwd)\\b\\s*[:=]"
+        "(?i)\\b(password|db_pass|secret|token|passwd|api[_-]?key)\\b\\s*[:=]"
     )
 
     /** Free text me forbidden naam ke saath value lagi ho (jaise "token: ...") to true. */
@@ -178,7 +182,7 @@ object PlanValidator {
             for (key in step.input.keys) {
                 val lowerKey = key.lowercase()
                 if (FORBIDDEN_INPUT_KEYS.any { lowerKey.contains(it) }) {
-                    errors += "step $index: input key '$key' stored plan me mana hai (password/secret kabhi save nahi)"
+                    errors += "step $index: input key '$key' stored plan me mana hai (password/secret/apiKey kabhi save nahi)"
                 }
             }
         }

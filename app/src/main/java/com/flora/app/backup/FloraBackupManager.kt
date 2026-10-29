@@ -3,6 +3,7 @@ package com.flora.app.backup
 import android.content.Context
 import com.flora.app.data.BuilderAuthKind
 import com.flora.app.data.BuilderService
+import com.flora.app.data.AutoLogStore
 import com.flora.app.data.ChatMemoryStore
 import com.flora.app.data.DocsStore
 import com.flora.app.data.FloraDoc
@@ -274,7 +275,41 @@ class FloraBackupManager(
             throw BackupFailure(e.message ?: "Backup nahi khula.")
         }
         val parsed = validateAll(sections)
-        writeAll(parsed)
+        // A3 M1-1 (P2-1, fail-closed): write sequence ke beech
+        // me failure aaye to pehle wale sections pehle hi replace
+        // ho chuke hote hain (mixed state) — ye sirf crash ki
+        // family nahi, mid-write store failure ki bhi hai.
+        // Temp-staging + single commit is store-set par possible
+        // nahi hai (alag-alag DataStores, koi shared transaction
+        // nahi — staging redesign hota, chhota local fix nahi),
+        // isliye: aage ke writes throw se rukte hi hain, yahan
+        // honest UI message + Auto Log entry judti hai, aur
+        // dobara restore ka raasta bataya jata hai (blob intact
+        // hai — dobara restore hi recovery hai). Backup format
+        // change nahi hua. Success ka jhootha daava kabhi nahi.
+        try {
+            writeAll(parsed)
+        } catch (e: BackupFailure) {
+            try {
+                AutoLogStore(appContext).add(
+                    "Backup restore adhoora raha — kuch sections badal chuke ho sakte hain, baaki nahi (mixed state); ye restore valid nahi hai. Wahi backup dobara restore karo."
+                )
+            } catch (e2: Exception) {
+            }
+            throw BackupFailure(
+                e.message + " Pehle wale sections (chats/memories/journal/docs) pehle hi badal chuke ho sakte hain — ye mixed state hai, isko valid mat maano; wahi backup dobara restore karo."
+            )
+        } catch (e: Exception) {
+            try {
+                AutoLogStore(appContext).add(
+                    "Backup restore beech me ruk gaya — kuch sections badal chuke ho sakte hain (mixed state); ye restore valid nahi hai. Wahi backup dobara restore karo."
+                )
+            } catch (e2: Exception) {
+            }
+            throw BackupFailure(
+                "Restore beech me ruk gaya — kuch sections badal chuke ho sakte hain (mixed state); ye restore valid nahi hai. Wahi backup dobara restore karo."
+            )
+        }
         val linkResult = resyncLinkAndLicence(parsed, deviceId)
         return RestoreReport(
             sectionsRestored = FloraBackupCrypto.Sections.ALL.filter { sections.containsKey(it) },

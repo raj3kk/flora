@@ -51,7 +51,9 @@ class MainActivity : ComponentActivity() {
     private var continuousWanted = false
     private val mainHandler = Handler(Looper.getMainLooper())
     private val restartRunnable = Runnable {
-        if (continuousWanted) startContinuous()
+        // A3 N1-P2-1: interrupted rehte safety restart bhi skip —
+        // interrupt listener hi mic ka malik hai tab tak.
+        if (continuousWanted && !NotchState.interrupted) startContinuous()
     }
 
     private fun startContinuous() {
@@ -148,7 +150,13 @@ class MainActivity : ComponentActivity() {
         )
         voice.onSpeechDone = {
             speakingState.value = false
-            if (continuousWanted) startContinuous()
+            // A3 N1-P2-1: interrupted == true ho to continuous
+            // restart SKIP — warna interrupt listener ke FINAL ka
+            // intezar karte waqt doosra recognizer shuru ho kar
+            // duplicate/overlapping turn de sakta hai. Restart
+            // interrupt listener ke onResult/onError se wapas
+            // aayega (FloraApp startSystemInterrupt).
+            if (continuousWanted && !NotchState.interrupted) startContinuous()
         }
         voice.onSpeechStart = {
             speakingState.value = true

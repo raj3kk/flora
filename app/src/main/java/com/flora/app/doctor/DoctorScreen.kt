@@ -1,6 +1,7 @@
 package com.flora.app.doctor
 
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -92,6 +93,11 @@ fun DoctorScreen(
     var versionsByFile by remember { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
     var plans by remember { mutableStateOf<List<StoredPlan>>(emptyList()) }
     var selectedPlanId by remember { mutableStateOf<String?>(null) }
+    // A3 N4: selected plan kis project se juda tha, ye screen
+    // state me hi rakho — loadProject par isi se validate hoga
+    // (Room link wrappers N1 hain, A3 me unhe chhua NAHI jayega,
+    // R-A3-A9: N1 caller-or-remove Phase 10 ka kaam hai).
+    var linkedPlanProjectId by remember { mutableStateOf<String?>(null) }
     var failedSteps by remember { mutableStateOf<List<StoredStep>>(emptyList()) }
     var linkedProjectNote by remember { mutableStateOf("") }
 
@@ -142,9 +148,18 @@ fun DoctorScreen(
                 note = "Project khula — health check: ${result.issues.size} issues mile."
                 engine.logDoctorEvent(pid, "open health check: ${result.issues.size} issues")
                 plans = engine.listPlans()
+                // A3 N4: selected plan bina link check ke mat dikhao
+                // — doosre project ka plan khula ho to uske failed
+                // steps is project ke naam par dikhna band. Link
+                // is project ka na ho to selection + steps saaf.
                 val linked = selectedPlanId
-                if (linked != null) {
+                if (linked != null && linkedPlanProjectId == pid) {
                     failedSteps = engine.failedSteps(linked)
+                } else if (linked != null) {
+                    selectedPlanId = null
+                    linkedPlanProjectId = null
+                    failedSteps = emptyList()
+                    note = "Project khula — health check: ${result.issues.size} issues mile. (Pichhla plan is project se juda nahi tha, isliye uske failed steps saaf kiye.)"
                 }
             }
         }
@@ -331,6 +346,22 @@ fun DoctorScreen(
                                 ): Boolean {
                                     return true
                                 }
+
+                                // A3 P2-1 (R-A3-A3, network-block):
+                                // BuilderScreen preview jaisa hi — JS ON,
+                                // par network subresource block. Sirf
+                                // main frame ka data guzarta hai.
+                                override fun shouldInterceptRequest(
+                                    view: WebView?,
+                                    request: WebResourceRequest?
+                                ): WebResourceResponse? {
+                                    if (request?.isForMainFrame == true) {
+                                        return super.shouldInterceptRequest(view, request)
+                                    }
+                                    return WebResourceResponse(
+                                        "text/plain", "utf-8", ByteArray(0).inputStream()
+                                    )
+                                }
                             }
                         }
                     },
@@ -346,6 +377,9 @@ fun DoctorScreen(
                 Row(modifier = Modifier.padding(top = 4.dp)) {
                     OutlinedButton(onClick = {
                         selectedPlanId = plan.planId
+                        // A3 N4: link-click par hi project yaad rahe —
+                        // loadProject isi se validate karega.
+                        linkedPlanProjectId = selectedProjectId
                         scope.launch {
                             val pid = selectedProjectId
                             if (pid != null) {

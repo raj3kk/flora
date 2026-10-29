@@ -69,17 +69,25 @@ class PlannerService : Service() {
     companion object {
         const val ACTION_STOP = "com.flora.app.planner.STOP"
 
-        fun start(context: Context) {
-            try {
+        // A3 (g): result wapas milta hai (pehle Unit + khaali
+        // catch tha — engine ko fail ka pata hi nahi chalta tha).
+        // Caller result ignore kar sakta hai, par live caller
+        // (PlannerEngine launchRun) is par Auto Log likhta hai.
+        fun start(context: Context): Boolean {
+            return try {
                 context.startForegroundService(Intent(context, PlannerService::class.java))
+                true
             } catch (e: Exception) {
+                false
             }
         }
 
-        fun stop(context: Context) {
-            try {
+        fun stop(context: Context): Boolean {
+            return try {
                 context.startService(Intent(context, PlannerService::class.java).apply { action = ACTION_STOP })
+                true
             } catch (e: Exception) {
+                false
             }
         }
     }

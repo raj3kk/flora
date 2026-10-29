@@ -120,7 +120,11 @@ fun PlannerScreen(
         if (plan != null) {
             Spacer(modifier = Modifier.height(12.dp))
             Text(text = "Goal: ${plan.goal}")
-            Text(text = "Version: v${plan.version} | Status: ${plan.status} | Prompts (stops ke alawa): ${plan.promptCount}")
+            // A3 (f, R-A3-A5): sirf LABEL badla — promptCount ka
+            // matlab stops/block count hai (bump sirf Engine
+            // ke Stopped aur genuine-block paths par hota hai).
+            // Bump sites chhede nahi gaye (metric ka arth wahi).
+            Text(text = "Version: v${plan.version} | Status: ${plan.status} | Prompts (stops/blocks): ${plan.promptCount}")
             Text(text = "Estimate: ${plan.estimate.freeLimitNote}")
             if (plan.stops.isNotEmpty()) {
                 Text(text = "Stops: ${plan.stops.joinToString(", ")}")

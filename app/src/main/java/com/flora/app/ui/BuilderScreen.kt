@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.speech.RecognizerIntent
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -42,6 +43,7 @@ import com.flora.app.tools.KeyInputGuard
 import com.flora.app.data.ProjectStore
 import com.flora.app.data.extractFirstTextEntry
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 import java.io.File
 
 /**
@@ -99,6 +101,19 @@ fun BuilderScreen(
     val isHtmlFile = (selectedFileName ?: "").lowercase().endsWith(".html") ||
         (selectedFileName ?: "").lowercase().endsWith(".htm")
 
+    // A3 P2-7: Auto Log fail par chupchaap catch nahi — har site
+    // ko Boolean milta hai aur note me signal judta hai (doosra
+    // log path nahi hai, isliye user-visible note hi signal hai).
+    // Ye helper saveCurrent se PEHLE hai (saare uses iske baad).
+    val logBuilder: suspend (String) -> Boolean = { entry ->
+        try {
+            autoLogStore.add(entry)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     // Save raasta — typed text ho ya bola hua text, yahi ek raasta
     // hai (wahi encryption, version snapshot, Auto Log).
     val saveCurrent: () -> Unit = {
@@ -117,18 +132,12 @@ fun BuilderScreen(
                 val result = projectStore.saveProjectFile(pid, fname, textToSave)
                 if (result.isSuccess) {
                     projects = projectStore.listProjects()
-                    try {
-                        autoLogStore.add("Builder: file save hui ($fname)")
-                    } catch (e: Exception) {
-                    }
-                    note = "Save ho gaya."
+                    val logOk = logBuilder("Builder: file save hui ($fname)")
+                    note = "Save ho gaya." + if (!logOk) " (Auto Log me entry nahi likh payi.)" else ""
                 } else {
                     val kind = result.exceptionOrNull()?.javaClass?.simpleName ?: "error"
-                    try {
-                        autoLogStore.add("Builder technical: save failed ($kind)")
-                    } catch (e: Exception) {
-                    }
-                    note = "Save nahi ho paya — dobara koshish karo."
+                    val logOk = logBuilder("Builder technical: save failed ($kind)")
+                    note = "Save nahi ho paya — dobara koshish karo." + if (!logOk) " (Auto Log me entry nahi likh payi.)" else ""
                 }
             }
         }
@@ -155,7 +164,11 @@ fun BuilderScreen(
             } else {
                 editorText = if (editorText.isBlank()) spoken else editorText + "\n" + spoken
                 saveCurrent()
-                note = "Bola hua text jud gaya aur save ho gaya."
+                // A3 P2-2: save async hai — success ka daava tabhi
+                // jab saveCurrent ka apna note aaye. Interim me
+                // sirf neutral note (fail case me pehle success
+                // note dikhna band).
+                note = "Bola hua text jud gaya — save ho raha hai…"
             }
         } else {
             note = "Voice sun nahi paya — dobara koshish karo."
@@ -180,10 +193,40 @@ fun BuilderScreen(
                     if (stream == null) {
                         note = "Ye file khul nahi payi — doosri file chuno."
                     } else {
-                        val bytes = stream.use { it.readBytes() }
-                        if (bytes.size > 1_000_000) {
+                        // A3 P2-3: size check poora read KE BAAD nahi —
+                        // bounded read (1 MB cap tak, usse aage ka
+                        // chunk padha hi nahi jata) se badi pick
+                        // memory me aane se pehle hi reject hoti hai.
+                        // Limit wahi 1 MB hai, badla nahi.
+                        val buf = ByteArrayOutputStream()
+                        val chunk = ByteArray(8192)
+                        var overLimit = false
+                        stream.use { input ->
+                            while (true) {
+                                val n = input.read(chunk)
+                                if (n < 0) break
+                                if (buf.size() + n > 1_000_000) {
+                                    overLimit = true
+                                    break
+                                }
+                                buf.write(chunk, 0, n)
+                            }
+                        }
+                        val bytes = buf.toByteArray()
+                        // A3 P2-4: zip pehchan content se (magic bytes
+                        // PK\x03\x04 / PK\x05\x06 / PK\x07\x08), sirf
+                        // naam ke suffix se nahi — bina .zip wali
+                        // content URI bhi extract hogi. Naam wala
+                        // suffix fallback ke roop me barkaraar hai.
+                        val looksZip = bytes.size >= 4 &&
+                            bytes[0] == 'P'.code.toByte() &&
+                            bytes[1] == 'K'.code.toByte() &&
+                            ((bytes[2] == 0x03.toByte() && bytes[3] == 0x04.toByte()) ||
+                                (bytes[2] == 0x05.toByte() && bytes[3] == 0x06.toByte()) ||
+                                (bytes[2] == 0x07.toByte() && bytes[3] == 0x08.toByte()))
+                        if (overLimit) {
                             note = "Ye file bahut badi hai — chhoti file chuno."
-                        } else if (pickedName.lowercase().endsWith(".zip")) {
+                        } else if (looksZip || pickedName.lowercase().endsWith(".zip")) {
                             val extracted = extractFirstTextEntry(bytes)
                             if (extracted == null) {
                                 note = "Is zip me koi text file nahi mili."
@@ -199,11 +242,8 @@ fun BuilderScreen(
                                     selectedProjectId = pid
                                     selectedFileName = extracted.name
                                     editorText = extracted.content
-                                    try {
-                                        autoLogStore.add("Builder: zip se file li gayi (${extracted.name})")
-                                    } catch (e: Exception) {
-                                    }
-                                    note = "Zip se file mil gayi aur editor me khul gayi."
+                                    val logOk = logBuilder("Builder: zip se file li gayi (${extracted.name})")
+                                    note = "Zip se file mil gayi aur editor me khul gayi." + if (!logOk) " (Auto Log me entry nahi likh payi.)" else ""
                                 } else {
                                     note = "Zip wali file save nahi ho payi — dobara koshish karo."
                                 }
@@ -223,11 +263,8 @@ fun BuilderScreen(
                                 selectedProjectId = pid
                                 selectedFileName = pickedName
                                 editorText = content
-                                try {
-                                    autoLogStore.add("Builder: file chuni gayi ($pickedName)")
-                                } catch (e: Exception) {
-                                }
-                                note = "File mil gayi aur editor me khul gayi."
+                                val logOk = logBuilder("Builder: file chuni gayi ($pickedName)")
+                                note = "File mil gayi aur editor me khul gayi." + if (!logOk) " (Auto Log me entry nahi likh payi.)" else ""
                             } else {
                                 note = "Chuni hui file save nahi ho payi — dobara koshish karo."
                             }
@@ -241,9 +278,16 @@ fun BuilderScreen(
     }
 
     LaunchedEffect(Unit) {
+        // A3 P2-7: load fail par khaali screen bina note ke nahi —
+        // imaandaar note aayega. A3 P2-8: corrupt index par bhi
+        // note (projects chhupenge, par overwrite nahi hoga).
         try {
             projects = projectStore.listProjects()
+            if (projectStore.isIndexCorrupt()) {
+                note = "Project index kharab lag raha hai — purane projects dikh nahi rahe; naya project/file save roka jayega taaki purana data overwrite na ho. Backup se restore karo."
+            }
         } catch (e: Exception) {
+            note = "Project list load nahi ho payi — dobara kholo."
         }
     }
 
@@ -306,17 +350,21 @@ fun BuilderScreen(
                 if (gateMsg != null) {
                     note = gateMsg
                 } else {
-                    val created = projectStore.createProject(newProjectName)
-                    projects = projectStore.listProjects()
-                    selectedProjectId = created.id
-                    selectedFileName = null
-                    editorText = ""
-                    newProjectName = ""
+                    // A3 P2-8: corrupt index par createProject throw
+                    // karta hai — bina catch ke coroutine crash hota,
+                    // isliye imaandaar note ke saath pakdo.
                     try {
-                        autoLogStore.add("Builder: project bana (${created.name})")
+                        val created = projectStore.createProject(newProjectName)
+                        projects = projectStore.listProjects()
+                        selectedProjectId = created.id
+                        selectedFileName = null
+                        editorText = ""
+                        newProjectName = ""
+                        val logOk = logBuilder("Builder: project bana (${created.name})")
+                        note = "Project ban gaya." + if (!logOk) " (Auto Log me entry nahi likh payi.)" else ""
                     } catch (e: Exception) {
+                        note = e.message ?: "Project ban nahi paya — dobara koshish karo."
                     }
-                    note = "Project ban gaya."
                 }
             }
         }) { Text("Naya project banao") }
@@ -351,11 +399,8 @@ fun BuilderScreen(
                             selectedFileName = fname
                             editorText = ""
                             newFileName = ""
-                            try {
-                                autoLogStore.add("Builder: nayi file bani ($fname)")
-                            } catch (e: Exception) {
-                            }
-                            note = "File ban gayi — ab isme likho ya bolo."
+                            val logOk = logBuilder("Builder: nayi file bani ($fname)")
+                            note = "File ban gayi — ab isme likho ya bolo." + if (!logOk) " (Auto Log me entry nahi likh payi.)" else ""
                         } else {
                             note = "File ban nahi payi — dobara koshish karo."
                         }
@@ -432,6 +477,25 @@ fun BuilderScreen(
                                     // Local-only preview: bahar ka link kabhi nahi khulta.
                                     return true
                                 }
+
+                                // A3 P2-1 (R-A3-A3, network-block): JS ON
+                                // rahega (interactive preview), par koi
+                                // network subresource load nahi hoga —
+                                // top-level block akela kaafi nahi tha
+                                // (absolute https image/script load ho
+                                // jata tha). Sirf main frame ka data
+                                // URL guzarta hai, baaki sab block.
+                                override fun shouldInterceptRequest(
+                                    view: WebView?,
+                                    request: WebResourceRequest?
+                                ): WebResourceResponse? {
+                                    if (request?.isForMainFrame == true) {
+                                        return super.shouldInterceptRequest(view, request)
+                                    }
+                                    return WebResourceResponse(
+                                        "text/plain", "utf-8", ByteArray(0).inputStream()
+                                    )
+                                }
                             }
                         }
                     },
@@ -450,7 +514,15 @@ fun BuilderScreen(
                     try {
                         val dir = File(appContext.cacheDir, "builder_exports")
                         if (!dir.exists()) dir.mkdirs()
-                        val outFile = File(dir, "${proj.name}-${System.currentTimeMillis()}.zip")
+                        // A3 P2-5 (D4): naam sanitize karo, kabhi
+                        // drop mat karo — "/" wala naam builder_exports
+                        // ke bahar subpath banata tha aur FileProvider
+                        // share fail hota tha. Log me bhi sirf
+                        // sanitized naam jayega (koi token nahi).
+                        val safeName = proj.name
+                            .map { ch -> if (ch == '/' || ch == '\\') '_' else ch }
+                            .joinToString("").trim().ifBlank { "project" }
+                        val outFile = File(dir, "$safeName-${System.currentTimeMillis()}.zip")
                         val result = projectStore.exportProjectZip(proj.id, outFile)
                         if (result.isSuccess) {
                             val uri = FileProvider.getUriForFile(
@@ -464,11 +536,8 @@ fun BuilderScreen(
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
                             appContext.startActivity(Intent.createChooser(send, "Project share karo"))
-                            try {
-                                autoLogStore.add("Builder: project export share sheet khola (${proj.name})")
-                            } catch (e: Exception) {
-                            }
-                            note = "Share sheet khul gaya — tum chuno kahan bhejna hai."
+                            val logOk = logBuilder("Builder: project export share sheet khola ($safeName)")
+                            note = "Share sheet khul gaya — tum chuno kahan bhejna hai." + if (!logOk) " (Auto Log me entry nahi likh payi.)" else ""
                         } else {
                             note = "Export nahi ho paya — dobara koshish karo."
                         }

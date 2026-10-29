@@ -17,7 +17,6 @@ import com.flora.app.tools.GitHubClient
 import com.flora.app.tools.KeyInputGuard
 import com.flora.app.tools.SupabaseProjectClient
 import com.flora.app.tools.VercelClient
-import org.json.JSONObject
 
 /**
  * B4 tools registry / step-to-tool binding (F12).
@@ -118,12 +117,7 @@ class PlannerTools(
         }
     }
 
-    fun serviceFor(tool: PlanTool): BuilderService? = when (tool) {
-        PlanTool.GITHUB_CREATE_REPO, PlanTool.GITHUB_PUSH_FILE -> BuilderService.GITHUB
-        PlanTool.VERCEL_CREATE_PROJECT, PlanTool.VERCEL_DEPLOY -> BuilderService.VERCEL
-        PlanTool.SUPABASE_CREATE_PROJECT, PlanTool.SUPABASE_RUN_SQL -> BuilderService.SUPABASE
-        else -> null
-    }
+    // A3 (a, R-A3-A2): serviceFor HATA DIYA GAYA (dead helper — execute seedha clients se chalta hai).
 
     /** Macro adapter: plan step -> Macro JSON (execute planner se nahi hota). */
     fun adaptMacro(input: Map<String, String>): StepOutcome {
@@ -430,25 +424,7 @@ class PlannerTools(
         }
     }
 
-    /** Side-effect preview (M8) + external names (M10) ka display text. */
-    fun previewText(step: StoredStep): String {
-        val namePart = if (step.externalName.isNotBlank()) " Naam: ${step.externalName}." else ""
-        return step.sideEffectPreview + namePart
-    }
-
-    /** files input (file:<path>) ko JSON se bharne ka helper — plan amend ke liye. */
-    fun filesFromJson(raw: String): Map<String, String> {
-        return try {
-            val obj = JSONObject(raw)
-            val out = mutableMapOf<String, String>()
-            val keys = obj.keys()
-            while (keys.hasNext()) {
-                val key = keys.next()
-                out["file:$key"] = obj.optString(key, "")
-            }
-            out
-        } catch (e: Exception) {
-            emptyMap()
-        }
-    }
+    // A3 (a, R-A3-A2): previewText + filesFromJson HATA DIYE GAYE
+    // (dead helpers — koi caller nahi tha; caller jodna naya
+    // feature hota, isliye wiring nahi ki gayi).
 }

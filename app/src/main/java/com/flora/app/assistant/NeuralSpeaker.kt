@@ -143,11 +143,16 @@ object NeuralSpeaker {
                     object : android.speech.tts.UtteranceProgressListener() {
                         override fun onStart(id: String?) {}
                         override fun onDone(id: String?) {
+                            // A3 N1-P2-3: onDone par handle clear —
+                            // warna baad ka stop() already-shutdown
+                            // instance ko dobara chhuta tha.
+                            if (fixedTts === tts) fixedTts = null
                             tts?.shutdown()
                         }
 
                         @Deprecated("Deprecated in Java")
                         override fun onError(id: String?) {
+                            if (fixedTts === tts) fixedTts = null
                             tts?.shutdown()
                         }
                     }
@@ -158,6 +163,21 @@ object NeuralSpeaker {
         // NOTCH-06: system branch ka handle bachao taaki
         // VoiceEngine.stop() ise bhi rok sake (pehle ye
         // instance caller ke haath se nikal jata tha).
+        // A3 N1-P2-3: concurrent speakFixed par purana handle
+        // chupchaap overwrite nahi — pehle wala flush (speak
+        // me QUEUE_FLUSH jaisa hi), phir naya handle.
+        val prevFixed = fixedTts
+        fixedTts = null
+        if (prevFixed != null) {
+            try {
+                prevFixed.stop()
+            } catch (e: Exception) {
+            }
+            try {
+                prevFixed.shutdown()
+            } catch (e: Exception) {
+            }
+        }
         fixedTts = tts
     }
 }

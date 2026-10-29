@@ -253,7 +253,7 @@ class PlannerEngine(
                         )
                     ),
                 )
-                val planId = UUID.randomUUID().toString().substring(0, 8)
+                val planId = UUID.randomUUID().toString()
                 val saved = repository.saveNewPlan(planId, draft, PlanEstimateCalc.forPlan(1, 0))
                 learnedCreatedPlanIds += planId
                 log(planId, -1, "learned pattern se bina AI call ke plan bana (tool=${pattern.tool})")
@@ -268,7 +268,7 @@ class PlannerEngine(
             is PlannerBrain.Generation.Failed -> Result.failure(IllegalStateException(gen.reason))
             is PlannerBrain.Generation.Ok -> {
                 val estimate = PlanEstimateCalc.forPlan(gen.draft.steps.size, gen.calls)
-                val planId = UUID.randomUUID().toString().substring(0, 8)
+                val planId = UUID.randomUUID().toString()
                 val saved = repository.saveNewPlan(planId, gen.draft, estimate)
                 // B5-06: plan-generation calls ka count sirf hisaab
                 // ke liye — builds me KABHI nahi ginega (CEO faisla c).
@@ -363,23 +363,19 @@ class PlannerEngine(
         launchRun(planId)
     }
 
-    fun queueGoal(goal: String) {
-        engineScope.launch {
-            if (runJob?.isActive == true) {
-                queue += QueueItem.Goal(goal)
-                refreshState(null, PlanStatus.PAUSED, "Goal queue me gaya.")
-            } else {
-                val created = createPlan(goal)
-                if (created.isSuccess) {
-                    launchRun(created.getOrNull()?.planId ?: return@launch)
-                }
-            }
-        }
-    }
-
+    // A3 (a, R-A3-A2): queueGoal HATA DIYA GAYA (dead helper —
+    // koi caller nahi tha; caller jodna naya feature hota, isliye
+    // wiring nahi ki gayi). QueueItem.Goal + launchRun ka Goal
+    // branch waisa hi hai (sealed when exhaustive rahe).
     private fun launchRun(planId: String) {
         runJob = engineScope.launch {
-            PlannerService.start(appContext)
+            // A3 (g): start ka result ab engine tak pahunchta hai
+            // — fail ho to Auto Log me signal, runLoop phir bhi
+            // chalega (service bina foreground ke bhi plan rukega
+            // nahi; engine ab andha nahi hai).
+            if (!PlannerService.start(appContext)) {
+                log(planId, -1, "PlannerService start fail — service foreground nahi hui, plan phir bhi chal raha hai")
+            }
             runLoop(planId)
             val next = queue.removeFirstOrNull()
             when (next) {
@@ -532,9 +528,14 @@ class PlannerEngine(
         var steps = plan.steps
         // Transient keys (password-ish) Room me kabhi nahi — sirf memory map me.
         for ((index, changes) in inputChanges) {
+            // A3 (h): apiKey class bhi transient hi hai — denylist
+            // (PlannerModels) + scanner regex ke barabar. Stored
+            // plan me apiKey kabhi nahi jayega.
             val transientPart = changes.filterKeys { key ->
                 key.lowercase().contains("password") || key.lowercase().contains("db_pass") ||
-                    key.lowercase().contains("secret") || key.lowercase().contains("token")
+                    key.lowercase().contains("secret") || key.lowercase().contains("token") ||
+                    key.lowercase().contains("api_key") || key.lowercase().contains("apikey") ||
+                    key.lowercase().contains("api-key")
             }
             if (transientPart.isNotEmpty()) transientInputs[index] = transientPart
             val storedPart = changes.filterKeys { key -> key !in transientPart.keys }
@@ -589,6 +590,13 @@ class PlannerEngine(
                 )
             }
             steps = reordered
+            // A3 (b) se juda index-keyed state: transient inputs
+            // bhi stepIndex se key hote hain — reorder par unki
+            // keys bhi remap hon, warna purana transient naye
+            // step par lag jayega (wahi stale-index class ka bug).
+            val remappedTransient = transientInputs.mapKeys { (oldIndex, _) -> remap[oldIndex] ?: oldIndex }
+            transientInputs.clear()
+            transientInputs.putAll(remappedTransient)
         }
         for (step in steps) repository.updateStep(step, planId)
         val newVersion = plan.version + 1
@@ -597,7 +605,14 @@ class PlannerEngine(
             // History me sirf step index (koi input value / password kabhi nahi).
             historyNote = "v$newVersion: amend (skip=$skipIndices, inputSteps=${inputChanges.keys.sorted()}, reorder=${newOrder != null})",
         )
-        log(planId, -1, "plan amend hua -> v$newVersion")
+        // A3 (b, R-A3-A1, P1 barkaraar): amend (skip / input-change /
+        // reorder — koi bhi) par is plan ki approvals CLEAR. StepIndex
+        // se key hone ki wajah se reorder/input-change ke baad purani
+        // approval doosre step par lag sakti thi (spend step ki approval
+        // ka carryover = stop-gate bypass). Session-memory design
+        // waisa hi hai — sirf is plan ki approvals hat ti hain.
+        approvedSteps.removeAll { it.startsWith("$planId:") }
+        log(planId, -1, "plan amend hua -> v$newVersion (is plan ki approvals saaf ki gayi)")
         val updated = repository.loadPlan(planId) ?: return Result.failure(IllegalStateException("plan load nahi hua"))
         stateFlow.value = EngineState(updated, updated.status, "Plan badal gaya (v$newVersion).", updated.promptCount, queue.size, false)
         return Result.success(updated)
