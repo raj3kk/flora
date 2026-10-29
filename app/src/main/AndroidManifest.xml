@@ -153,6 +153,11 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Flora planner background execution" />
         </service>
+        <!-- Lane A item 37: viewing notification ka Stop action —
+             explicit broadcast only, exported=false. -->
+        <receiver
+            android:name="com.flora.app.viewing.ViewingStopReceiver"
+            android:exported="false" />
         <!-- Default assistant (v2.22, Phase 1, G3): invoke par Flora khulti hai. -->
         <service
             android:name="com.flora.app.voice.FloraVoiceInteractionService"
