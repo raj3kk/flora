@@ -13,6 +13,7 @@ import android.os.HandlerThread
 import android.view.Display
 import androidx.core.app.NotificationCompat
 import com.flora.app.automation.FloraAutomationService
+import com.flora.app.data.AutoLogStore
 import java.util.concurrent.Executor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -148,6 +149,19 @@ object LiveScreenViewing {
     private var appContext: Context? = null
     private var onLog: (String) -> Unit = {}
 
+    // Follow-up wiring (spec §6.2): FloraApp bindAutoLog se store
+    // deta hai; har event-only onLog event Auto Log me bhi jata
+    // hai. onLog call sites pehle se event-only hain (start/stop/
+    // hook naam + outcome + counts) — ye wiring unhe nahi badalti,
+    // isliye frame content, read text, perception result kabhi
+    // log me nahi jata. add suspend hai, isliye viewingScope (IO)
+    // me call hoti hai — lifecycleScope kabhi nahi.
+    private var autoLogStore: AutoLogStore? = null
+
+    fun bindAutoLog(store: AutoLogStore) {
+        autoLogStore = store
+    }
+
     // Apna scope — lifecycleScope nahi (ABANDONED raasta).
     private val viewingScope: CoroutineScope =
         CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -217,7 +231,18 @@ object LiveScreenViewing {
             )
         }
         appContext = appCtx
-        onLog = logCallback
+        onLog = { event ->
+            logCallback(event)
+            val store = autoLogStore
+            if (store != null) {
+                viewingScope.launch {
+                    try {
+                        store.add(event)
+                    } catch (e: Exception) {
+                    }
+                }
+            }
+        }
         purpose = sessionPurpose
         fps = ViewingRate.clamp(requestedFps)
         intervalMs = ViewingRate.intervalMs(fps)

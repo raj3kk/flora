@@ -38,6 +38,9 @@ import com.flora.app.automation.ScreenCapture
 import com.flora.app.automation.ShizukuBridge
 import com.flora.app.data.AutoLogStore
 import com.flora.app.data.ProjectStore
+import com.flora.app.viewing.LiveScreenViewing
+import com.flora.app.viewing.ViewingStartResult
+import com.flora.app.viewing.ViewingStatusPanel
 import com.flora.app.tools.ImageTools
 import com.flora.app.tools.KeyInputGuard
 import kotlinx.coroutines.delay
@@ -396,6 +399,12 @@ fun FloraApp(
     var wizardBack by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    // Lane A item 37 follow-up (spec §6.2): viewing events Auto Log
+    // me jayein — bind ek baar, kisi bhi start tap se pehle hi ho
+    // jata hai (autoLogStore isse pehle declare hai).
+    LaunchedEffect(Unit) {
+        LiveScreenViewing.bindAutoLog(autoLogStore)
+    }
     // Lane A — A1 battery-aware (R-A1-2/R-A1-3/R-A1-5): EK hi wiring —
     // general chat, live-search fallback, routine brain step aur text
     // attachment — chaaron isi helper se transient note lete hain.
@@ -1693,6 +1702,40 @@ fun FloraApp(
                 // Wave B, A3: free-limit "kitna bacha hai" (gate
                 // wala hi counter — do sach nahi).
                 FreeRemainingText(prefs, licence)
+                Spacer(modifier = Modifier.height(8.dp))
+                // Lane A item 37 follow-up (spec §6.1): in-app viewing
+                // status — main Column me, har screen par dikhega.
+                // Live screen par NAHI: wo purani MediaProjection wali
+                // screen hai, screen_vision gate ke peeche — viewing ko
+                // wahan chhupana "hamesha dikhega" ke khilaaf hota.
+                // Panel khud har second refresh hota hai, isliye
+                // viewing-active state tap ke 1 second ke andar dikhega.
+                // Yahan use hone wale vars sab isse pehle declare hain:
+                // appContext, voice (param).
+                ViewingStatusPanel(onStart = {
+                    // Seedha manual start: user ka tap hi user
+                    // confirmation hai (userConfirmed = true).
+                    // plannerConfirmed = true ka imaandaar matlab:
+                    // koi planner step abhi maujood nahi hai — is
+                    // seedhe manual start me user ka tap hi ekmatra
+                    // confirmation hai; ye kisi planner-step approval
+                    // ka daava NAHI hai (planner-step contract alag
+                    // item hai, yahan invent nahi hua). Guard baaki
+                    // sab fail-closed rakhta hai: service OFF /
+                    // API<30 / indicator fail par Refused aayega.
+                    // Kabhi auto-start nahi, stop ke baad kabhi
+                    // dobara auto-start nahi — sirf naya tap.
+                    val result = LiveScreenViewing.start(
+                        context = appContext,
+                        sessionPurpose = "user-live-view",
+                        requestedFps = 2,
+                        userConfirmed = true,
+                        plannerConfirmed = true,
+                    )
+                    if (result is ViewingStartResult.Refused) {
+                        voice.speak("Screen viewing shuru nahi ho paya: " + result.failure.name)
+                    }
+                })
                 Spacer(modifier = Modifier.height(8.dp))
 
             if (screen == Screen.CHAT) {
