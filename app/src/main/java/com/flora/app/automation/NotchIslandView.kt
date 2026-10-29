@@ -41,16 +41,20 @@ class NotchIslandView(
         color = Color.parseColor("#DD1F2937")
         style = Paint.Style.FILL
     }
+    // Paint.color Int (@ColorInt) chahta hai — android.graphics
+    // .Color object nahi (CI error tha: lines 45/49/53). Hex
+    // literal Long hota hai, isliye .toInt() se bit pattern
+    // wahi rehta hai (rang FloraOrb default jodi se unchanged).
     private val orbOuterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color(0xFF7C4A03)
+        color = 0xFF7C4A03.toInt()
         style = Paint.Style.FILL
     }
     private val orbInnerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color(0xFFFFC978)
+        color = 0xFFFFC978.toInt()
         style = Paint.Style.FILL
     }
     private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color(0xFFFFC978)
+        color = 0xFFFFC978.toInt()
         style = Paint.Style.FILL
     }
     private val pillRect = RectF()
