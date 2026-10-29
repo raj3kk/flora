@@ -18,6 +18,11 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Lane A — A1 One-Tap Fix: adb/Shizuku se grant hone wali
+         development permission. Declare kiye bina `pm grant` kaam
+         nahi karta. App is permission ko khud kabhi maangta nahi —
+         sirf OneTapFix path (user ke tap par) iska use karta hai. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <queries>
         <intent>

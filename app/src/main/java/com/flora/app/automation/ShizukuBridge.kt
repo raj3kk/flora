@@ -1,5 +1,6 @@
 package com.flora.app.automation
 
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Parcel
 import rikka.shizuku.Shizuku
@@ -65,6 +66,53 @@ object ShizukuBridge {
                 binder.transact(code, data, reply, 0)
                 reply.readException()
                 true
+            } finally {
+                data.recycle()
+                reply.recycle()
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Lane A — A1 One-Tap Fix ke liye NAYA method (grantPermission se
+     * alag naam, alag scope — purane method ka scope nahi badha hai).
+     *
+     * DOCTOR CARVE-OUT: ye sirf One-Tap Fix path (OneTapFix.restore)
+     * se call hota hai — DoctorScreen/planner isko kabhi call nahi
+     * karte. grantPermission() ko secure-write ke liye kabhi call
+     * mat karna — wo sirf normal runtime permissions ke liye hai.
+     *
+     * Kaam: Shizuku (shell) ke through Flora ko WRITE_SECURE_SETTINGS
+     * grant karwana — wahi transact pattern jo grantPermission use
+     * karta hai, par permission WRITE_SECURE_SETTINGS hai (ye ek
+     * development permission hai, isliye shell/adb se grant ho sakti
+     * hai; normal app khud ise nahi le sakti). Grant ke baad app ke
+     * apne checkSelfPermission se verify karke hi true — transact
+     * bina exception ke poora hona hi kaafi nahi. Fail ho to false,
+     * kabhi crash nahi; caller imaandaar fail message dikhayega.
+     */
+    fun grantSecureSettingsPermission(pkg: String, context: Context): Boolean {
+        if (!hasPermission()) return false
+        return try {
+            val binder = SystemServiceHelper.getSystemService("package") ?: return false
+            val code = SystemServiceHelper.getTransactionCode(
+                "android.content.pm.IPackageManager", "grantRuntimePermission"
+            ) ?: return false
+            val data = SystemServiceHelper.obtainParcel(
+                "package", "android.content.pm.IPackageManager", "grantRuntimePermission"
+            )
+            val reply = Parcel.obtain()
+            try {
+                data.writeString(pkg)
+                data.writeString("android.permission.WRITE_SECURE_SETTINGS")
+                data.writeInt(android.os.Process.myUid() / 100000)
+                binder.transact(code, data, reply, 0)
+                reply.readException()
+                context.checkSelfPermission(
+                    "android.permission.WRITE_SECURE_SETTINGS"
+                ) == PackageManager.PERMISSION_GRANTED
             } finally {
                 data.recycle()
                 reply.recycle()

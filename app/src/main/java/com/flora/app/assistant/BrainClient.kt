@@ -46,7 +46,16 @@ class BrainClient(private val prefs: FloraPreferences) {
 
     private data class PostResult(val code: Int, val body: String?)
 
-    suspend fun ask(prompt: String, memoryContext: String = "", history: List<ChatTurn> = emptyList()): String = withContext(Dispatchers.IO) {
+    /**
+     * Lane A — A1 (R-A1-3/R-A1-5): transientNote sirf is ek call ke
+     * liye provider prompt ke aage judta hai (jaise personaPrefix) —
+     * memoryContext/history me kabhi nahi jata, stored turn me kabhi
+     * nahi jata, server contract (request shape) nahi badalta.
+     * Default khali hai, isliye saare purane call sites bina badle
+     * compile hote hain. BasicTalk (no-keys) raaste par note nahi
+     * judta — local canned jawab pehle se chhota hota hai.
+     */
+    suspend fun ask(prompt: String, memoryContext: String = "", history: List<ChatTurn> = emptyList(), transientNote: String = ""): String = withContext(Dispatchers.IO) {
         // Wave B, D8 "dono gate": direct provider calls se PEHLE
         // app-side licence gate (server gate proxy lane par hai,
         // LFMS server builder). Blocked ho to koi provider call
@@ -86,10 +95,12 @@ class BrainClient(private val prefs: FloraPreferences) {
         // par agla (quota bhi per-model hota hai, isliye 429 par
         // bhi rukna galat tha). Key ki value kahin log nahi hoti.
         val laneCodes = mutableListOf<Pair<String, Int>>()
-        val reply = geminiAsk(prompt, keys[0], laneCodes, memoryContext, cappedHistory)
-            ?: geminiAsk(prompt, keys[1], laneCodes, memoryContext, cappedHistory)
-            ?: groqAsk(prompt, keys[2], laneCodes, memoryContext, cappedHistory)
-            ?: groqAsk(prompt, keys[3], laneCodes, memoryContext, cappedHistory)
+        // Transient-only: note sirf provider prompt me, memory/history me nahi.
+        val providerPrompt = if (transientNote.isBlank()) prompt else transientNote + "\n" + prompt
+        val reply = geminiAsk(providerPrompt, keys[0], laneCodes, memoryContext, cappedHistory)
+            ?: geminiAsk(providerPrompt, keys[1], laneCodes, memoryContext, cappedHistory)
+            ?: groqAsk(providerPrompt, keys[2], laneCodes, memoryContext, cappedHistory)
+            ?: groqAsk(providerPrompt, keys[3], laneCodes, memoryContext, cappedHistory)
         if (reply != null) return@withContext reply
         // v2.20 user order: brain fail ho to chat me technical
         // error KABHI nahi — na code, na model naam, na "key

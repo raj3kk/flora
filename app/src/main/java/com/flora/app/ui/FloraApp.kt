@@ -58,6 +58,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.flora.app.assistant.BatteryStateReader
 import com.flora.app.assistant.BrainClient
 import com.flora.app.assistant.VisionClient
 import com.flora.app.assistant.VoiceEngine
@@ -389,6 +390,30 @@ fun FloraApp(
     var wizardBack by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    // Lane A — A1 battery-aware (R-A1-2/R-A1-3/R-A1-5): EK hi wiring —
+    // general chat, live-search fallback, routine brain step aur text
+    // attachment — chaaron isi helper se transient note lete hain.
+    // Helper scope + appContext ke BAAD declare hai, aur routine
+    // runner + sendChat se PEHLE — declaration order trap se bachne
+    // ke liye yahi jagah hai, neeche mat le jao.
+    // Note kabhi memCtx/history me nahi jata (BrainClient.ask ka
+    // transientNote param); stored turn me sirf Flora ka jawab jata
+    // hai, battery instruction nahi. Koi exception aaye to khali note
+    // — chat kabhi battery read par nahi rukegi.
+    suspend fun batteryTransientNote(): String {
+        return try {
+            val state = BatteryStateReader.read(appContext)
+            val key = BatteryStateReader.keyFor(state)
+            val last = try { prefs.batteryLastWarnedKey() } catch (e: Exception) { "" }
+            val isNew = key != last
+            if (isNew) {
+                try { prefs.setBatteryLastWarnedKey(key) } catch (e: Exception) { }
+            }
+            BatteryStateReader.instructionFor(key, state.percent, isNew) ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+    }
     // N5 system-STT interrupt listener: Deepgram path na chale
     // (key khali / gate blocked / barge-in fail / continuous
     // mic ka guard) to bolte waqt ye sunta hai. Beginning-of-
@@ -1086,7 +1111,7 @@ fun FloraApp(
                 if (licence?.plan != "pro" && used >= 600) {
                     voice.speak("Free talk time khatam ho gaya hai, isliye ye step chhod diya.")
                 } else {
-                    val reply = brain.ask(cmd)
+                    val reply = brain.ask(cmd, transientNote = batteryTransientNote())
                     messages = messages + ChatMsg("Flora: $reply", false)
                     voice.speak(reply.take(500))
                 }
@@ -1533,6 +1558,13 @@ fun FloraApp(
                         )
                         DropdownMenuItem(
                             text = { Text("Permissions") },
+                            onClick = { screen = Screen.PERMISSIONS; menuOpen = false },
+                        )
+                        // Lane A — A1 (R-A1-7): One-Tap Fix ka menu link —
+                        // naya Screen entry NAHI; PermissionsScreen ke
+                        // One-Tap section par le jata hai.
+                        DropdownMenuItem(
+                            text = { Text("One-Tap Fix — Accessibility wapas lao") },
                             onClick = { screen = Screen.PERMISSIONS; menuOpen = false },
                         )
                         DropdownMenuItem(
@@ -4161,7 +4193,8 @@ fun FloraApp(
                                     val reply = brain.ask(
                                         personaPrefix(prefs.persona()) +
                                             "File ka text:\n$text\n\nUser ka sawaal: " +
-                                            if (q.isBlank()) "Is file ke baare me batao." else q
+                                            if (q.isBlank()) "Is file ke baare me batao." else q,
+                                        transientNote = batteryTransientNote()
                                     )
                                     messages = messages + ChatMsg(reply, false)
                                     voice.speak(reply.take(500))
@@ -4917,7 +4950,7 @@ fun FloraApp(
                                 messages = messages + ChatMsg(msg, false)
                                 voice.speak(msg.take(600))
                             } else {
-                                val brainReply = brain.ask(personaPrefix(prefs.persona()) + question, memCtx, history)
+                                val brainReply = brain.ask(personaPrefix(prefs.persona()) + question, memCtx, history, transientNote = batteryTransientNote())
                                 val msg = "Live source se jawab nahi mila — ye brain ka jawab hai, taaza hone ki pushti nahi hai: $brainReply"
                                 messages = messages + ChatMsg(msg, false)
                                 voice.speak(msg.take(600))
@@ -4994,7 +5027,7 @@ fun FloraApp(
                             }
                             // Site khali ho to brain par girne do.
                         }
-                        val reply = brain.ask(personaPrefix(prefs.persona()) + question, memCtx, history)
+                        val reply = brain.ask(personaPrefix(prefs.persona()) + question, memCtx, history, transientNote = batteryTransientNote())
                         messages = messages + ChatMsg(reply, false)
                         voice.speak(reply)
                         busy = false

@@ -64,6 +64,10 @@ class FloraPreferences(private val context: Context) {
         // licence hai).
         val CALL_ANNOUNCE = booleanPreferencesKey("call_announce")
         val EVENT_ANNOUNCE = booleanPreferencesKey("event_announce")
+        // Lane A — A1 (R-A1-4): battery no-repeat state — aakhri warned
+        // level/state key ("low"/"critical"/"charging"/"full"/"normal").
+        // EVENT_ANNOUNCE pattern par DataStore key (reboot-persistent).
+        val BATTERY_LAST_WARNED = stringPreferencesKey("battery_last_warned")
         val DRIVING_MODE = booleanPreferencesKey("driving_mode")
         val PERSONA = stringPreferencesKey("persona")
         val VOICE_SAMPLE = stringPreferencesKey("voice_sample")
@@ -600,6 +604,14 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setEventAnnounce(value: Boolean) {
         context.floraDataStore.edit { it[Keys.EVENT_ANNOUNCE] = value }
+    }
+
+    /** Lane A — A1: battery no-repeat key (khali = kabhi warn nahi hua). */
+    suspend fun batteryLastWarnedKey(): String =
+        context.floraDataStore.data.map { it[Keys.BATTERY_LAST_WARNED] ?: "" }.first()
+
+    suspend fun setBatteryLastWarnedKey(value: String) {
+        context.floraDataStore.edit { it[Keys.BATTERY_LAST_WARNED] = value }
     }
 
     suspend fun drivingMode(): Boolean =

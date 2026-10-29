@@ -2,6 +2,8 @@ package com.flora.app.ui
 
 import android.Manifest
 import android.app.role.RoleManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -25,7 +27,13 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.flora.app.automation.OneTapFix
+import com.flora.app.data.AutoLogStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -52,6 +60,12 @@ fun PermissionsScreen(onShowWizard: () -> Unit) {
     val context = LocalContext.current
     var note by remember { mutableStateOf("") }
     var refreshTick by remember { mutableStateOf(0) }
+    // Lane A — A1 One-Tap Fix state (sab upar, LazyColumn se pehle):
+    // note/refreshTick ke saath hi declare — section inhe neeche use karta hai.
+    var oneTapNote by remember { mutableStateOf("") }
+    var oneTapBusy by remember { mutableStateOf(false) }
+    val oneTapScope = rememberCoroutineScope()
+    val autoLogStore = remember { AutoLogStore(context) }
     // Resume par status auto-refresh (v2.23, Phase 5): settings se
     // wapas aate hi refreshTick badhega, jisse battery/accessibility
     // status dobara compute hoga (tick padhne ka pattern upar hai).
@@ -250,6 +264,93 @@ fun PermissionsScreen(onShowWizard: () -> Unit) {
                     note = "Accessibility settings nahi khul payi — phone ki Settings > Accessibility se karo."
                 }
             }) { Text("Accessibility settings kholo") }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+        // Lane A — A1 One-Tap Fix (R-A1-6/R-A1-7): accessibility section
+        // ke paas hi — naya Screen entry nahi. Sirf Flora ki apni
+        // service restore hoti hai (append-only, doosri services
+        // barkaraar); battery-optimisation/auto-start isme nahi.
+        // DOCTOR CARVE-OUT: secure-settings write sirf isi path
+        // (OneTapFix.restore) se hota hai — DoctorScreen/planner
+        // isko kabhi call nahi karte.
+        item {
+            Text("One-Tap Fix — Accessibility wapas lao")
+            Text(
+                "Phone (khaas kar Vivo) ya Android 13 kabhi-kabhi Flora ki " +
+                    "accessibility service rok deta hai. Fix ek tap me use " +
+                    "wapas ON karne ki koshish karta hai — sirf Flora ki " +
+                    "service, kuch aur nahi. Status: " + if (accessibilityOn()) {
+                    "ON hai ✓ — fix ki zaroorat nahi"
+                } else {
+                    "OFF hai — neeche Fix dabao"
+                }
+            )
+            Text(
+                "Android 13+ par sideload app ke liye pehle ye zaroori hai: " +
+                    "Settings > Apps > Flora > upar ke 3 dots > " +
+                    "'Allow restricted settings' ON karo — iske bina " +
+                    "Accessibility ON hi nahi hoga. Reboot ke baad Shizuku " +
+                    "band ho jata hai — Shizuku app se dobara chalao, phir Fix dabao."
+            )
+            Row {
+                Button(
+                    enabled = !oneTapBusy,
+                    onClick = {
+                        oneTapBusy = true
+                        oneTapNote = "Fix chal raha hai…"
+                        oneTapScope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                OneTapFix.restore(context)
+                            }
+                            val msg = when (result) {
+                                is OneTapFix.Result.AlreadyOn ->
+                                    "Accessibility pehle se ON hai — kuch badla nahi."
+                                is OneTapFix.Result.Restored ->
+                                    "Ho gaya ✓ — Flora ki accessibility service wapas ON ho gayi." +
+                                        if (result.enabledFlagChanged) " (Accessibility bhi ON kiya gaya.)" else ""
+                                is OneTapFix.Result.GrantMissing ->
+                                    "Fix nahi ho paya: WRITE_SECURE_SETTINGS grant nahi mila. " +
+                                        if (result.shizukuReady) {
+                                            "Shizuku chal raha hai par grant nahi mila — neeche adb guide se grant do, phir dobara Fix dabao."
+                                        } else {
+                                            "Shizuku chalu karo ya adb guide se grant do, phir dobara Fix dabao."
+                                        }
+                                is OneTapFix.Result.Failed ->
+                                    "Fix nahi ho paya: ${result.reason}. adb guide se grant do, phir dobara Fix dabao."
+                            }
+                            try {
+                                autoLogStore.add("One-Tap Fix: $msg")
+                            } catch (e: Exception) {
+                            }
+                            oneTapNote = msg
+                            oneTapBusy = false
+                            refreshTick++
+                        }
+                    }
+                ) { Text(if (oneTapBusy) "Fix chal raha…" else "One-Tap Fix chalao") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = {
+                    try {
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                            as? ClipboardManager
+                        cm?.setPrimaryClip(
+                            ClipData.newPlainText("Flora adb command", OneTapFix.ADB_COMMAND)
+                        )
+                        oneTapNote = "adb command copy ho gaya — computer par terminal me chalao, phir dobara Fix dabao."
+                    } catch (e: Exception) {
+                        oneTapNote = "Copy nahi ho paya — command ye hai: " + OneTapFix.ADB_COMMAND
+                    }
+                }) { Text("adb command copy karo") }
+            }
+            Text(
+                "adb guide: phone ko computer se jodo, USB debugging ON karo, " +
+                    "phir computer par ye command chalao: " + OneTapFix.ADB_COMMAND +
+                    " — isse Flora ko sirf secure-settings likhne ki permission " +
+                    "milti hai, root nahi maanga jata."
+            )
+            if (oneTapNote.isNotEmpty()) {
+                Text(oneTapNote)
+            }
             Spacer(modifier = Modifier.height(12.dp))
         }
         item {
