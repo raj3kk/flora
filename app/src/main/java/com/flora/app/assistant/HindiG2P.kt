@@ -157,6 +157,18 @@ object HindiG2P {
                         } else {
                             cur.consonants.add(phoneme)
                         }
+                        // Conjunct special, spec section 1.5: halant-joined
+                        // ja + nya is the jna ligature, pronounced g + j, not
+                        // the generic dʒ + ɲ sequence. The joined pair
+                        // itself is the ligature, so the last two members are
+                        // replaced wherever the pair occurs in a cluster.
+                        if (cur.consonants.size >= 2 &&
+                            cur.consonants[cur.consonants.size - 2] == "dʒ" &&
+                            cur.consonants[cur.consonants.size - 1] == "ɲ"
+                        ) {
+                            cur.consonants[cur.consonants.size - 2] = "ɡ"
+                            cur.consonants[cur.consonants.size - 1] = "j"
+                        }
                         cur.vowel = "ə"
                         cur.vowelIsSchwa = true
                         cur.lastBase = ch
@@ -249,7 +261,15 @@ object HindiG2P {
         val schwaIndices = segs.indices.filter { segs[it].isVowel && segs[it].isSchwa }.sortedDescending()
         for (i in schwaIndices) {
             if (i >= segs.size || !segs[i].isVowel || !segs[i].isSchwa) continue
-            if (i == firstVowelIdx) continue
+            // First-syllable protection (spec section 2.3 C1) applies to a
+            // medial schwa. A word-final schwa is governed by the section
+            // 5.1 default (delete unless the resulting final cluster is in
+            // the section 5.3 inadmissible list), even when it is also the
+            // word's only vowel — that is what the section 1.4 nukta rows
+            // (q, f) and section 1.5 conjunct rows (kʂ, tɾ, ɡj, ʃɾ) require
+            // for single-akshara inputs. The final-position branch below
+            // still enforces the section 5.3 block.
+            if (i == firstVowelIdx && i != segs.lastIndex) continue
             if (i == segs.lastIndex) {
                 var j = i - 1
                 val run = ArrayList<String>()
