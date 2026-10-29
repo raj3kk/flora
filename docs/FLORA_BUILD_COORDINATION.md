@@ -40,6 +40,20 @@ admin-approve minimal, phase1/2 set, send-push local, home-sync) → schema chec
 (licences columns, plans/settings columns, licences.device_id nullable) → dead CI
 step web UI removal → push-token-sync JWT gate update.
 
+## Teams (2026-10-29 ~10:16 IST — user order: do teams, cycle jab tak user na roke ya 0 na ho)
+
+| Team | Domain | Log | Reserved (owner land hone tak mat chhuo) |
+|---|---|---|---|
+| App team (coordinator) | app/ + app behaviour | docs/FLORA_TEAM_APP_CYCLES.md | Wave B files (licence UI/LicenceScreen, LicenceGate, usage/limit display, Pro UPI + comments) |
+| Server/Web/Admin team (coordinator) | functions/ + web/ + schema + website + admin panel | docs/FLORA_TEAM_SERVER_CYCLES.md | LFMS server files, website builder files, home-sync function |
+
+Cycle: audit → fix (reserved = QUEUED-FOR-OWNER, mat chhuo) → re-audit → agla
+cycle. Stop: user stop message ya 2 consecutive zero-issue full cycles. Dono teams
+ek doosre ke domain me nahi jayengi, admin actions (approve/reject/flags/prices)
+kabhi nahi karengi, log har phase start/end par update karengi (watchdog ka
+heartbeat). Watchdog: flora-teams-watchdog cron (har 30 min check; 3h bina update
+→ resume coordinator spawn, verify karke duplicate nahi karega).
+
 ## Rules
 
 - Apne tree ke bahar mat jao. Doosre builder ki file chhedni ho to main agent ko
