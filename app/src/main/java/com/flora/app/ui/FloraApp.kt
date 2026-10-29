@@ -3654,19 +3654,40 @@ fun FloraApp(
                         }
                         return
                     }
-                    // Voice: "chrome me <site> kholo" / "website kholo <site>".
-                    // B1 G11 (jaanboojh kar alag rakha): ye
-                    // seedha voice-open branch maujooda verified
-                    // external-open path par hi rahega ("chrome me"
-                    // me user ne Chrome ka naam liya hai) — routine
-                    // step aur G16 fallback Flora browser se unify
-                    // hue hain, is branch ka vyavhaar B1 me chupchaap
-                    // nahi badla gaya.
-                    if (lower.startsWith("chrome me ") || lower.startsWith("website kholo ") ||
+                    // Voice: "website kholo <site>" / "website <site>".
+                    // B1-POLISH N9 (G11 faisla update): "website ..."
+                    // ab Flora browser par jata hai — routine step se
+                    // consistent. Sirf "chrome me ..." external rehta
+                    // hai (user ne Chrome ka naam liya hai).
+                    if (lower.startsWith("website kholo ") ||
                         lower.startsWith("website ")
                     ) {
-                        val site = question.substringAfter("kholo", "")
-                            .trim().ifEmpty { question.substringAfter("me", "").trim() }
+                        val site = lower.removePrefix("website kholo ")
+                            .removePrefix("website ").removeSuffix(" kholo").trim()
+                        input = ""
+                        if (site.isBlank()) {
+                            val msg = "Kaun si website kholu? Naam boliye, jaise 'website example.com kholo'."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        } else {
+                            val url = com.flora.app.tools.BrowserController.normalize(site)
+                            com.flora.app.tools.BrowserNav.request(url = url)
+                            screen = Screen.BROWSER
+                            val msg = "$site Flora browser me khol raha hun."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                        }
+                        return
+                    }
+                    // Voice: "chrome me <site> kholo" — external-open.
+                    // B1-POLISH N10: external fail ho to chupchaap
+                    // "Website nahi khul payi" par rukna nahi — wahi
+                    // URL Flora browser me kholo, imaandaar message
+                    // ke saath ("Chrome nahi mila, Flora browser me
+                    // khol rahi hoon").
+                    if (lower.startsWith("chrome me ")) {
+                        val site = lower.removePrefix("chrome me ")
+                            .removeSuffix(" kholo").trim()
                         input = ""
                         if (site.isBlank()) {
                             val msg = "Kaun si website kholu? Naam boliye, jaise 'chrome me example.com kholo'."
@@ -3675,15 +3696,20 @@ fun FloraApp(
                         } else {
                             scope.launch {
                                 val result = VerifiedAppLauncher.openWebsiteVerified(appContext, site)
-                                val msg = if (result == VerifiedAppLauncher.OpenResult.NotVisible ||
+                                if (result == VerifiedAppLauncher.OpenResult.NotVisible ||
                                     result == VerifiedAppLauncher.OpenResult.NoLaunchIntent
                                 ) {
-                                    "Website nahi khul payi."
+                                    val url = com.flora.app.tools.BrowserController.normalize(site)
+                                    com.flora.app.tools.BrowserNav.request(url = url)
+                                    screen = Screen.BROWSER
+                                    val msg = "Chrome nahi mila, Flora browser me khol rahi hoon: $site"
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
                                 } else {
-                                    "$site khol raha hun."
+                                    val msg = "$site khol raha hun."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
                                 }
-                                messages = messages + ChatMsg("Flora: $msg", false)
-                                voice.speak(msg)
                             }
                         }
                         return
@@ -4341,15 +4367,32 @@ fun FloraApp(
                         }
                         return
                     }
+                    // B1-POLISH N1 — fields discovery ka user raasta:
+                    // "browser fields dikhao" par BrowserScreen ka
+                    // "fields" action chalta hai — list sunai + dikhai
+                    // deti hai, phir user exact label se fill bol sakta hai.
+                    if (lower == "browser fields dikhao" || lower == "browser me fields dikhao") {
+                        input = ""
+                        if (!gateFeature("browser")) { return }
+                        com.flora.app.tools.BrowserNav.request(action = "fields")
+                        screen = Screen.BROWSER
+                        voice.speak("Is page ke fields nikal raha hun.")
+                        return
+                    }
                     // B1 G1: browser form-fill (chat se) — "browser me
                     // field <label> me <value> likho". Password guard
                     // BrowserController.fillWebField me hai; ye branch
                     // sirf BrowserNav fill action bhejti hai.
+                    // B1-POLISH N3: label/value ko PEHLE " me " se
+                    // kaato (lastIndexOf nahi) — value me " me " ho to
+                    // bhi poori value bachegi. Label me " me " ho to
+                    // ye parse abhi bhi galat kat sakta hai — us case
+                    // me fields list se exact label dekh kar dobara bolo.
                     if (lower.startsWith("browser me field ") && lower.endsWith(" likho")) {
                         input = ""
                         if (!gateFeature("browser")) { return }
                         val body = question.substring(17, question.length - 6).trim()
-                        val meIdx = body.lowercase().lastIndexOf(" me ")
+                        val meIdx = body.lowercase().indexOf(" me ")
                         if (meIdx < 0) {
                             voice.speak("Aise boliye: 'browser me field naam me Priyadarshi likho'.")
                         } else {
@@ -4497,6 +4540,65 @@ fun FloraApp(
                             }
                             busy = false
                             return@launch
+                        }
+                        // B1-POLISH N4 — router FALLBACK-ONLY wiring:
+                        // exact branches (app-open/voice-open) upar
+                        // already return kar chuki hain; jo yahan tak
+                        // pahuncha us par OpenApp -> VerifiedAppLauncher
+                        // aur OpenBrowser -> Flora browser jodo. Jo
+                        // pehle se verified branches sambhal leti hain
+                        // unhe chheda nahi gaya. App na mile to brain
+                        // par girne do (galat daava nahi).
+                        if (route is com.flora.app.tools.IntentRouter.Route.OpenApp) {
+                            val matches = VerifiedAppLauncher.findByName(appContext, route.name)
+                            when {
+                                matches.isEmpty() -> {
+                                    // Brain par girne do — neeche brain.ask chalega.
+                                }
+                                matches.size > 1 -> {
+                                    val names = matches.take(3).joinToString(", ") { it.label }
+                                    val msg = "Ek se zyada app mili: $names. Poora naam boliye ya Auto screen se chuniye."
+                                    messages = messages + ChatMsg("Flora: $msg", false)
+                                    voice.speak(msg)
+                                    busy = false
+                                    return@launch
+                                }
+                                autoMode -> {
+                                    autoExecuteOpen(matches[0])
+                                    busy = false
+                                    return@launch
+                                }
+                                else -> {
+                                    val app = matches[0]
+                                    messages = messages + ChatMsg(
+                                        "Flora: Theek hai, ${app.label} khol raha hun — ek baar confirm kijiye.", false
+                                    )
+                                    voice.speak("Theek hai, ${app.label} khol raha hun, ek baar confirm kijiye.")
+                                    voiceAppConfirm = app
+                                    busy = false
+                                    return@launch
+                                }
+                            }
+                        }
+                        if (route is com.flora.app.tools.IntentRouter.Route.OpenBrowser) {
+                            if (!gateFeature("browser")) {
+                                busy = false
+                                return@launch
+                            }
+                            val site = lower.removePrefix("browser me ")
+                                .removePrefix("chrome me ").removePrefix("website kholo ")
+                                .removePrefix("website ").removeSuffix(" kholo").trim()
+                            if (site.isNotBlank()) {
+                                val url = com.flora.app.tools.BrowserController.normalize(site)
+                                com.flora.app.tools.BrowserNav.request(url = url)
+                                screen = Screen.BROWSER
+                                val msg = "$site Flora browser me khol raha hun."
+                                messages = messages + ChatMsg("Flora: $msg", false)
+                                voice.speak(msg)
+                                busy = false
+                                return@launch
+                            }
+                            // Site khali ho to brain par girne do.
                         }
                         val reply = brain.ask(personaPrefix(prefs.persona()) + question, memCtx, history)
                         messages = messages + ChatMsg(reply, false)
