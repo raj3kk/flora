@@ -329,6 +329,9 @@ fun FloraApp(
     // Setup wizard (v2.13): states — baaki states ke saath, upar
     // declare (wizard UI neeche inhe use karega).
     var showGate by remember { mutableStateOf(false) }
+    // Batch 2 (F1): wizard se section khola ho to wapas jaane
+    // ka banner dikhega (showGate dobara true karega).
+    var wizardBack by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val vision = remember { VisionClient() }
@@ -1121,6 +1124,7 @@ fun FloraApp(
                 onDone = {
                     scope.launch {
                         try { prefs.setPermissionsGateDone(true) } catch (e: Exception) { }
+                        wizardBack = false
                         showGate = false
                         // Continuous mic (v2.14): wizard poora hote hi,
                         // mic mila ho to sunna apne aap shuru — mute
@@ -1135,6 +1139,16 @@ fun FloraApp(
                             }
                         } catch (e: Exception) { }
                     }
+                },
+                prefs = prefs,
+                // Batch 2 (F1): wizard step se section kholo — gate
+                // band karke us screen par jao, banner se wizard
+                // me wapas aane ka raasta khula rahega. Gate done
+                // NAHI hota (wizard poora hone par hi hoga).
+                onOpenSection = { section ->
+                    wizardBack = true
+                    showGate = false
+                    screen = if (section == "licence") Screen.LICENCE else Screen.SETTINGS
                 },
             )
         }
@@ -1326,11 +1340,30 @@ fun FloraApp(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)
         ) {
             Spacer(modifier = Modifier.height(8.dp))
-            if (!(screen == Screen.CHAT && voiceView)) {
-                Text(
-                    "Free: 10 min/day, app me maujood saare tools  •  Pro: ${FloraConfig.PRO_PRICE_TEXT}  •  " +
-                        "Support: ${FloraConfig.SUPPORT_EMAIL}"
-                )
+            // Batch 2 (F1): wizard se aaye ho to wapas jaane ka banner.
+            if (wizardBack) {
+                Button(onClick = { showGate = true }) { Text("Setup wizard me wapas jao") }
+                Text("Wizard adhoora hai — upar wale button se wapas ja sakte ho.")
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            // Batch 2 (F6): free-mode banner — pehle CHAT + voiceView
+            // par poora header chhup jata tha, isliye limit sabse
+            // zyada istemal wali jagah par nahi dikhta tha. Ab header
+            // hamesha dikhega. Pro ko free banner kabhi nahi — plan
+            // ke hisab se sahi line. "Saare tools" hissa CHHEDA NAHI
+            // — wo D4 definition conflict hai, faisla pending.
+            {
+                if (licence?.plan == "pro") {
+                    Text(
+                        "Pro: unlimited baat  •  Pro: ${FloraConfig.PRO_PRICE_TEXT}  •  " +
+                            "Support: ${FloraConfig.SUPPORT_EMAIL}"
+                    )
+                } else {
+                    Text(
+                        "AAP FREE MODE ME HO  •  Free: 10 min/day, app me maujood saare tools  •  Pro: ${FloraConfig.PRO_PRICE_TEXT}  •  " +
+                            "Support: ${FloraConfig.SUPPORT_EMAIL}"
+                    )
+                }
                 licence?.let {
                     // Cycle 1, APP-C1-008: raw enum kabhi nahi
                     // ("free (error)" / "free (local_free)" jaisa
@@ -2488,7 +2521,13 @@ fun FloraApp(
                         input = ""
                         if (!gateFeature("form_fill")) { return }
                         val body = question.substring(6, question.length - 6).trim()
-                        val meIdx = body.lowercase().lastIndexOf(" me ")
+                        // Batch 2 (F12/R2): browser branch N3 jaisa —
+                        // PEHLE " me " se kaato (lastIndexOf nahi),
+                        // taaki value me " me " ho to poori value
+                        // bache. Label me " me " ho to ye parse abhi
+                        // bhi galat kat sakta hai — us case me fields
+                        // list se exact label dekh kar dobara bolo.
+                        val meIdx = body.lowercase().indexOf(" me ")
                         if (meIdx < 0) {
                             voice.speak("Aise boliye: 'field naam me Priyadarshi likho'.")
                         } else {
@@ -2701,10 +2740,26 @@ fun FloraApp(
                         lower.startsWith("stock price ") ||
                         lower.endsWith(" ka share price") ||
                         lower.startsWith("study karo ") ||
-                        lower.endsWith(" par study")
+                        lower.endsWith(" par study") ||
+                        lower.startsWith("brave se dhoondho ") ||
+                        lower.startsWith("serp se dhoondho ") ||
+                        lower.startsWith("jagah dhoondho ")
                     ) {
                         input = ""
                         val (desc, job) = when {
+                            // Batch 2 (F2/F3/F4) explicit lanes — result
+                            // chat jawab me + source ke saath aata hai;
+                            // key na ho ya lane fail ho to lane fun
+                            // khud imaandaar message + DDG fallback deta hai.
+                            lower.startsWith("brave se dhoondho ") ->
+                                "Brave: ${question.substring("brave se dhoondho ".length).trim()}" to
+                                    suspend { searchTools.braveSearchLane(question.substring("brave se dhoondho ".length).trim()) }
+                            lower.startsWith("serp se dhoondho ") ->
+                                "SerpAPI: ${question.substring("serp se dhoondho ".length).trim()}" to
+                                    suspend { searchTools.serpSearchLane(question.substring("serp se dhoondho ".length).trim()) }
+                            lower.startsWith("jagah dhoondho ") ->
+                                "Jagah: ${question.substring("jagah dhoondho ".length).trim()}" to
+                                    suspend { searchTools.mapsLookup(question.substring("jagah dhoondho ".length).trim()) }
                             lower.startsWith("search karo ") ->
                                 "Search: ${question.substring(12).trim()}" to
                                     suspend { searchTools.search(question.substring(12).trim()) }
@@ -5479,26 +5534,26 @@ private fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = braveKey, onValueChange = { braveKey = it },
-                label = { Text("Brave key (optional, future lane)") },
+                label = { Text("Brave key (optional, search lane)") },
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = serpKey, onValueChange = { serpKey = it },
-                label = { Text("SerpAPI key (optional, future lane)") },
+                label = { Text("SerpAPI key (optional, search lane)") },
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = mapsKey, onValueChange = { mapsKey = it },
-                label = { Text("Maps key (optional, future lane)") },
+                label = { Text("Maps key (optional, jagah lane)") },
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Rotation order: Gemini 1, Gemini 2, Groq 1, Groq 2. Key values kabhi log nahi hoti. Brave/SerpAPI/Maps keys sirf save hoti hain, unka lane abhi nahi bana hai.")
+            Text("Rotation order: Gemini 1, Gemini 2, Groq 1, Groq 2. Key values kabhi log nahi hoti. Batch 2: Brave/SerpAPI/Maps lanes ban gaye hain — key ho to search me Brave, phir SerpAPI lane chalta hai, jagah ke liye Maps lane; key na ho to free DuckDuckGo/Open-Meteo raasta chalta hai, chupchaap paid lane par nahi gira jata.")
             Spacer(modifier = Modifier.height(8.dp))
             Row {
                 Button(onClick = {
@@ -5547,6 +5602,7 @@ private fun SettingsScreen(
                             brain.checkKeysFor(
                                 geminiKey.trim(), geminiKey2.trim(),
                                 groqKey.trim(), groqKey2.trim(), deepgramKey.trim(),
+                                braveKey.trim(), serpKey.trim(), mapsKey.trim(),
                             )
                         } catch (e: Exception) {
                             emptyList()
