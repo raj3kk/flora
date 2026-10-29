@@ -39,32 +39,200 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
         }
     }
 
+    private fun getWithHeader(urlText: String, headerName: String, headerValue: String): String? {
+        val conn = URL(urlText).openConnection() as HttpURLConnection
+        return try {
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 20_000
+            conn.setRequestProperty("User-Agent", "Flora/0.5")
+            conn.setRequestProperty(headerName, headerValue)
+            if (conn.responseCode !in 200..299) return null
+            BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).readText()
+        } catch (e: Exception) {
+            null
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     suspend fun search(query: String): String = withContext(Dispatchers.IO) {
-        // Tavily lane (v2.1): key ho to pehle try karo, fail ho to DuckDuckGo.
+        // Tavily lane (v2.1): key ho to pehle try karo, fail ho to agla lane.
         val tavilyKey = prefs?.tavilyApiKey() ?: ""
         if (tavilyKey.isNotEmpty()) {
             val tavilyResult = tavilySearch(query, tavilyKey)
             if (tavilyResult != null) return@withContext tavilyResult
         }
+        // Batch 2 (F2/F3): Brave lane, phir SerpAPI lane — dono
+        // sirf user ki apni Settings key se. Key na ho to lane
+        // chupchaap skip hota hai; paid lane par kabhi girna
+        // nahi hota — aakhri raasta hamesha free DuckDuckGo hai.
+        val braveKey = prefs?.braveApiKey() ?: ""
+        if (braveKey.isNotEmpty()) {
+            val braveResult = braveSearch(query, braveKey)
+            if (braveResult != null) return@withContext braveResult
+        }
+        val serpKey = prefs?.serpApiKey() ?: ""
+        if (serpKey.isNotEmpty()) {
+            val serpResult = serpSearch(query, serpKey)
+            if (serpResult != null) return@withContext serpResult
+        }
+        duckDuckGo(query)
+    }
+
+    /** Batch 2 (F2): Brave Search lane — user ki apni key se.
+     *  Key khali ho to null (lane skip); fail par bhi null, taaki
+     *  caller free DuckDuckGo fallback le sake. Key ki value
+     *  kabhi jawab ya log me nahi aati, sirf Brave endpoint ko jati hai. */
+    private fun braveSearch(query: String, key: String): String? {
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val text = getWithHeader(
+            "https://api.search.brave.com/res/v1/web/search?q=$encoded&count=3",
+            "X-Subscription-Token", key
+        ) ?: return null
+        return try {
+            val results = JSONObject(text)
+                .optJSONObject("web")?.optJSONArray("results")
+            if (results == null || results.length() == 0) return null
+            val first = results.optJSONObject(0) ?: return null
+            val title = first.optString("title", "")
+            val desc = first.optString("description", "")
+            val url = first.optString("url", "")
+            val body = listOf(title, desc, url).filter { it.isNotBlank() }.joinToString("\n")
+            if (body.isBlank()) null else body + "\n\nSource: Brave"
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Batch 2 (F2) explicit lane: key na ho to imaandaar
+     *  message + DuckDuckGo fallback; fail par bhi wahi fallback. */
+    suspend fun braveSearchLane(query: String): String = withContext(Dispatchers.IO) {
+        val key = prefs?.braveApiKey() ?: ""
+        if (key.isEmpty()) {
+            return@withContext "Brave key Settings me nahi hai — pehle Settings > Keys me " +
+                "apni Brave key daalo. Tab tak DuckDuckGo se dhoondh rahi hun:\n" + duckDuckGo(query)
+        }
+        braveSearch(query, key)
+            ?: ("Brave se jawab nahi mila — DuckDuckGo se dhoondh rahi hun:\n" + duckDuckGo(query))
+    }
+
+    /** Batch 2 (F3): SerpAPI lane — user ki apni key se.
+     *  Key sirf SerpAPI endpoint ko query me jati hai (uski
+     *  documented auth), kahin log nahi hoti. Fail par null. */
+    private fun serpSearch(query: String, key: String): String? {
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val text = get(
+            "https://serpapi.com/search.json?q=$encoded&num=3&api_key=$key"
+        ) ?: return null
+        return try {
+            val json = JSONObject(text)
+            val answerBox = json.optJSONObject("answer_box")?.optString("answer", "")
+            if (!answerBox.isNullOrBlank()) return answerBox + "\n\nSource: SerpAPI"
+            val results = json.optJSONArray("organic_results")
+            if (results == null || results.length() == 0) return null
+            val first = results.optJSONObject(0) ?: return null
+            val title = first.optString("title", "")
+            val snippet = first.optString("snippet", "")
+            val link = first.optString("link", "")
+            val body = listOf(title, snippet, link).filter { it.isNotBlank() }.joinToString("\n")
+            if (body.isBlank()) null else body + "\n\nSource: SerpAPI"
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Batch 2 (F3) explicit lane: key na ho to imaandaar
+     *  message + DuckDuckGo fallback; fail par bhi wahi fallback. */
+    suspend fun serpSearchLane(query: String): String = withContext(Dispatchers.IO) {
+        val key = prefs?.serpApiKey() ?: ""
+        if (key.isEmpty()) {
+            return@withContext "SerpAPI key Settings me nahi hai — pehle Settings > Keys me " +
+                "apni SerpAPI key daalo. Tab tak DuckDuckGo se dhoondh rahi hun:\n" + duckDuckGo(query)
+        }
+        serpSearch(query, key)
+            ?: ("SerpAPI se jawab nahi mila — DuckDuckGo se dhoondh rahi hun:\n" + duckDuckGo(query))
+    }
+
+    /** Batch 2 (F4): jagah/map lane. Key ho to Google Geocoding
+     *  (user ki apni Maps key) try karo; key na ho ya wo fail ho
+     *  to no-key free path (Open-Meteo geocoding, koi paid API
+     *  nahi, koi server-key spend nahi). Dono fail hon to
+     *  DuckDuckGo fallback, imaandaar note ke saath. */
+    suspend fun mapsLookup(place: String): String = withContext(Dispatchers.IO) {
+        val query = place.trim()
+        if (query.isEmpty()) return@withContext "Jagah ka naam khali hai — jagah ka naam boliye."
+        val mapsKey = prefs?.mapsApiKey() ?: ""
+        if (mapsKey.isNotEmpty()) {
+            val keyed = googleGeocode(query, mapsKey)
+            if (keyed != null) return@withContext keyed
+        }
+        val free = openMeteoGeocode(query)
+        if (free != null) return@withContext free
+        "Maps se ye jagah nahi mili — DuckDuckGo se dhoondh rahi hun:\n" + duckDuckGo(query)
+    }
+
+    private fun googleGeocode(place: String, key: String): String? {
+        val encoded = URLEncoder.encode(place, "UTF-8")
+        val text = get(
+            "https://maps.googleapis.com/maps/api/geocode/json?address=$encoded&key=$key"
+        ) ?: return null
+        return try {
+            val json = JSONObject(text)
+            if (json.optString("status", "") != "OK") return null
+            val first = json.optJSONArray("results")?.optJSONObject(0) ?: return null
+            val address = first.optString("formatted_address", place)
+            val loc = first.optJSONObject("geometry")?.optJSONObject("location")
+            val lat = loc?.optDouble("lat", Double.NaN) ?: Double.NaN
+            val lng = loc?.optDouble("lng", Double.NaN) ?: Double.NaN
+            if (lat.isNaN() || lng.isNaN()) return null
+            "Jagah: $address\nLocation: $lat, $lng\nSource: Google Maps (tumhari key se)"
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun openMeteoGeocode(place: String): String? {
+        val encoded = URLEncoder.encode(place, "UTF-8")
+        val text = get(
+            "https://geocoding-api.open-meteo.com/v1/search?name=$encoded&count=1&language=en&format=json"
+        ) ?: return null
+        return try {
+            val first = JSONObject(text).optJSONArray("results")?.optJSONObject(0) ?: return null
+            val name = first.optString("name", place)
+            val country = first.optString("country", "")
+            val lat = first.optDouble("latitude", Double.NaN)
+            val lon = first.optDouble("longitude", Double.NaN)
+            if (lat.isNaN() || lon.isNaN()) return null
+            val full = if (country.isNotBlank()) "$name, $country" else name
+            "Jagah: $full\nLocation: $lat, $lon\nSource: Open-Meteo geocoding (free, bina key)"
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** DuckDuckGo free lane — search() ka aakhri raasta, taaki
+     *  Brave/SerpAPI lanes isi ko fallback ke roop me le sakein. */
+    private fun duckDuckGo(query: String): String {
         val encoded = URLEncoder.encode(query, "UTF-8")
         val text = get("https://api.duckduckgo.com/?q=$encoded&format=json&no_html=1&skip_disambig=1")
-            ?: return@withContext "Search nahi ho paya — network ya server ki dikkat hai."
+            ?: return "Search nahi ho paya — network ya server ki dikkat hai."
         try {
             val json = JSONObject(text)
             val abstract = json.optString("AbstractText", "")
-            if (abstract.isNotBlank()) return@withContext abstract
+            if (abstract.isNotBlank()) return abstract
             val answer = json.optString("Answer", "")
-            if (answer.isNotBlank()) return@withContext answer
+            if (answer.isNotBlank()) return answer
             val topics = json.optJSONArray("RelatedTopics")
             if (topics != null) {
                 for (i in 0 until topics.length()) {
                     val t = topics.optJSONObject(i)?.optString("Text", "") ?: ""
-                    if (t.isNotBlank()) return@withContext t
+                    if (t.isNotBlank()) return t
                 }
             }
-            "Is sawal ka seedha jawab nahi mila."
+            return "Is sawal ka seedha jawab nahi mila."
         } catch (e: Exception) {
-            "Search ka jawab samajh nahi aaya, dobara koshish kijiye."
+            return "Search ka jawab samajh nahi aaya, dobara koshish kijiye."
         }
     }
 

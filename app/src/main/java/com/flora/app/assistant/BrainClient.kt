@@ -116,6 +116,9 @@ class BrainClient(private val prefs: FloraPreferences) {
             prefs.groqApiKey().trim(),
             prefs.groqApiKey2().trim(),
             prefs.deepgramApiKey().trim(),
+            prefs.braveApiKey().trim(),
+            prefs.serpApiKey().trim(),
+            prefs.mapsApiKey().trim(),
         )
     }
 
@@ -123,12 +126,20 @@ class BrainClient(private val prefs: FloraPreferences) {
      *  "Bhare hue keys check karo"): field values ko probe karta
      *  hai — save user ke haath me rehta hai, sahi ho ya galat.
      *  Key values kabhi log nahi hoti, sirf HTTP code dekha jata hai. */
+    /** Batch 2 (F9): Brave/SerpAPI/Maps bhi isi check me — naye
+     *  params ke defaults hain, isliye purani call sites (5 args)
+     *  bina badle compile hoti hain; Settings wali call site
+     *  8 args bhejti hai. Sirf validity batayi jati hai, key ki
+     *  value kabhi result ya screen par nahi aati. */
     suspend fun checkKeysFor(
         gemini: String,
         gemini2: String,
         groq: String,
         groq2: String,
         deepgram: String,
+        brave: String = "",
+        serp: String = "",
+        maps: String = "",
     ): List<LaneCheck> = withContext(Dispatchers.IO) {
         val checks = mutableListOf<LaneCheck>()
         checks += checkOne("Gemini 1", gemini) { key ->
@@ -152,7 +163,55 @@ class BrainClient(private val prefs: FloraPreferences) {
         checks += checkOne("Deepgram", deepgram) { key ->
             getCode("https://api.deepgram.com/v1/projects", "Token $key")
         }
+        checks += checkOne("Brave", brave) { key ->
+            getCode(
+                "https://api.search.brave.com/res/v1/web/search?q=Flora&count=1",
+                key, "X-Subscription-Token"
+            )
+        }
+        checks += checkOne("SerpAPI", serp) { key ->
+            getCode("https://serpapi.com/search.json?q=Flora&num=1&api_key=$key", null)
+        }
+        if (maps.isEmpty()) {
+            checks += LaneCheck("Maps", saved = false, valid = false, note = "saved nahi hai")
+        } else {
+            checks += mapsCheck(maps)
+        }
         checks
+    }
+
+    /** Maps validity: Google Geocode HTTP 200 par bhi body ka
+     *  status dekhta hai — OK/ZERO_RESULTS = key sahi,
+     *  REQUEST_DENIED = galat, OVER_QUERY_LIMIT = quota. */
+    private fun mapsCheck(key: String): LaneCheck {
+        val conn = PinnedTrust.openConnection(
+            URL("https://maps.googleapis.com/maps/api/geocode/json?address=Delhi&key=$key")
+        ) as HttpURLConnection
+        return try {
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 15_000
+            if (conn.responseCode !in 200..299) {
+                return LaneCheck("Maps", saved = true, valid = false, note = "server ne mana kiya (code ${conn.responseCode})")
+            }
+            val text = try {
+                BufferedReader(InputStreamReader(conn.inputStream, StandardCharsets.UTF_8)).readText()
+            } catch (e: Exception) {
+                ""
+            }
+            val status = try { JSONObject(text).optString("status", "") } catch (e: Exception) { "" }
+            when (status) {
+                "OK", "ZERO_RESULTS" -> LaneCheck("Maps", saved = true, valid = true, note = "sahi hai, kaam karegi")
+                "REQUEST_DENIED" -> LaneCheck("Maps", saved = true, valid = false, note = "galat ya expired hai — dobara daalo")
+                "OVER_QUERY_LIMIT" -> LaneCheck("Maps", saved = true, valid = false, note = "quota khatam hai, baad me chalegi")
+                "" -> LaneCheck("Maps", saved = true, valid = false, note = "network se check nahi ho paya")
+                else -> LaneCheck("Maps", saved = true, valid = false, note = "server ne mana kiya ($status)")
+            }
+        } catch (e: Exception) {
+            LaneCheck("Maps", saved = true, valid = false, note = "network se check nahi ho paya")
+        } finally {
+            conn.disconnect()
+        }
     }
 
     private fun checkOne(name: String, key: String, probe: (String) -> Int): LaneCheck {
@@ -174,13 +233,13 @@ class BrainClient(private val prefs: FloraPreferences) {
         }
     }
 
-    private fun getCode(urlText: String, authHeader: String?): Int {
+    private fun getCode(urlText: String, authHeader: String?, headerName: String = "Authorization"): Int {
         val conn = PinnedTrust.openConnection(URL(urlText)) as HttpURLConnection
         return try {
             conn.requestMethod = "GET"
             conn.connectTimeout = 15_000
             conn.readTimeout = 15_000
-            if (authHeader != null) conn.setRequestProperty("Authorization", authHeader)
+            if (authHeader != null) conn.setRequestProperty(headerName, authHeader)
             conn.responseCode
         } catch (e: Exception) {
             -1
