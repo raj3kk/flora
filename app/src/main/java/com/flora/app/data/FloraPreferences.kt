@@ -736,6 +736,14 @@ class FloraPreferences(private val context: Context) {
         // token slot nahi, kabhi plaintext token nahi. Default
         // true = save ke baad clipboard auto-clear hota hai.
         val CLIPBOARD_AUTO_CLEAR = booleanPreferencesKey("builder_clipboard_autoclear")
+        // B6 Drive slots (R-B6-5): token keys sirf readSecret/
+        // writeSecret se chhue jaate hain — seedha edit kabhi nahi.
+        val DRIVE_CLIENT_ID = stringPreferencesKey("drive_oauth_client_id")
+        val DRIVE_REDIRECT_URI = stringPreferencesKey("drive_oauth_redirect_uri")
+        val DRIVE_ACCESS_TOKEN = stringPreferencesKey("drive_access_token")
+        val DRIVE_REFRESH_TOKEN = stringPreferencesKey("drive_refresh_token")
+        val DRIVE_EXPIRES_AT_MS = longPreferencesKey("drive_expires_at_ms")
+        val DRIVE_FOLDER_ID = stringPreferencesKey("drive_folder_id")
     }
 
     private fun builderTokenKey(service: BuilderService): Preferences.Key<String> =
@@ -913,6 +921,72 @@ class FloraPreferences(private val context: Context) {
                 it[BuilderKeys.SUPABASE_BASE_URL] = "https://$ref.supabase.co"
                 it[BuilderKeys.SUPABASE_PROJECT_REF] = ref
             }
+        }
+    }
+
+    /**
+     * B6 Drive — OAuth + token slots (R-B6-4, R-B6-5).
+     * Client ID / redirect URI PUBLIC identifiers hain (secret
+     * nahi) — user apne Google OAuth app se daalta hai (K4/G14:
+     * GOOGLE_WEB_CLIENT_ID khaali hai, isliye B6 bhi user-entered
+     * client ID par chalta hai; live grant Phase 10 ka kaam hai).
+     * Access/refresh token readSecret/writeSecret se KeyStore-
+     * encrypted rehte hain — kabhi plaintext, kabhi log me nahi.
+     * Folder ID sirf metadata hai (user ke Drive me "Flora
+     * Backups" folder ka ID).
+     */
+    suspend fun driveClientId(): String =
+        context.floraDataStore.data.map { it[BuilderKeys.DRIVE_CLIENT_ID] ?: "" }.first()
+
+    suspend fun setDriveClientId(value: String) {
+        context.floraDataStore.edit {
+            if (value.isBlank()) it.remove(BuilderKeys.DRIVE_CLIENT_ID)
+            else it[BuilderKeys.DRIVE_CLIENT_ID] = value.trim()
+        }
+    }
+
+    suspend fun driveRedirectUri(): String =
+        context.floraDataStore.data.map { it[BuilderKeys.DRIVE_REDIRECT_URI] ?: "" }.first()
+
+    suspend fun setDriveRedirectUri(value: String) {
+        context.floraDataStore.edit {
+            if (value.isBlank()) it.remove(BuilderKeys.DRIVE_REDIRECT_URI)
+            else it[BuilderKeys.DRIVE_REDIRECT_URI] = value.trim()
+        }
+    }
+
+    suspend fun driveAccessToken(): String = readSecret(BuilderKeys.DRIVE_ACCESS_TOKEN)
+
+    suspend fun driveRefreshToken(): String = readSecret(BuilderKeys.DRIVE_REFRESH_TOKEN)
+
+    suspend fun driveExpiresAtMs(): Long =
+        context.floraDataStore.data.map { it[BuilderKeys.DRIVE_EXPIRES_AT_MS] ?: 0L }.first()
+
+    suspend fun setDriveTokens(accessToken: String, refreshToken: String, expiresAtMs: Long): Boolean {
+        if (accessToken.isEmpty()) return false
+        if (!writeSecret(BuilderKeys.DRIVE_ACCESS_TOKEN, accessToken)) return false
+        if (refreshToken.isNotEmpty()) {
+            if (!writeSecret(BuilderKeys.DRIVE_REFRESH_TOKEN, refreshToken)) return false
+        }
+        context.floraDataStore.edit { it[BuilderKeys.DRIVE_EXPIRES_AT_MS] = expiresAtMs }
+        return true
+    }
+
+    suspend fun clearDriveTokens() {
+        context.floraDataStore.edit {
+            it.remove(BuilderKeys.DRIVE_ACCESS_TOKEN)
+            it.remove(BuilderKeys.DRIVE_REFRESH_TOKEN)
+            it.remove(BuilderKeys.DRIVE_EXPIRES_AT_MS)
+        }
+    }
+
+    suspend fun driveFolderId(): String =
+        context.floraDataStore.data.map { it[BuilderKeys.DRIVE_FOLDER_ID] ?: "" }.first()
+
+    suspend fun setDriveFolderId(value: String) {
+        context.floraDataStore.edit {
+            if (value.isBlank()) it.remove(BuilderKeys.DRIVE_FOLDER_ID)
+            else it[BuilderKeys.DRIVE_FOLDER_ID] = value.trim()
         }
     }
 

@@ -5253,6 +5253,11 @@ private fun SettingsScreen(
     // UI sirf confirm hone par; warna "Link pending" + retry.
     var linkConfirmedDisplay by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf("") }
+    // B6 Backup/Import (2026-10-29): Settings ke andar hi khulta
+    // hai — Settings kabhi gated nahi hoti, isliye recovery
+    // raasta hamesha khula rehta hai. Baaki states se pehle
+    // declare (order trap se bacha).
+    var showBackup by remember { mutableStateOf(false) }
     // Guardian PIN re-ask (Guardian enforcement build, 2026-10-29):
     // Guardian ON ho aur is session me PIN verify na hua ho, tab
     // sensitive Settings kaam turant nahi chalega — PIN dialog khulega;
@@ -5462,6 +5467,20 @@ private fun SettingsScreen(
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
+        // B6 Backup/Import: Settings ka pehla item — backup screen
+        // yahin inline khulti hai (koi naya nav route nahi, koi
+        // Screen enum change nahi). Settings gated nahi hoti,
+        // isliye restore hamesha reachable hai.
+        item {
+            if (showBackup) {
+                BackupScreen(prefs, licenceClient, pinVault, guardian) { showBackup = false }
+            } else {
+                Text("Backup / Restore — Drive par backup rakho, naye phone par wapas laao.")
+                Spacer(modifier = Modifier.height(4.dp))
+                Button(onClick = { showBackup = true }) { Text("Backup / Restore kholo") }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
         item {
             Text("Keys — sirf is phone par save hoti hain, kabhi server par nahi bheji jaati (licence check ke alawa).")
             Spacer(modifier = Modifier.height(8.dp))

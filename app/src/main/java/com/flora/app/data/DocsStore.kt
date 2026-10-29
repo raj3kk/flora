@@ -47,6 +47,16 @@ class DocsStore(private val context: Context) {
         context.docsDataStore.edit { val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) it[key] = enc }
     }
 
+    /**
+     * B6 restore (R-B6-9): REPLACE, kabhi merge nahi. Backup se
+     * aayi poori list ek hi save me purani list ki jagah leti
+     * hai. Sirf FloraBackupManager bulata hai, restore confirm
+     * ke baad — koi UI isko seedha nahi bulata.
+     */
+    suspend fun replaceAll(newDocs: List<FloraDoc>) {
+        save(newDocs)
+    }
+
     suspend fun add(title: String, body: String) {
         val current = docs.first().toMutableList()
         current.add(FloraDoc(title.trim(), body))

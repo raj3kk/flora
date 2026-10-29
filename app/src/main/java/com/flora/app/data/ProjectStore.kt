@@ -357,4 +357,57 @@ class ProjectStore(
         }
         return fileStore.writeZip(outFile, entries)
     }
+
+    /**
+     * B6 restore (R-B6-9): REPLACE, kabhi merge nahi — B6
+     * "restore" (device-state restore) ka matlab yehi hai, ye
+     * restoreVersion (project-file version rollback) se bilkul
+     * alag hai, dono ko UI/log me kabhi milaya nahi jaata.
+     * Layout/version format chheda nahi gaya: wahi projects/
+     * dir, wahi .enc files, wahi index shape. Farq sirf itna:
+     * version history backup ka hissa nahi hai (sirf current
+     * file content restore hota hai), isliye purane versions
+     * restore ke baad nahi rehte. IDs backup wali hi rehti
+     * hain (naye random ID nahi bante), taaki file mapping
+     * toote nahi. Sab kuch validate hone ke baad hi purana
+     * tree hataya jaata hai; koi file save fail ho to false
+     * (caller poora import fail batata hai).
+     */
+    suspend fun replaceAllProjects(
+        projects: List<ProjectMeta>,
+        contents: Map<String, Map<String, String>>,
+    ): Boolean {
+        val idOk = Regex("^[A-Za-z0-9_-]{1,64}$")
+        for (project in projects) {
+            if (!idOk.matches(project.id) || project.name.isBlank()) return false
+            for (file in project.files) {
+                if (!idOk.matches(file.id) || file.name.isBlank()) return false
+                val content = contents[project.id]?.get(file.name)
+                    ?: return false
+                if (content.length > ProjectFileStore.MAX_CONTENT_CHARS) return false
+            }
+        }
+        return try {
+            val projectsDir = File(appContext.filesDir, "projects")
+            if (projectsDir.exists()) projectsDir.deleteRecursively()
+            for (project in projects) {
+                for (file in project.files) {
+                    val content = contents[project.id]?.get(file.name)
+                        ?: return false
+                    val saved = fileStore.saveText(project.id, file.id, content)
+                    if (saved.isFailure) return false
+                }
+            }
+            val restored = projects.map { project ->
+                project.copy(
+                    createdAtMs = project.createdAtMs,
+                    files = project.files.map { it.copy(versions = emptyList()) },
+                )
+            }
+            saveIndex(ProjectIndex(projects = restored))
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
 }

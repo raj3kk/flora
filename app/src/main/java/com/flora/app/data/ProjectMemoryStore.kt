@@ -136,4 +136,26 @@ class ProjectMemoryStore(private val context: Context) {
             false
         }
     }
+
+    /**
+     * B6 restore (R-B6-9 + R-B6-11): REPLACE, kabhi merge nahi.
+     * Har entry restore-time guard se guzarti hai (KeyInputGuard
+     * + forbidden assignment) — ek bhi entry guard fail kare to
+     * false aur KUCH NAHI likha jaata (caller poora import
+     * fail-closed rok deta hai). Backup wale ts waisa hi rehte
+     * hain (save() wali tarah ab ka time nahi lagta).
+     */
+    suspend fun replaceAll(entries: List<ProjectMemoryEntry>): Boolean {
+        for (entry in entries) {
+            if (entry.projectId.isBlank() || entry.text.isBlank()) return false
+            if (KeyInputGuard.looksKeyLike(entry.text)) return false
+            if (PlanValidator.containsForbiddenAssignment(entry.text)) return false
+        }
+        return try {
+            saveAll(entries.take(MAX_ENTRIES))
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
 }
