@@ -219,7 +219,8 @@ object HindiG2P {
         for (i in aksharas.indices) {
             val ak = aksharas[i]
             for (cons in ak.consonants) segs.add(Seg(cons, false, false))
-            if (ak.vowel != null) segs.add(Seg(ak.vowel, true, ak.vowelIsSchwa))
+            val vowel = ak.vowel
+            if (vowel != null) segs.add(Seg(vowel, true, ak.vowelIsSchwa))
             if (ak.visarga) segs.add(Seg("ɦ", false, false))
             if (ak.nasal) {
                 val nasalPhoneme = resolveNasal(nextFirstConsonant(aksharas, i))

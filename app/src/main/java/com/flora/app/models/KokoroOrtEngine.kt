@@ -14,6 +14,8 @@ import java.io.File
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.FloatBuffer
+import java.nio.LongBuffer
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -383,13 +385,13 @@ class KokoroOrtEngine private constructor(
         var result: OrtSession.Result? = null
         try {
             idsTensor = OnnxTensor.createTensor(
-                env, ids, longArrayOf(1, ids.size.toLong())
+                env, LongBuffer.wrap(ids), longArrayOf(1, ids.size.toLong())
             )
             styleTensor = OnnxTensor.createTensor(
-                env, styleRow, longArrayOf(1, STYLE_DIM.toLong())
+                env, FloatBuffer.wrap(styleRow), longArrayOf(1, STYLE_DIM.toLong())
             )
             speedTensor = OnnxTensor.createTensor(
-                env, floatArrayOf(1.0f), longArrayOf(1)
+                env, FloatBuffer.wrap(floatArrayOf(1.0f)), longArrayOf(1)
             )
             val inputs = mapOf(
                 inputIdsName to idsTensor,
@@ -397,7 +399,7 @@ class KokoroOrtEngine private constructor(
                 speedName to speedTensor
             )
             result = session.run(inputs, setOf(outputName))
-            val value = result[outputName]?.value ?: return null
+            val value = (result[outputName] as? OnnxTensor)?.value ?: return null
             return flattenWaveform(value)
         } catch (e: Exception) {
             Log.w(TAG, "ORT inference failed", e)
