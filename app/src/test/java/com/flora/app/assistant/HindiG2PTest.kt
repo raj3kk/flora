@@ -199,4 +199,115 @@ class HindiG2PTest {
         // Spec §1.6 F-GEMINATE: बच्चा -> bətʃːaː.
         assertWord("बच्चा", "bətʃːaː")
     }
+
+    // ---- Lane C Step 3 (§8 Step 3, §6.4 table) ----
+
+    @Test
+    fun pehlaKeepsSchwaNonCase() {
+        // Spec §3.3 non-case (T2 expected, tab tak): पहला -> pəɦlaː,
+        // NOT *pɛɦlaː. Note: §3.3 isko Path A confirmation ke liye
+        // UNVERIFIED flag karta hai — agar reference pɛɦlaː de to ye
+        // test §4.3 process se hi badlega, chupchaap nahi.
+        assertWord("पहला", "pəɦlaː")
+    }
+
+    // ---- Nasal branches, spec §1.6 F-NAS (a)/(b)/(c) ----
+    // O3 note: branches listening test (Path B) se confirm hone baaki
+    // hain, par rule text deterministic hai — ye tests rule text ko
+    // lock karte hain, listening confirmation ka daava nahi karte.
+
+    @Test
+    fun nasalBeforeVelarStopIsVelarNasal() {
+        // (a) velar: अंक -> əŋk.
+        assertWord("अंक", "əŋk")
+    }
+
+    @Test
+    fun nasalBeforePalatalAffricateIsPalatalNasal() {
+        // (a) palatal: पंच -> pəɲtʃ.
+        assertWord("पंच", "pəɲtʃ")
+    }
+
+    @Test
+    fun nasalBeforeRetroflexStopIsRetroflexNasal() {
+        // (a) retroflex: घंटा -> ɡʱəɳʈaː.
+        assertWord("घंटा", "ɡʱəɳʈaː")
+    }
+
+    @Test
+    fun nasalBeforeDentalStopIsDentalNasal() {
+        // (a) dental, spec §5.2 table: अंत -> ənt.
+        assertWord("अंत", "ənt")
+    }
+
+    @Test
+    fun nasalBeforeLabialStopIsLabialNasal() {
+        // (a) labial: लंबा -> ləmbaː.
+        assertWord("लंबा", "ləmbaː")
+    }
+
+    @Test
+    fun nasalDropsBeforeFricative() {
+        // (b) fricative se pehle drop: संसार -> səsaːɾ (koi nasal segment nahi).
+        assertWord("संसार", "səsaːɾ")
+    }
+
+    @Test
+    fun nasalDropsBeforeSonorant() {
+        // (b) sonorant (glide j) se pehle drop: संयम -> səjəm.
+        assertWord("संयम", "səjəm")
+    }
+
+    @Test
+    fun nasalWordFinalIsVelarNasalContrast() {
+        // (c) vowel se pehle ya word-finally ŋ: हैं -> ɦɛːŋ vs है -> ɦɛː.
+        assertWord("हैं", "ɦɛːŋ")
+        assertWord("है", "ɦɛː")
+        assertWord("मैं", "mɛːŋ")
+    }
+
+    @Test
+    fun visargaMapsToGlottalFricative() {
+        // Spec §1.6: visarga (ः) -> ɦ. अः -> əɦ (अ ka swar + visarga segment).
+        assertWord("अः", "əɦ")
+    }
+
+    // ---- Literal combining-mark drops, pre-audit D3 ----
+    // Trailing position par test hai taaki drop property lock ho bina
+    // mid-word split behaviour ko spec-correct claim kiye (wo spec me
+    // defined nahi hai, isliye us par assert nahi hai).
+
+    @Test
+    fun literalDentalMarkDrops() {
+        // U+032A kabhi emit nahi hota (F-DENT); literal input par drop hota hai.
+        val result = HindiG2P.tokenizeDetailed("राम\u032A")
+        assertEquals(HindiG2P.tokenize("राम"), result.tokens)
+        assertTrue(result.dropped.contains('\u032A'))
+    }
+
+    @Test
+    fun literalCombiningTildeDrops() {
+        // U+0303 vocab me nahi; literal input par drop hota hai (F-NAS se alag:
+        // ye ं/ँ ka mapping nahi, seedha combining tilde hai).
+        val result = HindiG2P.tokenizeDetailed("राम\u0303")
+        assertEquals(HindiG2P.tokenize("राम"), result.tokens)
+        assertTrue(result.dropped.contains('\u0303'))
+    }
+
+    @Test
+    fun longInputTokenChunksStayWithin509() {
+        // §6.4 table row ka engine-chunking hissa: runtime engine tokens ko
+        // 509-par chunk karta hai (KokoroOrtEngine, is test ke tree se bahar).
+        // Ye test sirf invariant ko mirror karta hai — engine khud yahan
+        // test nahi ho raha; chunkText ka test upar pehle se maujood hai.
+        val longText = ("राम ".repeat(120)).trim()
+        val tokens = HindiG2P.tokenize(longText)
+        assertTrue(tokens.size > 509)
+        val chunks = tokens.chunked(509)
+        assertTrue(chunks.size > 1)
+        for (chunk in chunks) {
+            assertTrue(chunk.size <= 509)
+        }
+        assertEquals(tokens, chunks.flatten())
+    }
 }
