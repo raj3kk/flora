@@ -32,7 +32,8 @@
 //     gaya). Mismatch par 400 + admin_audit, licence NAHI banegi.
 //     amount_paisa missing/non-number ho to check skip (purani
 //     rows) — admin manual match hi control rahega.
-// 4. Approve: payment -> approved + reviewed_by/at; users.device_id
+// 4. Approve (S2-9 order, Cycle 24 FIX): PEHLE payment ->
+//    approved (claim), PHIR licence; users.device_id
 //    se licences upsert (user_id, device_id) plan_id='pro',
 //    status='active', expires_at = ab + 30 din; audit insert.
 //    users row ya device_id na mile to licence activate NAHI
@@ -62,6 +63,18 @@
 // ki app-path lines (licence upsert fail / payment-update fail,
 // S4-2-queued ka hissa) is pass me NAHI hain — sirf reject-path
 // wali site badli gayi hai.
+// S2-9 (Cycle 24 FIX, clearance 14:20 IST — index + order flip +
+// 23505 -> 400 + audit + compensating revert; INDEX AKELA NAHI):
+// Approve ka order ulta hai: payment-update (claim) PEHLE, licence
+// creation SIRF claim safal hone par. Partial unique index
+// (payment_submissions_utr_approved_uidx, sirf status='approved')
+// raced doosre approval ka claim 23505 par rokta hai — us par 400
+// generic duplicate + audit, licence nahi banegi. Licence creation
+// claim ke BAAD fail ho to payment ko prior status (pending —
+// pending-guard se tay) par wapas laaya jata hai + audit, taaki
+// approved-without-licence orphan na bane. Reject path is pass me
+// nahi chhua (S4-4 waisa hi). Purana "pehle licence, tabhi
+// payment approved" comment ab is order se badal gaya hai.
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -150,6 +163,46 @@ Deno.serve(async (req) => {
     });
     return new Response(JSON.stringify({ ok: true }), { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   }
+  // S2-9 claim (approve path par hi): payment-update PEHLE —
+  // partial unique index raced duplicate-UTR approval ko yahin
+  // 23505 par rokta hai, licence banne se pehle. Status guard
+  // (pending -> approved) same-row raced claim ko bhi rokta hai:
+  // doosra claim zero rows dega -> already reviewed.
+  // Prior status pending hai (upar pending-guard se tay) — isliye
+  // revert me wahi pending + purane reviewed_by/at wapas aate hain.
+  const { data: claimed, error: claimErr } = await svc.from("payment_submissions").update({
+    status: "approved", reviewed_by: adminId, reviewed_at: now,
+  }).eq("id", payment_id).eq("status", "pending").select("id");
+  if (claimErr) {
+    if (claimErr.code === "23505") {
+      await svc.from("admin_audit").insert({
+        admin_user_id: adminId, action: "payment_approve_duplicate_utr_race",
+        target_user_id: payment.user_id, before_json: payment,
+        after_json: { utr: payment.utr },
+      });
+      return new Response(JSON.stringify({ error: "duplicate UTR: is UTR par ek payment pehle hi approved ho chuka hai" }), { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+    }
+    console.error(claimErr);
+    return new Response(JSON.stringify({ error: "store failed" }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+  }
+  if (!claimed || claimed.length === 0) {
+    return new Response(JSON.stringify({ error: "already reviewed" }), { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+  }
+  // S2-9 compensating revert: licence creation fail par payment
+  // ko prior status (pending) par wapas lao + audit. Best-effort
+  // hai (PostgREST calls ke beech transaction nahi); revert khud
+  // fail ho to console.error me darj hoga.
+  async function revertClaim(reason: string) {
+    const { error: revErr } = await svc.from("payment_submissions").update({
+      status: "pending", reviewed_by: (payment as any).reviewed_by ?? null, reviewed_at: (payment as any).reviewed_at ?? null,
+    }).eq("id", payment_id);
+    if (revErr) console.error(revErr);
+    await svc.from("admin_audit").insert({
+      admin_user_id: adminId, action: "payment_approve_reverted",
+      target_user_id: payment.user_id, before_json: payment,
+      after_json: { status: "pending", reason },
+    });
+  }
   // Approve path, option (ii) website-path (user order 2026-10-28):
   // payer ki users row / device_id na bhi ho to payment approve
   // ho jata hai — licence user_id par banti hai, device_id NULL
@@ -157,12 +210,15 @@ Deno.serve(async (req) => {
   // karega, to NULL-device pro row usi device par claim ho
   // jayegi (licence-verify me claim logic hai) — 15-din ka
   // wait us row par nahi lagta, kyunki wo kisi phone par kabhi
-  // chali hi nahi. Order zaroori hai: pehle licence row bane,
-  // tabhi payment approved — warna payment pending hi rahega.
+  // chali hi nahi. (S2-9: purana "pehle licence, tabhi payment"
+  // order ab ulta hai — claim pehle, licence baad me.)
   // Schema note: agar licences.device_id NOT NULL ho to NULL
   // insert fail hoga — tab dashboard SQL chahiye:
   // ALTER TABLE public.licences ALTER COLUMN device_id DROP NOT NULL;
   // (ye SQL deploy doc me hai, yahan blind alter nahi hai).
+  // S2-9 order: payment claim UPAR ho chuka hai — is path me
+  // dobara payment-update NAHI hota. Licence/supersede fail par
+  // revertClaim() payment ko pending par wapas laata hai.
   const { data: userRow } = await svc.from("users").select("device_id").eq("id", payment.user_id).maybeSingle();
   // LFMS minimal edit (website-path ONLY — app-path neeche waisa hi
   // hai): key generation + supersede + renewal stacking.
@@ -213,7 +269,7 @@ Deno.serve(async (req) => {
       }
       if (!licenceId && !licErr) licErr = { message: "key generation failed" };
     }
-    if (licErr) return new Response(JSON.stringify({ error: "website-path licence failed: " + licErr.message + " — payment left pending" }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+    if (licErr) { console.error(licErr); await revertClaim("website_path_licence_failed"); return new Response(JSON.stringify({ error: "licence failed — payment reverted to pending" }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }); }
     // Supersede: nayi/reused row chhod kar baaki active rows ko
     // 'superseded' karo (ek active rule — warna do devices par
     // do active rows dono Pro pate hain, 15-day lock trigger hi
@@ -223,13 +279,10 @@ Deno.serve(async (req) => {
     for (const p of (priors || [])) {
       if (p.id === licenceId) continue;
       const r = await svc.from("licences").update({ status: "superseded", superseded_by: licenceId }).eq("id", p.id);
-      if (r.error) return new Response(JSON.stringify({ error: "licence supersede failed: " + r.error.message + " — payment left pending" }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+      if (r.error) { console.error(r.error); await revertClaim("website_path_supersede_failed"); return new Response(JSON.stringify({ error: "licence supersede failed — payment reverted to pending" }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }); }
       supersededCount++;
     }
-    const { error: payErr } = await svc.from("payment_submissions").update({
-      status: "approved", reviewed_by: adminId, reviewed_at: now,
-    }).eq("id", payment_id);
-    if (payErr) return new Response(JSON.stringify({ error: payErr.message }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+    // S2-9: payment claim upar ho chuka hai — dobara update nahi.
     await svc.from("admin_audit").insert({
       admin_user_id: adminId, action: "payment_approved_website_path",
       target_user_id: payment.user_id, before_json: payment,
@@ -242,11 +295,8 @@ Deno.serve(async (req) => {
     user_id: payment.user_id, device_id: userRow.device_id,
     plan_id: "pro", status: "active", activated_at: now, expires_at: expires,
   }, { onConflict: "user_id,device_id" });
-  if (licErr) return new Response(JSON.stringify({ error: licErr.message }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
-  const { error: payErr } = await svc.from("payment_submissions").update({
-    status: "approved", reviewed_by: adminId, reviewed_at: now,
-  }).eq("id", payment_id);
-  if (payErr) return new Response(JSON.stringify({ error: payErr.message }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+  if (licErr) { console.error(licErr); await revertClaim("app_path_licence_failed"); return new Response(JSON.stringify({ error: "licence failed — payment reverted to pending" }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }); }
+  // S2-9: payment claim upar ho chuka hai — dobara update nahi.
   await svc.from("admin_audit").insert({
     admin_user_id: adminId, action: "payment_approved",
     target_user_id: payment.user_id, before_json: payment,

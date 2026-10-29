@@ -3,7 +3,7 @@
 -- admin_audit wahi se liye gaye hain) + live functions ke
 -- select/insert fields (users, licences, usage, plans, settings).
 --
--- !!!! PEHLE PADHO — YE FILE TABHI CHALAO JAB NEECHE KE 8
+-- !!!! PEHLE PADHO — YE FILE TABHI CHALAO JAB NEECHE KE 11
 -- DEPLOY-CHECKS LIVE PAR VERIFY HO JAYEIN !!!!
 -- Ye file live deploy-check ke baad hi chalani hai. Bina verify
 -- kiye chalane se maujooda live schema se takrao ho sakta hai.
@@ -54,6 +54,15 @@
 --      Bina policy = service-role-only (home_boxes pattern jaisa);
 --      functions service-role se chalte hain, isliye unhe RLS
 --      nahi rokta. Koi aur table ki RLS posture yahan NAHI badli.
+--   11. S2-9 partial unique index (Cycle 24 FIX) — live
+--      payment_submissions me pehle se duplicate approved UTRs
+--      ka SCAN zaroori hai, CREATE INDEX chalane se PEHLE:
+--      duplicate approved UTRs hon to index creation LOUD FAIL
+--      hogi (ye index sirf status='approved' rows par lagta hai;
+--      pending/rejected duplicates par rok nahi lagati). Duplicate
+--      mile to unhe DELETE karke nahi — combined deploy session
+--      me handle hoga (kaunsi row asli approved hai, ye admin
+--      faisla hai). Scan ke bina index mat chalao.
 --
 -- IDEMPOTENT: har statement IF NOT EXISTS / DO-block guard ke
 -- saath hai — live par dobara chalane se duplicate-policy ya
@@ -64,7 +73,7 @@
 -- nahi kiya gaya hai — jo confirm nahi hai, wo upar
 -- "deploy-check" me likha hai, code me guess nahi bhara gaya.
 --
--- Run order: pehle 8 deploy-checks verify karo, phir ye file
+-- Run order: pehle 11 deploy-checks verify karo, phir ye file
 -- (ek baar), phir functions deploy karo.
 
 -- --- users (app-link + admin check ki base table) ---
@@ -187,6 +196,18 @@ create table if not exists public.payment_submissions (
 );
 
 -- --- admin_audit (append-only — koi update/delete policy nahi) ---
+-- S2-9 (Cycle 24 FIX): partial unique index — payment_submissions
+-- par utr SIRF approved rows par unique hai. Predicate live status
+-- values se hai (payment check: 'pending', 'approved', 'rejected';
+-- approve code sirf 'approved' likhta hai) — pending/rejected
+-- duplicates par rok nahi lagati, isliye S2-5 sequential check +
+-- purani pending rows par koi asar nahi. Convention wahi hai jo
+-- push_tokens_user_device_uidx ki hai (IF NOT EXISTS, public
+-- schema). Deploy-check #11 dekho: live duplicate approved UTR
+-- scan ke bina ye index mat chalao.
+create unique index if not exists payment_submissions_utr_approved_uidx
+  on public.payment_submissions (utr)
+  where status = 'approved';
 create table if not exists public.admin_audit (
   id uuid primary key default gen_random_uuid(),
   admin_user_id uuid not null,
