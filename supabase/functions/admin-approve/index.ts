@@ -53,7 +53,15 @@
 // waise hi rahenge — CORS sirf preflight kholta hai, auth nahi
 // hatata. LICENCE-INSERT/SUPERSEDE/STACKING regions ko chhua nahi
 // gaya hai. Allow-Methods POST, OPTIONS (ye function POST-only hai).
-// Poora S2-1 (LFMS functions par CORS) abhi bhi QUEUED-FOR-OWNER hai.
+// S4-4 (Cycle 5 FIX, NON-LICENCE reject-path ONLY): reject-path par
+// payment-update fail par error.message ki jagah generic "store failed"
+// + console.error(error) detail (sirf Edge logs me). HTTP status 500
+// aur response shape waisi hi hain, sirf error string badli hai.
+// LICENCE-INSERT/SUPERSEDE/STACKING regions (reject branch ke baad
+// shuru hote hain) ko ek line bhi nahi chhua gaya hai; admin-approve
+// ki app-path lines (licence upsert fail / payment-update fail,
+// S4-2-queued ka hissa) is pass me NAHI hain — sirf reject-path
+// wali site badli gayi hai.
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -134,7 +142,7 @@ Deno.serve(async (req) => {
     const { error } = await svc.from("payment_submissions").update({
       status: "rejected", reviewed_by: adminId, reviewed_at: now, reject_reason,
     }).eq("id", payment_id);
-    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+    if (error) { console.error(error); return new Response(JSON.stringify({ error: "store failed" }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }); }
     await svc.from("admin_audit").insert({
       admin_user_id: adminId, action: "payment_rejected",
       target_user_id: payment.user_id, before_json: payment,
