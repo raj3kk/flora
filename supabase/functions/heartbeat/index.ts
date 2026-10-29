@@ -13,6 +13,11 @@
 // likhta. Koi aur data (location, screen, activity) kabhi nahi
 // liya jata. Deploy se pehle admin_panel_phase2.sql chalao.
 
+// S4-2-free (Cycle 4 FIX): 500-path par DB error text (error.message)
+// caller ko wapas NAHI milta — sirf generic message ("load failed" /
+// "store failed") + detail console.error me (Edge logs me). 400s
+// validation messages + success paths waise hi hain.
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // S2-1 (Cycle 2 FIX, PARTIAL — sirf free functions): CORS preflight.
@@ -59,6 +64,6 @@ Deno.serve(async (req) => {
     { user_id, last_seen: new Date().toISOString() },
     { onConflict: "user_id" },
   );
-  if (error) return json({ error: error.message }, 500);
+  if (error) { console.error(error); return json({ error: "store failed" }, 500); }
   return json({ ok: true, throttled: false });
 });

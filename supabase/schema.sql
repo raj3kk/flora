@@ -1,3 +1,5 @@
+-- SUPERSEDED by supabase/sql/core_tables.sql — do not run.
+-- Canonical definition core_tables.sql me hai; is file ko deploy me mat chalao.
 -- Maya rebuild — Supabase schema (NEW system, no old data)
 -- Tables user-confirmed: Users, Settings, Plans, Usage
 -- Ye sirf schema hai — koi key, password, ya secret is file me nahi hai.

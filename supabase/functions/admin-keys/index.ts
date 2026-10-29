@@ -23,6 +23,11 @@
 // sirf provider + present/missing.
 // 401: JWT nahi; 403: is_admin nahi; 400: galat action/provider.
 
+// S4-2-free (Cycle 4 FIX): 500-path par DB error text (error.message)
+// caller ko wapas NAHI milta — sirf generic message ("load failed" /
+// "store failed") + detail console.error me (Edge logs me). 400s
+// validation messages + success paths waise hi hain.
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // S2-1 (Cycle 2 FIX, PARTIAL — sirf free functions): CORS preflight.
@@ -74,7 +79,7 @@ Deno.serve(async (req) => {
   const { action, provider } = body;
   if (action === "status") {
     const { data, error } = await svc.from("provider_keys").select("provider");
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "load failed" }, 500); }
     const present = new Set((data || []).map((r: any) => r.provider));
     const providers: Record<string, boolean> = {};
     const providersLabel: Record<string, string> = {};
@@ -95,14 +100,14 @@ Deno.serve(async (req) => {
     const { error } = await svc.from("provider_keys").upsert({
       provider, key_value: keyValue, updated_at: new Date().toISOString(),
     });
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "store failed" }, 500); }
     await audit("key_set", { provider, before_present: !!beforeRow, after_present: true });
     return json({ ok: true });
   }
   if (action === "delete") {
     const { data: beforeRow } = await svc.from("provider_keys").select("provider").eq("provider", provider).maybeSingle();
     const { error } = await svc.from("provider_keys").delete().eq("provider", provider);
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "store failed" }, 500); }
     await audit("key_deleted", { provider, before_present: !!beforeRow, after_present: false });
     return json({ ok: true });
   }

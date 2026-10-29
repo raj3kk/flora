@@ -14,6 +14,11 @@
 //     jata — panel GET se padh lega jab edit karna ho).
 // Deploy se pehle admin_panel_phase2.sql chalao.
 
+// S4-2-free (Cycle 4 FIX): 500-path par DB error text (error.message)
+// caller ko wapas NAHI milta — sirf generic message ("load failed" /
+// "store failed") + detail console.error me (Edge logs me). 400s
+// validation messages + success paths waise hi hain.
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // S2-1 (Cycle 2 FIX, PARTIAL — sirf free functions): CORS preflight.
@@ -67,7 +72,7 @@ Deno.serve(async (req) => {
   const { action, instructions, knowledge } = await req.json().catch(() => ({}));
   if (action === "get") {
     const { data, error } = await svc.from("global_instructions").select("instructions,knowledge,updated_at").eq("id", 1).maybeSingle();
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "load failed" }, 500); }
     return json({
       instructions: data?.instructions || "",
       knowledge: data?.knowledge || "",
@@ -89,7 +94,7 @@ Deno.serve(async (req) => {
       updated_at: new Date().toISOString(),
     };
     const { error } = await svc.from("global_instructions").upsert(next, { onConflict: "id" });
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "store failed" }, 500); }
     await audit("instructions_set",
       { instructions_len: (cur?.instructions || "").length, knowledge_len: (cur?.knowledge || "").length },
       { instructions_len: next.instructions.length, knowledge_len: next.knowledge.length,

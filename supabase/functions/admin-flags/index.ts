@@ -14,6 +14,11 @@
 // Flags secret nahi hain (global config) — isliye list me values
 // dikhana theek hai. Deploy se pehle admin_panel_phase2.sql chalao.
 
+// S4-2-free (Cycle 4 FIX): 500-path par DB error text (error.message)
+// caller ko wapas NAHI milta — sirf generic message ("load failed" /
+// "store failed") + detail console.error me (Edge logs me). 400s
+// validation messages + success paths waise hi hain.
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // S2-1 (Cycle 2 FIX, PARTIAL — sirf free functions): CORS preflight.
@@ -72,7 +77,7 @@ Deno.serve(async (req) => {
   const { action, key, enabled, scope, user_id } = await req.json().catch(() => ({}));
   if (action === "list") {
     const { data, error } = await svc.from("feature_flags").select("key,enabled,scope").order("key");
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "load failed" }, 500); }
     return json({ flags: data || [] });
   }
   if (action === "set") {
@@ -93,7 +98,7 @@ Deno.serve(async (req) => {
       { key, enabled, scope: effScope, updated_at: new Date().toISOString() },
       { onConflict: "key,scope" },
     ).select("key");
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "store failed" }, 500); }
     await audit("flag_set", effScope !== "global" ? effScope : null,
       beforeRow || null, { key, enabled, scope: effScope });
     // S1-38: additive affected count (upsert hamesha 1 row deta hai).
@@ -107,7 +112,7 @@ Deno.serve(async (req) => {
       : (typeof scope === "string" && scope ? scope : "global");
     const { data: beforeRow } = await svc.from("feature_flags").select("key,enabled,scope").eq("key", key).eq("scope", effScope).maybeSingle();
     const { data: deleted, error } = await svc.from("feature_flags").delete().eq("key", key).eq("scope", effScope).select("key");
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "store failed" }, 500); }
     await audit("flag_deleted", effScope !== "global" ? effScope : null,
       beforeRow || null, { key, scope: effScope });
     // S1-38: galat scope/key par silent no-op ki jagah affected:0.

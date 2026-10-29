@@ -12,6 +12,11 @@
 // hota hai; khaali ya beshape value reject.
 // 401: JWT nahi; 403: is_admin nahi; 400: galat action/value.
 
+// S4-2-free (Cycle 4 FIX): 500-path par DB error text (error.message)
+// caller ko wapas NAHI milta — sirf generic message ("load failed" /
+// "store failed") + detail console.error me (Edge logs me). 400s
+// validation messages + success paths waise hi hain.
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // S2-1 (Cycle 2 FIX, PARTIAL — sirf free functions): CORS preflight.
@@ -63,7 +68,7 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   if (body.action === "get") {
     const { data, error } = await svc.from("admin_settings").select("value").eq("key", "upi_vpa").maybeSingle();
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "load failed" }, 500); }
     return json({ ok: true, upi_vpa: data?.value || null });
   }
   if (body.action === "set") {
@@ -75,7 +80,7 @@ Deno.serve(async (req) => {
     const { error } = await svc.from("admin_settings").upsert({
       key: "upi_vpa", value, updated_at: new Date().toISOString(),
     });
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "store failed" }, 500); }
     await audit("upi_set", { upi_vpa: beforeRow?.value || null }, { upi_vpa: value });
     return json({ ok: true });
   }
