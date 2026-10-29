@@ -45,17 +45,36 @@
 // me daalkar Supabase CLI/dashboard se deploy karna hoga —
 // GitHub push se Edge Function deploy NAHI hota.
 
+// S2-8 (Cycle 3 FIX): CORS block — baaki 10 free functions jaisa.
+// Browser se panel callApprove (Authorization + JSON) par preflight
+// OPTIONS bhejta hai; is block ke bina approve/reject button browser
+// me block rehta tha. OPTIONS par 200 + CORS headers; wahi headers
+// har response par (json/raw 401/403/405 samet). JWT/admin gates
+// waise hi rahenge — CORS sirf preflight kholta hai, auth nahi
+// hatata. LICENCE-INSERT/SUPERSEDE/STACKING regions ko chhua nahi
+// gaya hai. Allow-Methods POST, OPTIONS (ye function POST-only hai).
+// Poora S2-1 (LFMS functions par CORS) abhi bhi QUEUED-FOR-OWNER hai.
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("POST only", { status: 405 });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: { ...CORS_HEADERS } });
+  }
+  if (req.method !== "POST") return new Response("POST only", { status: 405, headers: { ...CORS_HEADERS } });
   const body = await req.json().catch(() => ({}));
   const { payment_id, action, reject_reason } = body;
   if (!payment_id || (action !== "approve" && action !== "reject")) {
-    return new Response(JSON.stringify({ error: "payment_id + approve/reject required" }), { status: 400, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "payment_id + approve/reject required" }), { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   }
   if (action === "reject" && !reject_reason) {
-    return new Response(JSON.stringify({ error: "reject_reason required" }), { status: 400, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "reject_reason required" }), { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   }
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -64,20 +83,20 @@ Deno.serve(async (req) => {
   const anon = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } });
   const { data: userData, error: userErr } = await anon.auth.getUser();
   if (userErr || !userData?.user) {
-    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   }
   const adminId = userData.user.id;
   const svc = createClient(url, serviceKey);
   const { data: adminRow } = await svc.from("users").select("is_admin").eq("id", adminId).maybeSingle();
   if (!adminRow?.is_admin) {
-    return new Response(JSON.stringify({ error: "admin only" }), { status: 403, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "admin only" }), { status: 403, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   }
   const { data: payment } = await svc.from("payment_submissions").select("*").eq("id", payment_id).maybeSingle();
   if (!payment) {
-    return new Response(JSON.stringify({ error: "payment not found" }), { status: 404, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "payment not found" }), { status: 404, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   }
   if (payment.status !== "pending") {
-    return new Response(JSON.stringify({ error: "already reviewed" }), { status: 400, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "already reviewed" }), { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   }
   // S1-4 amount check (approve path par hi; reject par nahi —
   // reject koi licence nahi deta). Licence regions ko chhua
@@ -91,7 +110,7 @@ Deno.serve(async (req) => {
         target_user_id: payment.user_id, before_json: payment,
         after_json: { expected_paisa: EXPECTED_PAISA_FOR_PRO, actual_paisa: amt, plan_id: "pro" },
       });
-      return new Response(JSON.stringify({ error: "amount mismatch: expected 19900 paisa (Pro ₹199/mahina) for pro licence" }), { status: 400, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "amount mismatch: expected 19900 paisa (Pro ₹199/mahina) for pro licence" }), { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
     }
   }
   // S2-5 approved-UTR duplicate check (approve path par hi;
@@ -107,7 +126,7 @@ Deno.serve(async (req) => {
         target_user_id: payment.user_id, before_json: payment,
         after_json: { duplicate_of_payment_id: dupApproved.id, utr: payment.utr },
       });
-      return new Response(JSON.stringify({ error: "duplicate UTR: is UTR par ek payment pehle hi approved ho chuka hai" }), { status: 400, headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "duplicate UTR: is UTR par ek payment pehle hi approved ho chuka hai" }), { status: 400, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
     }
   }
   const now = new Date().toISOString();
@@ -115,13 +134,13 @@ Deno.serve(async (req) => {
     const { error } = await svc.from("payment_submissions").update({
       status: "rejected", reviewed_by: adminId, reviewed_at: now, reject_reason,
     }).eq("id", payment_id);
-    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
     await svc.from("admin_audit").insert({
       admin_user_id: adminId, action: "payment_rejected",
       target_user_id: payment.user_id, before_json: payment,
       after_json: { status: "rejected", reject_reason },
     });
-    return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ ok: true }), { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   }
   // Approve path, option (ii) website-path (user order 2026-10-28):
   // payer ki users row / device_id na bhi ho to payment approve
@@ -186,7 +205,7 @@ Deno.serve(async (req) => {
       }
       if (!licenceId && !licErr) licErr = { message: "key generation failed" };
     }
-    if (licErr) return new Response(JSON.stringify({ error: "website-path licence failed: " + licErr.message + " — payment left pending" }), { status: 500, headers: { "Content-Type": "application/json" } });
+    if (licErr) return new Response(JSON.stringify({ error: "website-path licence failed: " + licErr.message + " — payment left pending" }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
     // Supersede: nayi/reused row chhod kar baaki active rows ko
     // 'superseded' karo (ek active rule — warna do devices par
     // do active rows dono Pro pate hain, 15-day lock trigger hi
@@ -196,34 +215,34 @@ Deno.serve(async (req) => {
     for (const p of (priors || [])) {
       if (p.id === licenceId) continue;
       const r = await svc.from("licences").update({ status: "superseded", superseded_by: licenceId }).eq("id", p.id);
-      if (r.error) return new Response(JSON.stringify({ error: "licence supersede failed: " + r.error.message + " — payment left pending" }), { status: 500, headers: { "Content-Type": "application/json" } });
+      if (r.error) return new Response(JSON.stringify({ error: "licence supersede failed: " + r.error.message + " — payment left pending" }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
       supersededCount++;
     }
     const { error: payErr } = await svc.from("payment_submissions").update({
       status: "approved", reviewed_by: adminId, reviewed_at: now,
     }).eq("id", payment_id);
-    if (payErr) return new Response(JSON.stringify({ error: payErr.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+    if (payErr) return new Response(JSON.stringify({ error: payErr.message }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
     await svc.from("admin_audit").insert({
       admin_user_id: adminId, action: "payment_approved_website_path",
       target_user_id: payment.user_id, before_json: payment,
       after_json: { status: "approved", plan_id: "pro", expires_at: expires, device_id: null, superseded_count: supersededCount },
     });
-    return new Response(JSON.stringify({ ok: true, licence_activated: true, website_path: true, expires_at: expires }), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ ok: true, licence_activated: true, website_path: true, expires_at: expires }), { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   }
   // App-path (device_id maujood): pehle wala flow.
   const { error: licErr } = await svc.from("licences").upsert({
     user_id: payment.user_id, device_id: userRow.device_id,
     plan_id: "pro", status: "active", activated_at: now, expires_at: expires,
   }, { onConflict: "user_id,device_id" });
-  if (licErr) return new Response(JSON.stringify({ error: licErr.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+  if (licErr) return new Response(JSON.stringify({ error: licErr.message }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   const { error: payErr } = await svc.from("payment_submissions").update({
     status: "approved", reviewed_by: adminId, reviewed_at: now,
   }).eq("id", payment_id);
-  if (payErr) return new Response(JSON.stringify({ error: payErr.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+  if (payErr) return new Response(JSON.stringify({ error: payErr.message }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   await svc.from("admin_audit").insert({
     admin_user_id: adminId, action: "payment_approved",
     target_user_id: payment.user_id, before_json: payment,
     after_json: { status: "approved", plan_id: "pro", expires_at: expires },
   });
-  return new Response(JSON.stringify({ ok: true, licence_activated: true, expires_at: expires }), { headers: { "Content-Type": "application/json" } });
+  return new Response(JSON.stringify({ ok: true, licence_activated: true, expires_at: expires }), { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
 });

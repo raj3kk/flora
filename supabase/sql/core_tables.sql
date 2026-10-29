@@ -46,6 +46,15 @@
 --      wale value se match hona chahiye, warna upsert fail hoga.
 --      Unique (user_id, device_id) tabhi banega jab duplicate
 --      rows na hon (hon to pehle saaf karo — loud failure).
+--   10. push_tokens RLS state (S3-1, Cycle 3 FIX) — live
+--      push_tokens ki RLS sthiti pehle confirm karo: ye file
+--      ki enable-RLS line tabhi asar karegi jab table ban chuki
+--      ho (table na ho to ye line kuch nahi karegi, error bhi
+--      nahi — isliye deploy-checks list me isko shamil karo:
+--      table banne ke BAAD RLS enabled hai ya nahi, verify karo).
+--      Bina policy = service-role-only (home_boxes pattern jaisa);
+--      functions service-role se chalte hain, isliye unhe RLS
+--      nahi rokta. Koi aur table ki RLS posture yahan NAHI badli.
 --
 -- IDEMPOTENT: har statement IF NOT EXISTS / DO-block guard ke
 -- saath hai — live par dobara chalane se duplicate-policy ya
@@ -304,3 +313,11 @@ end $$;
 -- lagu hota hai.
 create unique index if not exists push_tokens_user_device_uidx
   on public.push_tokens (user_id, device_id);
+-- S3-1 (Cycle 3 FIX): push_tokens par RLS enable — bina policy =
+-- service-role-only (home_boxes pattern jaisa). Idempotent hai
+-- (dobara chalane par error nahi deta). Deploy-check #10 dekho:
+-- live push_tokens RLS state pehle confirm karo; table banne ke
+-- baad hi ye line asar karegi. Koi aur table ki RLS posture
+-- yahan nahi badli gayi hai. push-token-sync FUNCTION ko mat
+-- chhuo (LFMS-reserved) — sirf ye SQL definition free hai.
+alter table public.push_tokens enable row level security;
