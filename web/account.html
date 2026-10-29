@@ -38,7 +38,7 @@ ol.steps li{margin:8px 0}
 <a href="account.html">Mera account</a>
 <a href="admin.html">Admin</a>
 <a href="download.html">App download</a>
-<details style="position:relative;display:inline-block"><summary style="color:#ea580c;font-weight:600;cursor:pointer;list-style:none">Sab pages ▾</summary><div style="position:absolute;top:100%;left:0;background:#fff;border:1px solid #fed7aa;border-radius:12px;padding:8px 0;min-width:190px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:50"><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="index.html">Home</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="pricing.html">Pricing</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="pay.html">Pay / UTR</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="account.html">Mera account</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="download.html">App download</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="signup.html">Signup</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="login.html">Login</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="admin.html">Admin</a></div></details></nav>
+<details style="position:relative;display:inline-block"><summary style="color:#ea580c;font-weight:600;cursor:pointer;list-style:none">Sab pages ▾</summary><div style="position:absolute;top:100%;left:0;background:#fff;border:1px solid #fed7aa;border-radius:12px;padding:8px 0;min-width:190px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:50"><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="index.html">Home</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="pricing.html">Pricing</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="pay.html">Pay / UTR</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="account.html">Mera account</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="download.html">App download</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="signup.html">Signup</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="login.html">Login</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="admin.html">Admin</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="privacy.html">Privacy</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="terms.html">Terms</a></div></details></nav>
 <header>
 <h1>Mera account</h1>
 <p class="note" id="who">Login ke baad tumhara email yahan aayega.</p>
@@ -63,8 +63,14 @@ ol.steps li{margin:8px 0}
 <li>UPI se ₹199 pay + UTR submit — <span id="step-pay" class="badge grey">?</span></li>
 <li>Admin approve — uske baad Pro app me active hoga</li>
 </ol>
-<p class="note">Licence app me dikhta hai — website par nahi. Bina app link ke UTR approval rukega, isliye pehle link karo, phir UTR submit karo.</p>
+<p class="note">Bina app link ke bhi approval hota hai — approve hui licence app me dikhane ke liye app me link karo. Licence ka status neeche card me bhi dikhega (server update ke baad).</p>
 <p><a class="btn" href="pay.html">UTR submit karo</a> &nbsp; <a href="download.html">App download karo</a></p>
+</section>
+
+<section class="card">
+<h2>Meri licence</h2>
+<p class="note" id="licence-status">Login ke baad licence status yahan aayega.</p>
+<div id="licence-details"></div>
 </section>
 
 <section class="card">
@@ -103,10 +109,11 @@ async function loadPayments() {
   document.getElementById('step-signup').className = "badge green";
   document.getElementById('step-confirm').textContent = "ho gaya";
   document.getElementById('step-confirm').className = "badge green";
+  loadLicence();
   st.textContent = "Payments load ho rahi hain...";
   const { data, error } = await client
     .from("payment_submissions")
-    .select("amount_paisa,utr,note,status,created_at")
+    .select("amount_paisa,utr,note,status,created_at,reject_reason")
     .eq("user_id", session.user.id)
     .order("created_at", { ascending: false });
   if (error) {
@@ -130,16 +137,68 @@ async function loadPayments() {
     div.className = "item";
     div.innerHTML = "<strong>₹" + (row.amount_paisa / 100) + "</strong> | UTR " + row.utr +
       " " + statusBadge(row.status) +
-      "<div class='meta'>" + (row.note || "") + " | " + row.created_at + "</div>";
+      "<div class='meta'>" + (row.note || "") + " | " + row.created_at + "</div>" +
+      (row.status === "rejected" && row.reject_reason ? "<div class='meta'>Reject ki wajah: " + row.reject_reason + "</div>" : "");
     el.appendChild(div);
   });
+}
+
+async function loadLicence() {
+  const el = document.getElementById('licence-status');
+  const det = document.getElementById('licence-details');
+  const { data: { session } } = await client.auth.getSession();
+  if (!session) {
+    el.textContent = "Licence dekhne ke liye pehle login karo.";
+    det.innerHTML = "";
+    return;
+  }
+  el.textContent = "Licence status load ho raha hai...";
+  det.innerHTML = "";
+  let d = {};
+  try {
+    const res = await fetch("https://keomyweghrmhqglaxmyv.supabase.co/functions/v1/licence-verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + session.access_token },
+      body: JSON.stringify({ user_id: session.user.id }),
+    });
+    d = await res.json().catch(() => ({}));
+    if (!res.ok || typeof d.plan === "undefined") throw new Error("status-pending");
+  } catch (e) {
+    el.textContent = "Licence status website par jald dikhega — server update ke baad yahan plan aur expiry dikhne lagenge. Tab tak licence app ke Licence screen par dekho.";
+    return;
+  }
+  let badge = "<span class='badge grey'>Free</span>";
+  let line = "Free plan par ho.";
+  if (d.plan === "pro" && d.status === "active") {
+    badge = "<span class='badge green'>Pro active</span>";
+    line = "Pro licence active hai.";
+  } else if (d.status === "revoked") {
+    badge = "<span class='badge red'>Revoked</span>";
+    line = "Licence revoke ho gayi hai." + (d.reason ? " Wajah: " + d.reason : "");
+  } else if (d.status === "expired") {
+    badge = "<span class='badge red'>Expired</span>";
+    line = "Licence ki expiry ho gayi hai.";
+  } else if (d.status === "superseded") {
+    badge = "<span class='badge orange'>Superseded</span>";
+    line = "Nayi licence ne isko replace kar diya hai.";
+  } else if (d.device_locked) {
+    badge = "<span class='badge orange'>Device locked</span>";
+    line = "Licence kisi aur device par lagi hai." +
+      (d.device_change_available_at ? " Transfer " + String(d.device_change_available_at).split("T")[0] + " ke baad hoga." : "");
+  } else if (d.status && d.status !== "free" && d.status !== "active") {
+    line = "Status: " + d.status;
+  }
+  el.innerHTML = badge;
+  det.innerHTML = "<p>" + line + "</p>" +
+    (d.expires_at ? "<p class='meta'>Expiry: " + String(d.expires_at).split("T")[0] + "</p>" : "") +
+    "<p class='note'>Licence ki key website par kabhi nahi dikhayi jaati — key sirf app me dikhti hai (masked + copy). Ye card sirf status batata hai, koi binding/claim nahi karta.</p>";
 }
 
 document.getElementById('logout').addEventListener('click', async () => {
   await client.auth.signOut();
   window.location.href = "login.html";
 });
-document.getElementById('refresh').addEventListener('click', loadPayments);
+document.getElementById('refresh').addEventListener('click', () => { loadPayments(); loadLicence(); });
 loadPayments();
 </script>
 </body>

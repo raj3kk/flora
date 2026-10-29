@@ -7,35 +7,57 @@
 <style>body{font-family:system-ui,sans-serif;margin:24px;line-height:1.5}input,button{padding:8px;font-size:15px}label{display:block;margin:8px 0 4px}.note{color:#555;font-size:14px}</style>
 </head>
 <body>
-<nav style="background:#fff;border-bottom:1px solid #fed7aa;padding:12px 24px;display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-family:system-ui,sans-serif"><span style="font-size:1.2em;font-weight:800;color:#1f2937;margin-right:auto">Flora</span><a style="color:#ea580c;text-decoration:none;font-weight:600" href="index.html">Home</a><a style="color:#ea580c;text-decoration:none;font-weight:600" href="pricing.html">Pricing</a><a style="color:#ea580c;text-decoration:none;font-weight:600" href="pay.html">Pay / UTR</a><a style="color:#ea580c;text-decoration:none;font-weight:600" href="account.html">Mera account</a><a style="color:#ea580c;text-decoration:none;font-weight:600" href="admin.html">Admin</a><a style="color:#ea580c;text-decoration:none;font-weight:600" href="download.html">App download</a><details style="position:relative;display:inline-block"><summary style="color:#ea580c;font-weight:600;cursor:pointer;list-style:none">Sab pages ▾</summary><div style="position:absolute;top:100%;left:0;background:#fff;border:1px solid #fed7aa;border-radius:12px;padding:8px 0;min-width:190px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:50"><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="index.html">Home</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="pricing.html">Pricing</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="pay.html">Pay / UTR</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="account.html">Mera account</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="download.html">App download</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="signup.html">Signup</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="login.html">Login</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="admin.html">Admin</a></div></details></nav>
+<nav style="background:#fff;border-bottom:1px solid #fed7aa;padding:12px 24px;display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-family:system-ui,sans-serif"><span style="font-size:1.2em;font-weight:800;color:#1f2937;margin-right:auto">Flora</span><a style="color:#ea580c;text-decoration:none;font-weight:600" href="index.html">Home</a><a style="color:#ea580c;text-decoration:none;font-weight:600" href="pricing.html">Pricing</a><a style="color:#ea580c;text-decoration:none;font-weight:600" href="pay.html">Pay / UTR</a><a style="color:#ea580c;text-decoration:none;font-weight:600" href="account.html">Mera account</a><a style="color:#ea580c;text-decoration:none;font-weight:600" href="admin.html">Admin</a><a style="color:#ea580c;text-decoration:none;font-weight:600" href="download.html">App download</a><details style="position:relative;display:inline-block"><summary style="color:#ea580c;font-weight:600;cursor:pointer;list-style:none">Sab pages ▾</summary><div style="position:absolute;top:100%;left:0;background:#fff;border:1px solid #fed7aa;border-radius:12px;padding:8px 0;min-width:190px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:50"><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="index.html">Home</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="pricing.html">Pricing</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="pay.html">Pay / UTR</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="account.html">Mera account</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="download.html">App download</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="signup.html">Signup</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="login.html">Login</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="admin.html">Admin</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="privacy.html">Privacy</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="terms.html">Terms</a></div></details></nav>
 <h1>Flora account banao</h1>
 <label>Email <input id="email" type="email"></label>
 <label>Password <input id="password" type="password"></label>
 <button id="btn" type="button">Signup</button>
 <p id="status" class="note"></p>
+<label>Confirmation email dobara bhejo — Email <input id="resend-email" type="email"></label>
+<button id="resend-btn" type="button">Confirmation dobara bhejo</button>
+<p id="resend-status" class="note"></p>
 <p class="note"><a href="login.html">Login</a> | <a href="pricing.html">Pricing</a> | <a href="download.html">App download</a></p>
 <p class="note">Account banne ke baad: <a href="pricing.html">Pro (₹199/mahina)</a> dekh lo.
 Zaroori step: app me Pro dikhane ke liye app ke Settings me
 "Website account link" me wahi email aur password daalo —
 tab website account aur app ka account jud jayenge aur
-approval ke baad Pro app me dikhega. Bina link ke approval
-par licence active nahi hoga, isliye pehle link karo, phir
+approval ke baad Pro app me dikhega. Bina link ke bhi approval
+hota hai; Pro app me dikhane ke liye link karo — link ke baad
+approve hui licence app me dikhegi. Phir
 <a href="pay.html">UTR submit karo</a>.</p>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const client = supabase.createClient("https://keomyweghrmhqglaxmyv.supabase.co", "sb_publishable_qMjX-cw11dB_Y9nT8IlVzw_nPup-Yxe");
+function hindiAuthError(msg) {
+  const m = (msg || "").toLowerCase();
+  if (m.includes("invalid login credentials")) return "Email ya password galat hai.";
+  if (m.includes("email not confirmed")) return "Email confirm nahi hua hai — pehle confirmation link click karo, ya neeche se confirmation dobara bhejo.";
+  if (m.includes("too many requests")) return "Bahut zyada koshish ho gayi — thodi der baad dobara try karo.";
+  if (m.includes("already registered")) return "Is email se account pehle se hai — login karo ya password reset karo.";
+  if (m.includes("password should be at least")) return "Password kam se kam 6 akshar ka ho.";
+  if (m.includes("unable to validate email") || m.includes("invalid email")) return "Email sahi nahi lag raha — dobara check karo.";
+  if (m.includes("expired")) return "Ye link expire ho gaya hai ya pehle use ho chuka hai — dobara bhejo.";
+  return "Ho nahi paya — dobara try karo.";
+}
 document.getElementById('btn').addEventListener('click', async () => {
   const email = document.getElementById('email').value;
   const password = document.getElementById('password').value;
   const st = document.getElementById('status');
   if (!email || !password) { st.textContent = "Email aur password dono daalo."; return; }
   const { data, error } = await client.auth.signUp({ email, password });
-  if (error) { st.textContent = "Signup fail: " + error.message; return; }
+  if (error) { st.textContent = "Signup fail: " + hindiAuthError(error.message); return; }
   if (data.session) {
     st.innerHTML = 'Account ban gaya aur login bhi ho gaya. <a href="account.html">Account page kholo</a>.';
   } else {
-    st.innerHTML = 'Account ban gaya. Email me confirmation link aaya hoga — us par click karo, phir <a href="login.html">login karo</a>. (Link inbox/spam me na mile to dobara signup mat karo, pehle thoda intezar karo.)';
+    st.innerHTML = 'Account ban gaya. Email me confirmation link aaya hoga — us par click karo, phir <a href="login.html">login karo</a>. (Link inbox/spam me na mile to neeche se confirmation dobara bhejo.)';
   }
+});
+document.getElementById('resend-btn').addEventListener('click', async () => {
+  const email = document.getElementById('resend-email').value;
+  const st = document.getElementById('resend-status');
+  if (!email) { st.textContent = "Pehle email daalo."; return; }
+  const { error } = await client.auth.resend({ type: "signup", email });
+  st.textContent = error ? "Dobara bhejna fail: " + hindiAuthError(error.message) : "Confirmation email dobara bhej diya gaya hai — inbox/spam check karo.";
 });
 </script>
 </body>
