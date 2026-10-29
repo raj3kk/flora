@@ -214,6 +214,10 @@ class VoiceEngine(context: Context) {
         // Interrupt par bhi ab tak bola hua waqt gino — poora
         // text kabhi count nahi hoga jab aadha hi bola ho.
         finishUtterance(utteranceSeq)
+        // Cycle 3, F4: neural engine bhi ruke (null ho to
+        // NeuralSpeaker.stop() kuch nahi karta); system
+        // tts?.stop() barkaraar hai.
+        NeuralSpeaker.stop()
         tts?.stop()
     }
 

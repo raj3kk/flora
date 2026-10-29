@@ -39,6 +39,16 @@ class GuardianGate {
     companion object {
         /** Guardian session idle timeout — EK HI JAGAH. Default 15 minute. */
         const val SESSION_TIMEOUT_MS = 15L * 60L * 1000L
+
+        /**
+         * Cycle 3, F1 (e): Face Lock unlock session timeout —
+         * Guardian ke 15-minute pattern jaisa, par ALAG constant
+         * (Face Lock ka apna timeout — Guardian timeout badalne
+         * se ye nahi badlega). Unlock ke is waqt baad chat
+         * dobara lock ho jati hai (PIN dobara chahiye). Value
+         * EK HI JAGAH hai — FloraApp + prefs isi ko dekhte hain.
+         */
+        const val FACE_LOCK_SESSION_TIMEOUT_MS = 15L * 60L * 1000L
     }
 
     private var pinVerifiedAtMs = 0L

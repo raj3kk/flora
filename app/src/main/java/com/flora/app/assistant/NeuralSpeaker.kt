@@ -25,6 +25,16 @@ import java.util.Locale
  */
 interface NeuralEngine {
     fun speak(text: String, onStart: () -> Unit, onDone: () -> Unit)
+
+    /**
+     * Cycle 3, F4: chal rahi neural utterance roko. Engine abhi
+     * null hai (koi implementation repo me nahi), isliye ye
+     * sirf contract hai — koi neural engine implement nahi kiya
+     * gaya hai, aur system TTS hi bolega. Engine judne par use
+     * ye method bhi implement karni hogi (warna stop kaam nahi
+     * karega — isliye default empty nahi rakha gaya).
+     */
+    fun stop()
 }
 
 object NeuralSpeaker {
@@ -33,6 +43,23 @@ object NeuralSpeaker {
     var engine: NeuralEngine? = null
 
     fun isNeuralAvailable(): Boolean = engine != null
+
+    /**
+     * Cycle 3, F4: neural engine ka stop plumbing. Engine null
+     * ho to kuch nahi hota (system fallback waisa hi); engine
+     * ho to uska stop() chalta hai. VoiceEngine.stop() isi ko
+     * bulata hai, isliye Stop button + barge-in stop path dono
+     * neural raaste par bhi lagenge (jab engine aayega).
+     */
+    fun stop() {
+        try {
+            engine?.stop()
+        } catch (e: Exception) {
+            // Engine stop fail: awaaz rokne ki koshish kabhi
+            // caller ko crash nahi degi; system stop alag se
+            // VoiceEngine.stop() me chalta hai.
+        }
+    }
 
     /**
      * TTS safai — VoiceEngine.sanitizeForSpeech ka asli code
