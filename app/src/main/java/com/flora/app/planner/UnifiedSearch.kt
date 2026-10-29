@@ -39,6 +39,12 @@ import kotlinx.coroutines.flow.first
  * - tasklog: AutoLogStore items (Auto Log = execution proof;
  *   plan history Room me hai, AutoLog 30-din prune hota hai —
  *   isliye task-log source AutoLog hi hai, Room history nahi).
+ *
+ * B5 FIX 3 note: AppSearch index is version me NAHI hai
+ * (stack-blocked, upar gradle comment + audit log dekho) —
+ * search poori tarah store-scan par chalti hai, jo source of
+ * truth bhi hai. Index wapas aane par merge() wahi dedup
+ * rule se hits ko milayega (koi API change nahi chahiye).
  */
 data class UnifiedSearchResult(
     val source: String,
@@ -112,7 +118,6 @@ class UnifiedSearch(
     private val chatMemoryStore: ChatMemoryStore?,
     private val projectMemoryStore: ProjectMemoryStore?,
     private val autoLogStore: AutoLogStore?,
-    private val appSearchIndex: MemoryAppSearchIndex?,
 ) {
 
     suspend fun search(query: String): List<UnifiedSearchResult> {
@@ -181,36 +186,13 @@ class UnifiedSearch(
         } catch (e: Exception) {
         }
 
-        // AppSearch index: refresh (idempotent puts, snippet-only)
-        // + query; hits ko scan results ke saath dedup karo.
-        // Index fail ho to scan results hi kaafi hain.
-        if (appSearchIndex != null) {
-            try {
-                val indexEntries = mutableListOf<Triple<String, String, Long>>()
-                for (candidate in candidates) {
-                    indexEntries.add(Triple(candidate.source, candidate.snippet, candidate.ts))
-                }
-                if (indexEntries.isNotEmpty()) {
-                    appSearchIndex.refresh(indexEntries)
-                }
-                val hits = appSearchIndex.query(cleanQuery)
-                for (hit in hits) {
-                    val rank = UnifiedSearchLogic.rank(cleanQuery, hit.snippet)
-                    if (rank <= 0) continue
-                    candidates.add(
-                        UnifiedSearchResult(
-                            source = hit.source,
-                            sources = listOf(hit.source),
-                            title = "Index (${hit.source})",
-                            snippet = hit.snippet,
-                            ts = hit.ts,
-                            rank = rank,
-                        )
-                    )
-                }
-            } catch (e: Exception) {
-            }
-        }
+        // B5 FIX 3: AppSearch index HATA diya gaya hai — poori
+        // 1.1.0 line ko compileSdk 35+ chahiye, pinned stack 34
+        // hai (CI runs 40896889152 / 40899312759 / 40900218424).
+        // Unified search store-scan-only hai (source of truth
+        // wahi tha); AppSearch index tab wapas aayega jab stack
+        // upgrade (compileSdk 35+) coordinator se approve ho.
+        // Koi jhootha "AppSearch-backed" daava nahi hai.
 
         return UnifiedSearchLogic.merge(candidates)
     }

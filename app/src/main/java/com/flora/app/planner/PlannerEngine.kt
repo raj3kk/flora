@@ -139,9 +139,10 @@ class PlannerEngine(
     private val learnedEngine = LearnedEngine(appContext)
     private val aiBuildQuota = AiBuildQuota(appContext, prefs, licenceClient, androidId)
     private val selfMapClient = SelfMapClient(appContext)
-    private val memoryAppSearchIndex = MemoryAppSearchIndex(appContext)
+    // B5 FIX 3: MemoryAppSearchIndex HATA diya gaya (AppSearch
+    // dep stack-blocked hai) — unifiedSearch store-scan-only hai.
     private val unifiedSearch = UnifiedSearch(
-        chatMemoryStore, projectMemoryStore, autoLogStore, memoryAppSearchIndex,
+        chatMemoryStore, projectMemoryStore, autoLogStore,
     )
 
     /** Learned shortcut se bane plans — in par dobara learned record nahi hoga (feedback loop nahi). */

@@ -15,11 +15,13 @@ import org.json.JSONObject
  * (isliye is file me koi save/update API hai hi nahi — map update
  * != code self-edit boundary, plan ka Self-knowledge map section).
  *
- * B5-12 SAFETY (generator + index dono me, sirf comment me nahi):
+ * B5-12 SAFETY (generator + client + search me, sirf comment me nahi):
  * SelfMapSafety hi ek enforcement point hai — generator isse
  * filter karke JSON banata hai, client isse filter karke padhta
- * hai, aur UnifiedSearch/AppSearch index isse filter karke
- * snippet banata hai. Map me KABHI nahi aayega: koi secret /
+ * hai, aur UnifiedSearch isse filter karke snippet banata hai
+ * (B5 FIX 3: AppSearch index stack-blocked hai, isliye map me
+ * appsearch dependency entry bhi nahi hai). Map me KABHI nahi
+ * aayega: koi secret /
  * token / key VALUE, koi token-shape pattern wali line, koi
  * path-with-secret. Sirf pattern-level + structural info
  * (screen / feature / service / data-flow / permission naam —
@@ -275,7 +277,6 @@ object SelfMapGenerator {
             SelfMapDependency("kotlinx_serialization", "Structured plan schema + strict parsing."),
             SelfMapDependency("timber", "Planner-step logging ka ek standard raasta (B5-09)."),
             SelfMapDependency("app_startup", "Tools registry init ka single point (B5-09)."),
-            SelfMapDependency("appsearch", "Unified memory ka on-device full-text index (B5-04)."),
         )
         return SelfMap(screens, features, services, dataFlows, permissions, dependencies)
     }

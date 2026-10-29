@@ -78,19 +78,18 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.8.1")
     // B5 tools consolidation — Timber (planner-step logging,
     // B5-09) + App Startup (registry init ka single point,
-    // B5-09) + AppSearch (unified memory index, B5-04).
-    // Sab Apache-2.0, AGP 8.5.2 / Kotlin 1.9.24 stack par pinned.
-    // AppSearch pin 1.1.0-alpha07 (Dec 2024) — CI-PROVEN ladder:
+    // B5-09). Sab Apache-2.0, AGP 8.5.2 / Kotlin 1.9.24 stack
+    // par pinned.
+    // AppSearch DEP BLOCKED (CI-PROVEN ladder, audit log B5 FIX 3):
     // 1.1.0 stable ko compileSdk 36 + AGP 8.9.1 chahiye (CI run
-    // 40896889152, checkDebugAarMetadata FAILED); 1.1.0-beta01
-    // (Jan 2025) ko compileSdk 35 chahiye (CI run 40899312759,
-    // wahi task FAILED) — dono pinned stack (34 / 8.5.2) se
-    // takrate hain. Stack bump (35/36, AGP bump) coordinator
-    // approval ke bina nahi hoga — isliye sabse purana viable
-    // pin alpha07 hai; ye bhi fail kare to AppSearch dep hatana
-    // + store-scan-only raasta hoga (audit log me darj).
-    implementation("androidx.appsearch:appsearch:1.1.0-alpha07")
-    implementation("androidx.appsearch:appsearch-local-storage:1.1.0-alpha07")
+    // 40896889152); 1.1.0-beta01 ko compileSdk 35 chahiye (CI run
+    // 40899312759); 1.1.0-alpha07 ko bhi compileSdk 35 chahiye
+    // (CI run 40900218424) — poori 1.1.0 line pinned stack
+    // (compileSdk 34 / AGP 8.5.2) se takrati hai. Stack bump
+    // (35/36, AGP bump) coordinator approval ke bina nahi hoga,
+    // isliye AppSearch dep HATA di gayi hai — unified search
+    // store-scan-only chalti hai (API poori hai, index pending
+    // hai jab tak stack upgrade approve na ho).
     implementation("com.jakewharton.timber:timber:5.0.1")
     implementation("androidx.startup:startup-runtime:1.1.1")
     // B5-11 test-only + debug-only — production/release APK me kabhi nahi.
