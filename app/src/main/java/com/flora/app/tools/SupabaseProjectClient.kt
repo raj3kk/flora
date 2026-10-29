@@ -8,6 +8,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -39,13 +40,57 @@ import org.json.JSONObject
  * fail par RegrantOnce — kabhi silent failure, kabhi fake success
  * nahi.
  */
+/**
+ * B3-01-S follow-up: Management list-projects response parsing
+ * (pure — unit test me bina prefs ke chalta hai).
+ *
+ * Management API list-projects ek BARE JSON ARRAY deta hai
+ * (list endpoints ka shape); kuch wrapper ek object me
+ * `projects` array bhi de sakte hain. Dono shapes maane jate
+ * hain — koi aur shape (khaali body, galat JSON, projects ke
+ * bina object) null deta hai, taaki caller imaandaar SERVER
+ * failure de sake, jhootha 0-count success kabhi nahi.
+ */
+object SupabaseProjectParsing {
+
+    fun parseProjects(body: String): List<SupabaseProjectClient.Project>? {
+        val trimmed = body.trim()
+        if (trimmed.isEmpty()) return null
+        return try {
+            val array = if (trimmed.startsWith("[")) {
+                JSONArray(trimmed)
+            } else {
+                JSONObject(trimmed).optJSONArray("projects") ?: return null
+            }
+            val out = mutableListOf<SupabaseProjectClient.Project>()
+            for (i in 0 until array.length()) {
+                val obj = array.optJSONObject(i) ?: continue
+                val ref = obj.optString("id", obj.optString("ref", ""))
+                if (ref.isEmpty()) continue
+                out.add(SupabaseProjectClient.Project(ref, obj.optString("name", "")))
+            }
+            out
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun countProjects(body: String): Int? =
+        parseProjects(body)?.size
+}
+
 class SupabaseProjectClient(
     private val prefs: FloraPreferences,
     private val http: OkHttpClient = BuilderOkHttp.newClient()
 ) {
 
     data class Project(val ref: String, val name: String)
-    data class TokenResult(val accessToken: String, val refreshToken: String)
+    data class TokenResult(
+        val accessToken: String,
+        val refreshToken: String,
+        /** OAuth token response ka `expires_in` (seconds); 0 = provider ne expiry nahi di. */
+        val expiresInSec: Long = 0L
+    )
 
     private data class Raw(val code: Int, val body: String)
 
@@ -80,7 +125,41 @@ class SupabaseProjectClient(
         try {
             val raw = callMgmt("GET", "/v1/projects", tok, null)
             if (raw.code in 200..299) {
-                BuilderOutcome.Ok(JSONObject(raw.body).optJSONArray("projects")?.length() ?: 0)
+                val projects = SupabaseProjectParsing.parseProjects(raw.body)
+                if (projects == null) {
+                    BuilderOutcome.Failure(
+                        BuilderFailureKind.SERVER, "unexpected projects shape"
+                    )
+                } else {
+                    BuilderOutcome.Ok(projects.size)
+                }
+            } else {
+                BuilderOutcome.Failure(BuilderHttp.classifyHttp(raw.code), "http ${raw.code}")
+            }
+        } catch (e: Exception) {
+            BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
+        }
+    }
+
+    /** Project list — Supabase ref chune ke liye (P2-8; whoAmI wahi parse). */
+    suspend fun listProjects(): BuilderOutcome<List<Project>> = withContext(Dispatchers.IO) {
+        val tok = token()
+        if (tok.isEmpty()) {
+            return@withContext BuilderOutcome.Failure(
+                BuilderFailureKind.AUTH_EXPIRED, "not connected"
+            )
+        }
+        try {
+            val raw = callMgmt("GET", "/v1/projects", tok, null)
+            if (raw.code in 200..299) {
+                val projects = SupabaseProjectParsing.parseProjects(raw.body)
+                if (projects == null) {
+                    BuilderOutcome.Failure(
+                        BuilderFailureKind.SERVER, "unexpected projects shape"
+                    )
+                } else {
+                    BuilderOutcome.Ok(projects)
+                }
             } else {
                 BuilderOutcome.Failure(BuilderHttp.classifyHttp(raw.code), "http ${raw.code}")
             }
@@ -211,7 +290,11 @@ class SupabaseProjectClient(
                         BuilderOutcome.Failure(BuilderFailureKind.SERVER, "empty access token")
                     } else {
                         BuilderOutcome.Ok(
-                            TokenResult(access, json.optString("refresh_token", ""))
+                            TokenResult(
+                                access,
+                                json.optString("refresh_token", ""),
+                                json.optLong("expires_in", 0L)
+                            )
                         )
                     }
                 } else {
@@ -255,7 +338,11 @@ class SupabaseProjectClient(
                             BuilderOutcome.Failure(BuilderFailureKind.SERVER, "empty access token")
                         } else {
                             BuilderOutcome.Ok(
-                                TokenResult(access, json.optString("refresh_token", refresh))
+                                TokenResult(
+                                    access,
+                                    json.optString("refresh_token", refresh),
+                                    json.optLong("expires_in", 0L)
+                                )
                             )
                         }
                     } else {

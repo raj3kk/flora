@@ -216,6 +216,33 @@ class BuilderGuardTest {
     }
 
     @Test
+    fun supabaseWhoAmIParsesBareArrayAndWrappedObject() {
+        val bare = "[{\"id\":\"syn-ref-a\",\"name\":\"Alpha\"},{\"id\":\"syn-ref-b\",\"name\":\"Beta\"}]"
+        assertEquals(2, SupabaseProjectParsing.countProjects(bare))
+        val parsed = SupabaseProjectParsing.parseProjects(bare)!!
+        assertEquals("syn-ref-a", parsed[0].ref)
+        assertEquals("Beta", parsed[1].name)
+        val wrapped = "{\"projects\":[{\"id\":\"syn-ref-c\",\"name\":\"Gamma\"}]}"
+        assertEquals(1, SupabaseProjectParsing.countProjects(wrapped))
+        assertEquals("syn-ref-c", SupabaseProjectParsing.parseProjects(wrapped)!![0].ref)
+        // Honest failure shapes — kabhi jhootha 0-count success nahi.
+        assertNull(SupabaseProjectParsing.parseProjects(""))
+        assertNull(SupabaseProjectParsing.parseProjects("not json"))
+        assertNull(SupabaseProjectParsing.parseProjects("{\"other\":[]}"))
+        assertEquals(0, SupabaseProjectParsing.countProjects("[]")!!)
+    }
+
+    @Test
+    fun githubContentsPathEncodedOnce() {
+        assertEquals(
+            "my%20folder/file%20name.kt",
+            GitHubClient.encodeContentsPath("my folder/file name.kt")
+        )
+        assertEquals("plain/path.kt", GitHubClient.encodeContentsPath("plain/path.kt"))
+        assertEquals("a%26b/c%23d.kt", GitHubClient.encodeContentsPath("a&b/c#d.kt"))
+    }
+
+    @Test
     fun redactionMasksTokenHeaders() {
         val cleaned = BuilderRedaction.sanitizeHeaders(
             mapOf(

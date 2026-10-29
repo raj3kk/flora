@@ -43,7 +43,12 @@ class GitHubClient(
 ) {
 
     data class Repo(val fullName: String, val htmlUrl: String)
-    data class TokenResult(val accessToken: String, val refreshToken: String)
+    data class TokenResult(
+        val accessToken: String,
+        val refreshToken: String,
+        /** OAuth token response ka `expires_in` (seconds); 0 = provider ne expiry nahi di. */
+        val expiresInSec: Long = 0L
+    )
 
     private data class Raw(val code: Int, val body: String)
 
@@ -146,7 +151,7 @@ class GitHubClient(
             )
         }
         try {
-            val url = BuilderHosts.githubApiBase() + "/repos/$owner/$repo/contents/$path"
+            val url = BuilderHosts.githubApiBase() + "/repos/$owner/$repo/contents/" + encodeContentsPath(path)
             var sha = ""
             val existing = call("GET", url, tok, null)
             if (existing.code in 200..299) {
@@ -200,7 +205,11 @@ class GitHubClient(
                         BuilderOutcome.Failure(BuilderFailureKind.SERVER, "empty access token")
                     } else {
                         BuilderOutcome.Ok(
-                            TokenResult(access, json.optString("refresh_token", ""))
+                            TokenResult(
+                                access,
+                                json.optString("refresh_token", ""),
+                                json.optLong("expires_in", 0L)
+                            )
                         )
                     }
                 } else {
@@ -244,7 +253,11 @@ class GitHubClient(
                             BuilderOutcome.Failure(BuilderFailureKind.SERVER, "empty access token")
                         } else {
                             BuilderOutcome.Ok(
-                                TokenResult(access, json.optString("refresh_token", refresh))
+                                TokenResult(
+                                    access,
+                                    json.optString("refresh_token", refresh),
+                                    json.optLong("expires_in", 0L)
+                                )
                             )
                         }
                     } else {
@@ -260,6 +273,18 @@ class GitHubClient(
         java.net.URLEncoder.encode(value, "UTF-8")
 
     companion object {
+        /**
+         * Contents-API path encode (P2-11): caller RAW path deta
+         * hai, har segment ek baar encode hota hai (space -> %20,
+         * URLEncoder ka "+" nahi). Pehle se encoded path dobara
+         * mat do — double-encode se bachne ke liye contract RAW
+         * path hi hai. "/" segment separator hi rehta hai.
+         */
+        fun encodeContentsPath(path: String): String =
+            path.split("/").joinToString("/") { segment ->
+                java.net.URLEncoder.encode(segment, "UTF-8").replace("+", "%20")
+            }
+
         /** UI ke liye: is client ka auth kind kya mana jaye (save ke waqt). */
         fun authKindForSavedToken(hasRefreshToken: Boolean): BuilderAuthKind =
             if (hasRefreshToken) BuilderAuthKind.OAUTH else BuilderAuthKind.PAT
