@@ -1122,3 +1122,53 @@ maujood, index bhi 200. Download page ab live hai.
 - Prepush checks: braces/parens balanced (FloraApp 1699/1699, 3382/3382; Manifest 0/0, 6/6). Declaration order: koi naya declaration nahi (sirf removal); termuxConfirm ke saare uses usi ke saath gaye — post-edit tree grep 0. Koi fun/property-setter clash nahi. Sed use nahi hua (python slice removals, har anchor verify — pehle attempt me guardianPinPending end anchor 2 baar mila tha, isliye dialog slice ko start-index se next-anchor par kiya gaya; us attempt me koi partial write nahi hua tha — freshness dobara verify karke hi edits lagaye gaye). Koi key/password file me nahi; web/download.html nahi chheda; workflow file nahi chhedi; koi naya permission nahi (ek permission HATA hai).
 - LIMITS (imaandaari se): "termux me ..." bolne par ab koi Termux branch nahi — command research/brain raaste par jayegi (koi special message nahi joda gaya — scope sirf removal tha); Termux app khud phone par rahe to bhi Flora usse command nahi bhejegi. Phone behaviour Phase 10 checklist me test hoga.
 - IS BUILD ME NAHI: Phase 7/8/9, neural voice, server changes, overlay mic (alag scope), koi naya permission.
+
+## Admin panel FULL build — 2026-10-29 (user order ~09:22 IST)
+- Wajah: admin panel me approve nahi hota tha (admin flag nahi — users row nahi, app-link
+  pending → admin-approve 403; ye code bug nahi hai, isliye approve ka code chheda nahi
+  gaya), payments list RLS se adhoori thi (sirf apni rows), details (email, push presence,
+  totals) nahi dikhte the, UPI sirf app-local tha, keys ka koi panel option nahi tha.
+- web/admin.html (rewrite): Users & Licences (search + per-user card: email, device short,
+  ADMIN badge, licence plan/status/expiry, push haan/naa, usage total); Payments (ALL
+  statuses + filter buttons + detail: amount, UTR, note, user email, dates, reviewed_by,
+  reject_reason; approve/reject wahi admin-approve call); App connection table (device +
+  push presence + token updated_at; "last active" nahi likha); Usage totals + per-user
+  table; Push (templates-only: trial_ending, pro_expiry; user select all/ek; all par sirf
+  token wale, skip count ke saath); Keys (present/missing booleans + set form + confirm
+  delete; value kabhi display/log nahi); UPI (current + edit + save; pay page ke liye);
+  Audit (unchanged); Plans (view-only, owner-gated note); Secrets status text nayi
+  reality par update. JS syntax node --check se OK; saare section ids ek-ek baar mile.
+- supabase/functions/admin-list v2: + auth emails (listUsers id-match) + push-token
+  presence (value kabhi nahi, sirf haan/naa + updated_at) + usage totals (mili rows ka
+  jod). admin-payments NEW: admin JWT + is_admin check, full list status filter ke
+  saath, limit 200, user email map; approve/reject isme nahi. admin-keys NEW: allowlist
+  gemini/groq/deepgram, status/set/delete, value kabhi response/log me nahi. admin-
+  settings NEW: allowlist sirf upi_vpa, get/set, basic VPA shape check. public-settings
+  NEW: no auth, sirf { upi_vpa } (null jab unset); pay page anon-key Bearer bhejta hai.
+- supabase/functions/brain-proxy v3 + tts-proxy v2: key resolution = env FIRST, else
+  provider_keys DB row; koi key na mile to pehla wala 503; JWT gate/model chain/caps
+  bilkul wahi.
+- supabase/sql/admin_panel_tables.sql NEW: provider_keys + admin_settings (RLS ON, koi
+  policy nahi — service-role-only by design) + honest comment (at-rest encrypted nahi;
+  dashboard secrets zyada secure + pehle jeetenge).
+- web/pay.html: public-settings se UPI ID dikhata hai; unset ho to imaandaar fallback
+  ("UPI ID abhi set nahi hai — app ke Pro screen par dekho"); jhootha UPI kabhi nahi.
+- DEPLOY (dashboard, alag browser step — is commit se deploy NAHI hota): order: (1) SQL
+  file chalao, (2) functions deploy karo: admin-list (replace), admin-payments (new),
+  admin-keys (new), admin-settings (new), public-settings (new), brain-proxy (replace),
+  tts-proxy (replace), send-push (REDEPLOY — local copy se, repo me nahi hai; isme
+  admin check + templates wala version live aana chahiye). admin-approve/licence-verify
+  dobara deploy karne ki zaroorat nahi (pehle wale deploy ho chuke hain).
+- LIVE TEST ke liye chahiye: admin unblock (user ka app-link phone step + is_admin=true)
+  — bina iske admin functions 403 denge, ye expected hai, bug nahi.
+- IMAANDAAR LIMITS: DB keys at-rest encrypted nahi (RLS + service-role-only hi
+  protection); env precedence (dashboard secret hamesha jeetega); push templates-only
+  (freeform title/body function reject karta hai; "all" sirf token walon ko jata hai);
+  price edit owner-gated hi rahega; app-side UPI sync IS BUILD ME NAHI — panel UPI
+  website pay page ke liye hai, app apna local VPA tab tak dikhata rahega jab tak app
+  build server UPI na padhne lage (follow-up); usage totals mili hui rows (limit 1000)
+  ka jod hain; emails 1000 users tak (listUsers paging cap).
+- OLD DESIGN CHANGE (user order se supersede): 2026-10-28 design kehta tha keys sirf
+  Supabase dashboard se set hongi, panel par kabhi nahi. User ne panel me key option
+  maanga → panel-set keys ban gayi hain, par VALUES panel par kabhi display nahi hongi
+  (sirf present/missing + set form); dashboard secrets zyada secure raasta bana rahega.

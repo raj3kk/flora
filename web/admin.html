@@ -5,13 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flora Admin</title>
 <!--
-  Flora Admin Panel — payments approvals admin-approve Edge Function
-  se hote hain (server-side admin check + licence activation +
-  audit insert, sab function ke andar). Client kabhi licence ya
-  payment status seedha update nahi karta.
-  Is page me koi secret value NAHI hai aur kabhi nahi hogi:
+  Flora Admin Panel — FULL build 2026-10-29 (admin panel expansion).
+  Payments approvals admin-approve Edge Function se hote hain
+  (server-side admin check + licence activation + audit insert,
+  sab function ke andar). Client kabhi licence ya payment status
+  seedha update nahi karta.
+  Lists (users, payments, usage, licences) service-role functions
+  se aati hain (admin-list v2, admin-payments) — RLS wali tables
+  par koi policy nahi hai, isliye client-side list hamesha khaali
+  aati hai. Koi bhi list bina admin check ke nahi milti.
+  Is page me koi secret/key VALUE nahi hai aur kabhi nahi hogi:
   SUPABASE_URL / ANON_KEY sirf publishable client config hai.
-  Service role key yahan kabhi nahi aayegi.
+  Service role key yahan kabhi nahi aayegi. Keys section sirf
+  present/missing booleans dikhata hai + set/delete form deta
+  hai; set ki gayi value wapas kabhi display nahi hoti.
   Approve tabhi chalega jab login karne wale ki users row par
   is_admin=true ho — non-admin ko function 403 dega. Admin row
   app link ke baad banti hai (device_id zaroori hai).
@@ -29,7 +36,8 @@ h2{font-size:1.2em;margin:0 0 8px}
 button{padding:9px 16px;font-size:15px;border-radius:10px;border:1px solid #ea580c;background:#ea580c;color:#fff;cursor:pointer}
 button.ghost{background:#fff;color:#ea580c}
 button.danger{background:#fff;color:#b91c1c;border-color:#fca5a5}
-input{padding:9px;font-size:15px;border-radius:10px;border:1px solid #fed7aa;width:100%;max-width:320px}
+button.small{padding:6px 12px;font-size:14px}
+input,select{padding:9px;font-size:15px;border-radius:10px;border:1px solid #fed7aa;width:100%;max-width:320px}
 label{display:block;margin:8px 0 4px;font-weight:600}
 .note{color:#555;font-size:14px}
 .badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;font-weight:700}
@@ -42,6 +50,8 @@ label{display:block;margin:8px 0 4px;font-weight:600}
 #admin-banner{display:none}
 #admin-banner.show{display:block}
 #login-section.hide{display:none}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{border-bottom:1px solid #f3f4f6;padding:8px 6px;text-align:left;vertical-align:top}
 </style>
 </head>
 <body>
@@ -78,21 +88,79 @@ Admin banne ke liye: (1) app me Settings → “Website account link” me isi e
 
 <section class="card">
 <h2>Payments / UTR approvals <span class="badge orange" id="pending-count"></span></h2>
-<p class="note">Pending list: amount + note + UTR match karke approve (licence active) ya reject (reason zaroori) karo. Har approval admin_audit me darj hoga.</p>
+<p class="note">Saare users ke payments (server function se — RLS list yahan kaam nahi karti). Amount + UTR + note match karke approve (licence active) ya reject (reason zaroori) karo. Har approval admin_audit me darj hoga. Approve/reject sirf admin-approve function se hota hai.</p>
+<div class="row">
+<button type="button" class="small ghost" data-payfilter="all">Sab</button>
+<button type="button" class="small ghost" data-payfilter="pending">Pending</button>
+<button type="button" class="small ghost" data-payfilter="approved">Approved</button>
+<button type="button" class="small ghost" data-payfilter="rejected">Rejected</button>
+</div>
 <p class="note" id="action-status"></p>
 <div id="payments-list">Login ke baad list yahan aayegi.</div>
 </section>
 
 <section class="card">
 <h2>Users &amp; Licences</h2>
-<p class="note">List, plan, status, device. Licence is page se activate/revoke nahi hoti — licence sirf payment approval se active hoti hai.</p>
+<p class="note">Har user: email, device, admin badge, licence plan/status/expiry, push token (haan/naa), usage total. Email auth se aati hai; token value kabhi nahi aati.</p>
+<label>Search (email / device) <input id="user-search" type="text" placeholder="email ya device id ka hissa"></label>
 <div id="users-list">Login ke baad list yahan aayegi.</div>
 </section>
 
 <section class="card">
+<h2>App connection</h2>
+<p class="note">Kaunsa user app se juda hai: device + push token presence + token ki aakhri update. "Last active" nahi likha hai — sirf token-updated time hai, kyunki token update hi connection ka saboot hai.</p>
+<div id="appconn-list">Login ke baad list yahan aayegi.</div>
+</section>
+
+<section class="card">
 <h2>Usage</h2>
-<p class="note">Har user ka daily talk seconds vs 600 sec free limit.</p>
+<p class="note">Har user ka total talk seconds + tool calls (mili hui usage rows ka jod). Free limit 600 talk sec/day hai — neeche wala jod all-time hai, roz ka limit isse alag check hota hai.</p>
+<p class="note" id="usage-totals"></p>
 <div id="usage-list">Login ke baad list yahan aayegi.</div>
+</section>
+
+<section class="card">
+<h2>Push bhejo</h2>
+<p class="note">Sirf fixed templates chalte hain (send-push function manmana title/body reject karta hai). "Sabhi users" par sirf un users ko bheja jayega jinke paas push token hai — bina token wale skip honge aur count me dikhenge.</p>
+<label>Template
+<select id="push-template">
+<option value="trial_ending">Trial khatam — "Flora trial khatam hone wala hai"</option>
+<option value="pro_expiry">Pro expiry — "Flora Pro khatam hone wala hai"</option>
+</select>
+</label>
+<p class="note" id="push-template-text"></p>
+<label>User
+<select id="push-user">
+<option value="__all__">Sabhi users (token wale)</option>
+</select>
+</label>
+<div class="row"><button id="push-send-btn" type="button">Push bhejo</button></div>
+<p class="note" id="push-status"></p>
+<div id="push-results"></div>
+</section>
+
+<section class="card">
+<h2>Keys (provider keys)</h2>
+<p class="note">Status sirf present/missing batata hai — key ki VALUE kabhi yahan nahi dikhegi, kabhi log nahi hogi. Dashboard secrets (env) zyada secure hain aur hamesha pehle jeetenge; yahan set ki gayi key sirf fallback hai (jab dashboard secret na ho). Delete karne se pehle confirm poochha jayega.</p>
+<div id="keys-list">Login ke baad status yahan aayega.</div>
+<label>Provider
+<select id="key-provider">
+<option value="gemini">Gemini (GEMINI_API_KEY)</option>
+<option value="groq">Groq (GROQ_API_KEY)</option>
+<option value="deepgram">Deepgram (DEEPGRAM_API_KEY)</option>
+</select>
+</label>
+<label>Key value <input id="key-value" type="password" placeholder="key yahan daalo — save ke baad dobara nahi dikhegi"></label>
+<div class="row"><button id="key-save-btn" type="button">Key save karo</button></div>
+<p class="note" id="key-status"></p>
+</section>
+
+<section class="card">
+<h2>UPI (website pay page)</h2>
+<p class="note">Ye UPI ID website ke pay page par dikhega, taaki customer ko app ke Pro screen par na dekhna pade. App apna local UPI VPA tab tak dikhata rahega jab tak app build server UPI na padhne lage (wo follow-up kaam hai).</p>
+<label>UPI ID <input id="upi-input" type="text" placeholder="naam@bank"></label>
+<div class="row"><button id="upi-save-btn" type="button">UPI save karo</button></div>
+<p class="note" id="upi-status"></p>
 </section>
 
 <section class="card">
@@ -103,13 +171,13 @@ Admin banne ke liye: (1) app me Settings → “Website account link” me isi e
 
 <section class="card">
 <h2>Plans</h2>
-<p class="note">Sirf view. Price change owner-gated hai — admin propose karega, owner confirm karega.</p>
+<p class="note">Sirf view. Price change owner-gated hai — admin propose karega, owner confirm karega. Is panel se price edit nahi hota.</p>
 <p>Free: 600 talk sec/day, basic tools. Pro: ₹199/mahina, unlimited talk, sab tools, FCM push. (Live wallpaper aur conversation mode abhi available nahi hain — baad me aayenge.)</p>
 </section>
 
 <section class="card">
 <h2>Secrets status</h2>
-<p class="note">By design: secrets ki values is page par kabhi nahi aayengi, edit bhi nahi hogi. Status sirf Supabase dashboard (owner-only) se dekha ja sakta hai.</p>
+<p class="note">Do tareeke hain: (1) Supabase dashboard secrets (env) — zyada secure, hamesha pehle jeetenge; inki values/status is panel par kabhi nahi aayengi, sirf Supabase dashboard (owner-only) se dekhi ja sakti hain. (2) Panel DB keys (provider_keys table) — service-role-only, at-rest encrypted nahi, sirf fallback; inka status upar Keys section me booleans me dikhta hai. Key ki VALUE kabhi panel par nahi dikhegi.</p>
 </section>
 </main>
 <footer>
@@ -122,9 +190,32 @@ const SUPABASE_ANON_KEY = "sb_publishable_qMjX-cw11dB_Y9nT8IlVzw_nPup-Yxe";
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let adminSession = null;
 let isAdmin = false;
+let adminData = null;
+let payFilter = "all";
 
 function shortId(id) { return (id || "").slice(0, 8) + "…"; }
 function setAction(msg) { document.getElementById('action-status').textContent = msg || ""; }
+function fmtErr(d, res) {
+  if (d && typeof d.error === "string") return d.error;
+  if (d && d.error && d.error.message) return d.error.message;
+  return "HTTP " + res.status;
+}
+async function callFn(name, body) {
+  const res = await fetch(SUPABASE_URL + "/functions/v1/" + name, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + adminSession.access_token,
+    },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("Function abhi deploy nahi hua hai — dashboard deploy checklist dekho (" + name + ")");
+    throw new Error(fmtErr(data, res));
+  }
+  return data;
+}
 
 async function callApprove(paymentId, action, rejectReason) {
   const res = await fetch(SUPABASE_URL + "/functions/v1/admin-approve", {
@@ -141,103 +232,266 @@ async function callApprove(paymentId, action, rejectReason) {
 }
 
 async function loadPayments() {
-  const { data, error } = await client
-    .from("payment_submissions")
-    .select("id,user_id,amount_paisa,utr,note,status,created_at")
-    .eq("status", "pending").order("created_at", { ascending: true });
   const el = document.getElementById('payments-list');
   const badge = document.getElementById('pending-count');
-  if (error) {
-    el.textContent = "Load fail: " + error.message +
-      " (Non-admin ho to yehi dikhega — upar wala banner padho.)";
+  try {
+    const body = payFilter === "all" ? {} : { status: payFilter };
+    const data = await callFn("admin-payments", body);
+    const rows = data.payments || [];
+    badge.textContent = rows.length ? rows.length + " " + payFilter : "0 " + payFilter;
+    if (!rows.length) { el.textContent = "Is filter me koi payment nahi hai."; return; }
+    el.innerHTML = "";
+    rows.forEach(row => {
+      const div = document.createElement('div');
+      div.className = "item";
+      div.innerHTML = "<strong>₹" + (row.amount_paisa / 100) + "</strong> | UTR " + row.utr +
+        " | " + (row.note || "") + " | status " + row.status +
+        "<div class='meta'>user " + (row.user_email || shortId(row.user_id)) +
+        " | " + row.created_at +
+        (row.reviewed_by ? " | reviewed " + shortId(row.reviewed_by) + " (" + (row.reviewed_at || "") + ")" : "") +
+        (row.reject_reason ? " | reason: " + row.reject_reason : "") + "</div>";
+      if (row.status === "pending") {
+        const ok = document.createElement('button');
+        ok.textContent = "Approve";
+        ok.onclick = async () => {
+          try {
+            const r = await callApprove(row.id, "approve");
+            setAction("Approved. Licence active, expires: " + (r.expires_at || "?"));
+          } catch (e) { setAction("Approve fail: " + e.message); return; }
+          loadPayments(); loadAudit();
+        };
+        const no = document.createElement('button');
+        no.textContent = "Reject";
+        no.className = "danger";
+        no.onclick = async () => {
+          const reason = prompt("Reject reason (zaroori):");
+          if (!reason) return;
+          try { await callApprove(row.id, "reject", reason); setAction("Rejected."); }
+          catch (e) { setAction("Reject fail: " + e.message); return; }
+          loadPayments(); loadAudit();
+        };
+        const btnRow = document.createElement('div');
+        btnRow.className = "row";
+        btnRow.appendChild(ok); btnRow.appendChild(no);
+        div.appendChild(btnRow);
+      }
+      el.appendChild(div);
+    });
+  } catch (e) {
+    el.textContent = "Load fail: " + e.message;
     badge.textContent = "";
-    return;
   }
-  badge.textContent = data.length ? data.length + " pending" : "0 pending";
-  if (!data.length) { el.textContent = "Koi pending payment nahi hai."; return; }
+}
+
+function renderUsers() {
+  const el = document.getElementById('users-list');
+  if (!adminData) { el.textContent = "Login ke baad list yahan aayegi."; return; }
+  const q = (document.getElementById('user-search').value || "").toLowerCase();
+  const licByUser = {};
+  (adminData.licences || []).forEach(l => { licByUser[l.user_id] = l; });
+  const users = (adminData.users || []).filter(u => {
+    if (!q) return true;
+    const email = (adminData.emails || {})[u.id] || "";
+    return email.toLowerCase().includes(q) || (u.device_id || "").toLowerCase().includes(q) || (u.id || "").toLowerCase().includes(q);
+  });
+  if (!users.length) { el.textContent = "Koi user nahi mila."; return; }
   el.innerHTML = "";
-  data.forEach(row => {
+  users.forEach(u => {
     const div = document.createElement('div');
     div.className = "item";
-    div.innerHTML = "<strong>₹" + (row.amount_paisa / 100) + "</strong> | UTR " + row.utr +
-      " | " + (row.note || "") + "<div class='meta'>user " + shortId(row.user_id) +
-      " | " + row.created_at + "</div>";
-    const ok = document.createElement('button');
-    ok.textContent = "Approve";
-    ok.onclick = async () => {
-      try {
-        const r = await callApprove(row.id, "approve");
-        setAction("Approved. Licence active, expires: " + (r.expires_at || "?"));
-      } catch (e) { setAction("Approve fail: " + e.message); return; }
-      loadPayments(); loadAudit();
-    };
-    const no = document.createElement('button');
-    no.textContent = "Reject";
-    no.className = "danger";
-    no.onclick = async () => {
-      const reason = prompt("Reject reason (zaroori):");
-      if (!reason) return;
-      try { await callApprove(row.id, "reject", reason); setAction("Rejected."); }
-      catch (e) { setAction("Reject fail: " + e.message); return; }
-      loadPayments(); loadAudit();
-    };
-    const btnRow = document.createElement('div');
-    btnRow.className = "row";
-    btnRow.appendChild(ok); btnRow.appendChild(no);
-    div.appendChild(btnRow); el.appendChild(div);
+    const lic = licByUser[u.id];
+    const push = (adminData.push || {})[u.id];
+    const tot = (adminData.usage_totals || {})[u.id];
+    div.innerHTML = "<strong>" + ((adminData.emails || {})[u.id] || ("user " + shortId(u.id))) + "</strong>" +
+      (u.is_admin ? " <span class='badge green'>ADMIN</span>" : "") +
+      "<div class='meta'>device " + (u.device_id ? shortId(u.device_id) : "?") +
+      (lic ? " | <span class='badge orange'>" + lic.plan_id + "/" + lic.status + "</span>" +
+        (lic.expires_at ? " (exp " + lic.expires_at + ")" : "") : " | <span class='badge grey'>no licence</span>") +
+      " | push token: " + (push ? "haan (" + (push.updated_at || "?") + ")" : "nahi") +
+      (tot ? " | usage: " + tot.talk_seconds + "s / " + tot.tool_calls + " tools" : "") + "</div>";
+    el.appendChild(div);
   });
 }
 
-async function loadAdminList() {
-  const res = await fetch(SUPABASE_URL + "/functions/v1/admin-list", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer " + adminSession.access_token,
-    },
-    body: JSON.stringify({}),
+function renderAppTable() {
+  const el = document.getElementById('appconn-list');
+  if (!adminData) { el.textContent = "Login ke baad list yahan aayegi."; return; }
+  const users = adminData.users || [];
+  if (!users.length) { el.textContent = "Koi user nahi hai."; return; }
+  let html = "<table><tr><th>User</th><th>Device</th><th>Push token</th><th>Token updated</th></tr>";
+  users.forEach(u => {
+    const push = (adminData.push || {})[u.id];
+    html += "<tr><td>" + ((adminData.emails || {})[u.id] || shortId(u.id)) + "</td>" +
+      "<td>" + (u.device_id ? shortId(u.device_id) : "?") + "</td>" +
+      "<td>" + (push ? "haan" : "nahi") + "</td>" +
+      "<td>" + (push && push.updated_at ? push.updated_at : "—") + "</td></tr>";
   });
-  const data = await res.json().catch(() => ({}));
+  html += "</table>";
+  el.innerHTML = html;
+}
+
+function renderUsage() {
+  const totEl = document.getElementById('usage-totals');
+  const el = document.getElementById('usage-list');
+  if (!adminData) { el.textContent = "Login ke baad list yahan aayegi."; return; }
+  const totals = adminData.usage_totals || {};
+  let talkAll = 0, toolsAll = 0;
+  Object.values(totals).forEach(t => { talkAll += t.talk_seconds; toolsAll += t.tool_calls; });
+  totEl.textContent = "Total: " + talkAll + "s talk, " + toolsAll + " tools, " + Object.keys(totals).length + " users (mili hui rows ka jod).";
+  const rows = Object.entries(totals).sort((a, b) => b[1].talk_seconds - a[1].talk_seconds);
+  if (!rows.length) { el.textContent = "Koi usage nahi hai."; return; }
+  let html = "<table><tr><th>User</th><th>Talk sec</th><th>Tools</th><th>Days</th></tr>";
+  rows.forEach(([uid, t]) => {
+    html += "<tr><td>" + ((adminData.emails || {})[uid] || shortId(uid)) + "</td>" +
+      "<td>" + t.talk_seconds + "</td><td>" + t.tool_calls + "</td><td>" + t.days + "</td></tr>";
+  });
+  html += "</table>";
+  el.innerHTML = html;
+}
+
+async function loadAdminList() {
   const uEl = document.getElementById('users-list');
   const gEl = document.getElementById('usage-list');
-  if (!res.ok) {
-    uEl.textContent = "Load fail: " + (data.error || ("HTTP " + res.status)) +
-      " (Non-admin ho to yehi dikhega — upar wala banner padho.)";
-    gEl.textContent = "Load fail: " + (data.error || ("HTTP " + res.status));
-    return;
-  }
-  isAdmin = true;
-  document.getElementById('admin-banner').classList.remove('show');
-  document.getElementById('who-line').textContent =
-    "Login hai: " + adminSession.user.email + " — ADMIN";
-  const licByUser = {};
-  (data.licences || []).forEach(l => { licByUser[l.user_id] = l; });
-  if (!(data.users || []).length) { uEl.textContent = "Koi user nahi hai."; }
-  else {
-    uEl.innerHTML = "";
-    data.users.forEach(u => {
-      const div = document.createElement('div');
-      div.className = "item";
-      const lic = licByUser[u.id];
-      div.innerHTML = "user " + shortId(u.id) + " | device " + (u.device_id ? shortId(u.device_id) : "?") +
-        (u.is_admin ? " <span class='badge green'>ADMIN</span>" : "") +
-        (lic ? " <span class='badge orange'>" + lic.plan_id + "/" + lic.status + "</span>" +
-          (lic.expires_at ? " <span class='meta'>(exp " + lic.expires_at + ")</span>" : "") : " <span class='badge grey'>no licence</span>");
-      uEl.appendChild(div);
-    });
-  }
-  if (!(data.usage || []).length) { gEl.textContent = "Koi usage nahi hai."; }
-  else {
-    gEl.innerHTML = "";
-    data.usage.forEach(r => {
-      const div = document.createElement('div');
-      div.className = "item";
-      div.textContent = r.day + " | user " + shortId(r.user_id) +
-        " | " + r.talk_seconds + "s | " + r.tool_calls + " tools";
-      gEl.appendChild(div);
-    });
+  try {
+    const data = await callFn("admin-list", {});
+    adminData = data;
+    isAdmin = true;
+    document.getElementById('admin-banner').classList.remove('show');
+    document.getElementById('who-line').textContent =
+      "Login hai: " + adminSession.user.email + " — ADMIN";
+    renderUsers(); renderAppTable(); renderUsage(); fillPushUsers();
+  } catch (e) {
+    uEl.textContent = "Load fail: " + e.message + " (Non-admin ho to yehi dikhega — upar wala banner padho.)";
+    gEl.textContent = "Load fail: " + e.message;
   }
 }
+
+function fillPushUsers() {
+  const sel = document.getElementById('push-user');
+  sel.innerHTML = "<option value=\"__all__\">Sabhi users (token wale)</option>";
+  (adminData.users || []).forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.id;
+    opt.textContent = (adminData.emails || {})[u.id] || shortId(u.id);
+    sel.appendChild(opt);
+  });
+}
+
+const PUSH_TEMPLATES = {
+  trial_ending: "Flora trial khatam hone wala hai — Aapka free trial khatam hone wala hai. Pro lene ke liye app me dekho.",
+  pro_expiry: "Flora Pro khatam hone wala hai — Aapka Pro plan khatam hone wala hai. Renew karne ke liye app me dekho.",
+};
+function refreshPushTemplateText() {
+  document.getElementById('push-template-text').textContent =
+    "Bheja jayega: " + PUSH_TEMPLATES[document.getElementById('push-template').value];
+}
+document.getElementById('push-template').addEventListener('change', refreshPushTemplateText);
+refreshPushTemplateText();
+
+document.getElementById('push-send-btn').addEventListener('click', async () => {
+  const st = document.getElementById('push-status');
+  const resEl = document.getElementById('push-results');
+  const template = document.getElementById('push-template').value;
+  const target = document.getElementById('push-user').value;
+  st.textContent = "Bhej raha hai…";
+  resEl.innerHTML = "";
+  try {
+    if (target === "__all__") {
+      const withToken = (adminData.users || []).filter(u => (adminData.push || {})[u.id]);
+      const skipped = (adminData.users || []).length - withToken.length;
+      let ok = 0, fail = 0;
+      const lines = [];
+      for (const u of withToken) {
+        try {
+          await callFn("send-push", { user_id: u.id, template });
+          ok++;
+          lines.push("OK: " + ((adminData.emails || {})[u.id] || shortId(u.id)));
+        } catch (e) {
+          fail++;
+          lines.push("FAIL: " + ((adminData.emails || {})[u.id] || shortId(u.id)) + " — " + e.message);
+        }
+      }
+      st.textContent = "Ho gaya: " + ok + " bheje, " + fail + " fail, " + skipped + " bina token skip.";
+      resEl.innerHTML = lines.map(l => "<div class='item'>" + l + "</div>").join("");
+    } else {
+      const data = await callFn("send-push", { user_id: target, template });
+      st.textContent = "Push bhej diya gaya.";
+      resEl.innerHTML = "<div class='item'>" + JSON.stringify(data).slice(0, 300) + "</div>";
+    }
+  } catch (e) {
+    st.textContent = "Push fail: " + e.message;
+  }
+});
+
+async function loadKeys() {
+  const el = document.getElementById('keys-list');
+  try {
+    const data = await callFn("admin-keys", { action: "status" });
+    const labels = { gemini: "Gemini (GEMINI_API_KEY)", groq: "Groq (GROQ_API_KEY)", deepgram: "Deepgram (DEEPGRAM_API_KEY)" };
+    el.innerHTML = "";
+    Object.keys(labels).forEach(p => {
+      const div = document.createElement('div');
+      div.className = "item";
+      div.innerHTML = "<strong>" + labels[p] + "</strong> " +
+        (data.providers[p] ? "<span class='badge green'>Present</span>" : "<span class='badge grey'>Missing</span>");
+      if (data.providers[p]) {
+        const del = document.createElement('button');
+        del.textContent = "Delete";
+        del.className = "danger small";
+        del.onclick = async () => {
+          if (!confirm(labels[p] + " delete karna hai? Iske baad sirf dashboard secret (agar ho) kaam karega.")) return;
+          try { await callFn("admin-keys", { action: "delete", provider: p }); document.getElementById('key-status').textContent = "Deleted."; }
+          catch (e) { document.getElementById('key-status').textContent = "Delete fail: " + e.message; return; }
+          loadKeys();
+        };
+        const row = document.createElement('div');
+        row.className = "row";
+        row.appendChild(del);
+        div.appendChild(row);
+      }
+      el.appendChild(div);
+    });
+  } catch (e) {
+    el.textContent = "Load fail: " + e.message;
+  }
+}
+
+document.getElementById('key-save-btn').addEventListener('click', async () => {
+  const st = document.getElementById('key-status');
+  const provider = document.getElementById('key-provider').value;
+  const value = document.getElementById('key-value').value;
+  if (!value.trim()) { st.textContent = "Key value zaroori hai."; return; }
+  try {
+    await callFn("admin-keys", { action: "set", provider, key_value: value });
+    document.getElementById('key-value').value = "";
+    st.textContent = "Key save ho gayi (value dobara nahi dikhegi).";
+    loadKeys();
+  } catch (e) { st.textContent = "Save fail: " + e.message; }
+});
+
+async function loadUpi() {
+  const st = document.getElementById('upi-status');
+  try {
+    const data = await callFn("admin-settings", { action: "get" });
+    document.getElementById('upi-input').value = data.upi_vpa || "";
+    st.textContent = data.upi_vpa ? "Current UPI pay page par dikh raha hai." : "UPI abhi set nahi hai — pay page par fallback text dikhega.";
+  } catch (e) {
+    st.textContent = "Load fail: " + e.message;
+  }
+}
+
+document.getElementById('upi-save-btn').addEventListener('click', async () => {
+  const st = document.getElementById('upi-status');
+  const value = document.getElementById('upi-input').value.trim();
+  if (!/^[A-Za-z0-9._-]{2,}@[A-Za-z0-9.-]{2,}$/.test(value)) {
+    st.textContent = "Sahi UPI ID daalo (jaise naam@bank).";
+    return;
+  }
+  try {
+    await callFn("admin-settings", { action: "set", value });
+    st.textContent = "UPI save ho gaya — pay page par dikhne lagega.";
+  } catch (e) { st.textContent = "Save fail: " + e.message; }
+});
 
 async function loadAudit() {
   const { data, error } = await client
@@ -261,7 +515,7 @@ async function loadAudit() {
   });
 }
 
-function loadAll() { loadPayments(); loadAudit(); loadAdminList(); }
+function loadAll() { loadPayments(); loadAudit(); loadAdminList(); loadKeys(); loadUpi(); }
 
 async function afterLogin(session, user) {
   adminSession = session;
@@ -288,6 +542,15 @@ document.getElementById('refresh-btn').addEventListener('click', () => {
   setAction("Refresh ho raha hai…");
   loadAll();
   setAction("");
+});
+document.querySelectorAll('[data-payfilter]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    payFilter = btn.getAttribute('data-payfilter');
+    if (adminSession) loadPayments();
+  });
+});
+document.getElementById('user-search').addEventListener('input', () => {
+  if (adminData) renderUsers();
 });
 (async () => {
   const { data: { session } } = await client.auth.getSession();

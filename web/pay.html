@@ -13,6 +13,7 @@
 bhejo (app ke Settings me owner ka UPI ID hota hai). Step 2: yahan
 login karke UTR + note submit karo. Step 3: admin approve karega —
 tab licence active hoga. Koi auto-charge nahi.</p>
+<p class="note">UPI ID: <b id="upi-id">load ho raha hai…</b></p>
 <p class="note"><b>Zaroori — pehle app link karo:</b> approval par licence
 tabhi active hogi jab tumhara app account website account se juda
 ho. App ke Settings me "Website account link" me wahi email aur
@@ -40,6 +41,27 @@ document.getElementById('btn').addEventListener('click', async () => {
   if (error) { st.textContent = "Submit fail: " + error.message; return; }
   st.innerHTML = 'UTR submit ho gaya. Admin approval ka intezar karo. Status <a href="account.html">Account page</a> par dekh sakte ho.';
 });
+</script>
+<script>
+// Server UPI ID dikhao (public-settings se). Set na ho to imaandaar
+// fallback — jhootha UPI kabhi nahi dikhana. Anon-key Bearer isliye
+// bheja jata hai taaki gateway JWT verification ON ho to bhi call
+// pass ho jaye; function khud koi auth check nahi karta (UPI public
+// payment address hai, secret nahi).
+(async () => {
+  const el = document.getElementById('upi-id');
+  const fallback = "UPI ID abhi set nahi hai — app ke Pro screen par dekho";
+  try {
+    const r = await fetch("https://keomyweghrmhqglaxmyv.supabase.co/functions/v1/public-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer sb_publishable_qMjX-cw11dB_Y9nT8IlVzw_nPup-Yxe" },
+    });
+    const d = await r.json().catch(() => ({}));
+    el.textContent = (d && d.upi_vpa) ? d.upi_vpa : fallback;
+  } catch (_e) {
+    el.textContent = fallback;
+  }
+})();
 </script>
 </body>
 </html>

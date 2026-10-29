@@ -6,6 +6,11 @@
 // kare to 403 — koi doosre user ke naam par key burn nahi kar sakta.
 // Provider keys server-side ONLY (env, never in repo/app):
 //   GEMINI_API_KEY, GROQ_API_KEY (set in Supabase dashboard by owner).
+// v3 (admin panel build 2026-10-29): key resolution = env FIRST
+//   (dashboard secret jeetega), else provider_keys DB row
+//   (panel se set ki gayi key, service-role read). Koi key na
+//   mile to pehle wala 503 hi rahega. Baaki logic (JWT gate,
+//   model chain, caps) bilkul wahi hai.
 // Order: Gemini first, Groq fallback, then honest error. Keys never logged.
 // Style: short-casual replies default (same instruction as app BrainClient).
 // Prompt cap: 4000 chars (lambi prompt reject, cost control).
@@ -35,6 +40,18 @@ serve(async (req) => {
   const { data: userData, error: userErr } = await anon.auth.getUser();
   if (userErr || !userData?.user) return json({ error: "unauthorized" }, 401);
   const jwtUserId = userData.user.id;
+  const svc = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+  // Key resolution (v3): env FIRST, else provider_keys DB row.
+  // DB key kabhi log nahi hogi, kabhi response me nahi jayegi.
+  async function resolveKey(provider: string, envName: string): Promise<string> {
+    const envKey = Deno.env.get(envName) || "";
+    if (envKey) return envKey;
+    try {
+      const { data } = await svc.from("provider_keys").select("key_value").eq("provider", provider).maybeSingle();
+      return data?.key_value || "";
+    } catch (_e) { return ""; }
+  }
 
   const { user_id, device_id, prompt } = await req.json().catch(() => ({}));
   if (!user_id || !device_id || typeof prompt !== "string" || !prompt.trim()) {
@@ -45,7 +62,7 @@ serve(async (req) => {
     return json({ error: "prompt too long (max 4000 chars)" }, 400);
   }
 
-  const geminiKey = Deno.env.get("GEMINI_API_KEY") || "";
+  const geminiKey = await resolveKey("gemini", "GEMINI_API_KEY");
   if (geminiKey) {
     // v2.22: chain me verified-working models bhi (user key par
     // 2.5-flash/lite 404 dete hain; flash-lite-latest + 3.5 chalte hain).
@@ -70,7 +87,7 @@ serve(async (req) => {
     }
   }
 
-  const groqKey = Deno.env.get("GROQ_API_KEY") || "";
+  const groqKey = await resolveKey("groq", "GROQ_API_KEY");
   if (groqKey) {
     try {
       const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {

@@ -3,6 +3,9 @@
 // JWT gate brain-proxy step 2 jaisa: anon client se user nikalo,
 // na mile to 401. Provider: Deepgram TTS (server-side key ONLY).
 // Key unset ho to 503 "tts keys not configured" — jhootha audio nahi.
+// v2 (admin panel build 2026-10-29): key resolution = env FIRST
+//   (DEEPGRAM_API_KEY dashboard secret jeetega), else provider_keys
+//   DB row ("deepgram", panel se set). Baaki logic wahi hai.
 // Text cap: 1000 chars (cost control). User ka text kabhi log nahi.
 // DEPLOY + KEYS PENDING: dashboard editor se deploy + DEEPGRAM_API_KEY
 // set karna baaki hai; app wiring (system TTS se proxy par) uske baad
@@ -22,6 +25,17 @@ serve(async (req) => {
   const anon = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } });
   const { data: userData, error: userErr } = await anon.auth.getUser();
   if (userErr || !userData?.user) return json({ error: "unauthorized" }, 401);
+  const svc = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+  // Key resolution (v2): env FIRST, else provider_keys DB row.
+  async function resolveKey(provider: string, envName: string): Promise<string> {
+    const envKey = Deno.env.get(envName) || "";
+    if (envKey) return envKey;
+    try {
+      const { data } = await svc.from("provider_keys").select("key_value").eq("provider", provider).maybeSingle();
+      return data?.key_value || "";
+    } catch (_e) { return ""; }
+  }
 
   const { text } = await req.json().catch(() => ({}));
   if (typeof text !== "string" || !text.trim()) {
@@ -31,7 +45,7 @@ serve(async (req) => {
     return json({ error: "text too long (max 1000 chars)" }, 400);
   }
 
-  const dgKey = Deno.env.get("DEEPGRAM_API_KEY") || "";
+  const dgKey = await resolveKey("deepgram", "DEEPGRAM_API_KEY");
   if (!dgKey) return json({ error: "tts keys not configured" }, 503);
   try {
     const r = await fetch(

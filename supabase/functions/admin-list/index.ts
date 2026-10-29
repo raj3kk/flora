@@ -1,31 +1,37 @@
-// admin-list — DEPLOYED live 2026-10-28 ~10:59 IST via
-// Supabase dashboard editor; live-verified auth gate (bina
-// header gateway 401, anon-key Bearer par code ka apna
-// {"error":"unauthorized"} 401). Asli list tabhi jab admin
-// user banega (JWT + is_admin check ke baad).
-// Kaam: admin ko Users + Usage + Licences ki list dena — kyunki
-// in tables par RLS ON hai par koi policy nahi hai, isliye
-// client-side (anon key) list hamesha khaali aati hai. Ye
-// function service_role se padhta hai, isliye admin check
-// function ke andar hi hota hai (koi bhi caller list nahi
-// dekh sakta).
-//
-// POST {} (body khaali bhi chalega)
-// Headers: Authorization: Bearer <user JWT> (Supabase Auth se).
-// Steps:
-// 1. JWT se user nikalo (anon client, auth.getUser). Na mile -> 401.
-// 2. Service client se users row check: is_admin=true na ho -> 403.
-// 3. users (id, device_id, is_admin, limit 200), usage (limit
-//    200, day desc), licences (limit 200) wapas do.
-// Kabhi wapas NAHI: email (public users me hai hi nahi), FCM
-// token, UTR, koi secret. Payment rows isme nahi hain (wo
-// admin page RLS se hi list karta hai).
-// Deploy se pehle: is file ko Supabase dashboard editor me
-// "Deploy a new function > Via Editor" se admin-list naam se
-// banana hoga — DEPLOYED 2026-10-28 ~10:59 IST, auth gate
-// live-verified. Repo copy = live code.
+// admin-list v2 — admin panel full build 2026-10-29 (repo copy;
+// deploy dashboard editor se hoga — live abhi v1 hai, v2 deploy
+// ke baad hi emails/push-presence/totals milenge).
+// Kaam: admin ko Users + Usage + Licences + push-token presence
+// + auth emails + usage totals dena. RLS wali tables par koi
+// policy nahi hai, isliye client-side list hamesha khaali aati
+// hai — ye function service_role se padhta hai, admin check
+// function ke andar hi hota hai (koi bhi caller list nahi dekh
+// sakta).
+// v2 me naya (v1 se): emails (auth.admin.listUsers se id-match),
+// push_tokens presence (token VALUE kabhi nahi bheji jaati — sirf
+// haan/naa + latest updated_at), usage totals (mili hui rows ka
+// jod; poora all-time tabhi jab rows 1000 ki limit me aa jayein).
+// Kabhi wapas NAHI: FCM token value, UTR, koi secret/key value,
+// kisi user ka password/hash.
+// POST {} + Authorization: Bearer <user JWT>.
+// 401: JWT nahi; 403: is_admin nahi.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+async function loadEmails(svc: any): Promise<Record<string, string>> {
+  const emails: Record<string, string> = {};
+  try {
+    for (let page = 1; page <= 10; page++) {
+      const { data, error } = await svc.auth.admin.listUsers({ page, perPage: 100 });
+      if (error || !data?.users?.length) break;
+      for (const u of data.users) {
+        if (u?.id && u?.email) emails[u.id] = u.email;
+      }
+      if (data.users.length < 100) break;
+    }
+  } catch (_e) { /* emails best-effort: bina email ke bhi list do */ }
+  return emails;
+}
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("POST only", { status: 405 });
@@ -45,7 +51,32 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "admin only" }), { status: 403, headers: { "Content-Type": "application/json" } });
   }
   const { data: users } = await svc.from("users").select("id,device_id,is_admin").limit(200);
-  const { data: usage } = await svc.from("usage").select("user_id,day,talk_seconds,tool_calls").order("day", { ascending: false }).limit(200);
+  const { data: usageAll } = await svc.from("usage").select("user_id,day,talk_seconds,tool_calls").order("day", { ascending: false }).limit(1000);
   const { data: licences } = await svc.from("licences").select("user_id,plan_id,status,expires_at").limit(200);
-  return new Response(JSON.stringify({ ok: true, users: users || [], usage: usage || [], licences: licences || [] }), { headers: { "Content-Type": "application/json" } });
+  const { data: pushRows } = await svc.from("push_tokens").select("user_id,updated_at").limit(500);
+  const push: Record<string, { has_token: boolean; updated_at: string | null }> = {};
+  (pushRows || []).forEach((r: any) => {
+    const prev = push[r.user_id];
+    if (!prev || (r.updated_at && r.updated_at > (prev.updated_at || ""))) {
+      push[r.user_id] = { has_token: true, updated_at: r.updated_at || null };
+    }
+  });
+  const usageTotals: Record<string, { talk_seconds: number; tool_calls: number; days: number }> = {};
+  (usageAll || []).forEach((r: any) => {
+    const t = usageTotals[r.user_id] || { talk_seconds: 0, tool_calls: 0, days: 0 };
+    t.talk_seconds += r.talk_seconds || 0;
+    t.tool_calls += r.tool_calls || 0;
+    t.days += 1;
+    usageTotals[r.user_id] = t;
+  });
+  const emails = await loadEmails(svc);
+  return new Response(JSON.stringify({
+    ok: true,
+    users: users || [],
+    usage: (usageAll || []).slice(0, 200),
+    licences: licences || [],
+    push,
+    emails,
+    usage_totals: usageTotals,
+  }), { headers: { "Content-Type": "application/json" } });
 });
