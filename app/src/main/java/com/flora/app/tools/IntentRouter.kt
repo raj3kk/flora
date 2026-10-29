@@ -7,8 +7,8 @@ package com.flora.app.tools
  * - OpenApp: "<naam> kholo" / "open <naam>" (app ka naam) — VerifiedAppLauncher.
  * - OpenBrowser: "browser me ...", "chrome me ...", "website ..." — Flora browser.
  * - Research: live sawal — "search karo" / "dhoondho" bole bina bhi,
- *   jab sawal me live nishan ho (aaj / abhi / taaza / latest /
- *   mausam / khabar / price / rate / score / kab / kya hai + "?").
+ *   jab live nishan + sawal ho (sawal-chinh / sawal-shabd);
+ *   sirf "aaj/abhi" se shuru hona kaafi nahi (B1-POLISH N8).
  * - BrainChat: baaki sab — saadharan baat-cheet, brain se.
  *
  * Aakhri fallback ka niyam (G5): live sawal par brain.ask seedha
@@ -43,6 +43,11 @@ object IntentRouter {
         "what is", "when is", "how much",
     )
 
+    /** B1-POLISH N8 — akele sawal-shabd (token ke roop me). */
+    private val QUESTION_TOKENS = setOf(
+        "kya", "kaise", "kab", "kahan", "kitna", "kitne", "kaun",
+    )
+
     /** Research lane ke imaandaar fail strings (SearchTools.search se aate hain). */
     fun isLaneFailure(text: String): Boolean {
         val t = text.trim()
@@ -74,15 +79,18 @@ object IntentRouter {
         }
         // Research: verb bole to seedha; live nishan + sawal ho to bhi,
         // bina "search karo" bole (G5 ka asal fix).
+        // B1-POLISH N8: sirf "aaj/abhi" se shuru hona kaafi NAHI —
+        // gair-sawal ("aaj kaam khatam karo") bekaar search call
+        // ban jata tha. Ab live nishan ke saath sawal-chinh,
+        // sawal-shabd ya research verb bhi chahiye.
         if (RESEARCH_VERBS.any { lower.contains(it) }) {
             return Route.Research(raw.trim())
         }
         val hasLive = LIVE_WORDS.any { lower.contains(it) }
-        val hasQuestion = QUESTION_WORDS.any { lower.contains(it) } || lower.endsWith("?")
+        val tokens = lower.split(Regex("[^a-z]+")).toSet()
+        val hasQuestion = QUESTION_WORDS.any { lower.contains(it) } ||
+            lower.endsWith("?") || tokens.intersect(QUESTION_TOKENS).isNotEmpty()
         if (hasLive && hasQuestion) return Route.Research(raw.trim())
-        if (hasLive && (lower.startsWith("aaj ") || lower.startsWith("abhi "))) {
-            return Route.Research(raw.trim())
-        }
         return Route.BrainChat(raw.trim())
     }
 }

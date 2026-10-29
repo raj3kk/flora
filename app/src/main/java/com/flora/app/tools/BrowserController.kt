@@ -194,6 +194,50 @@ object BrowserController {
         }
     }
 
+    /** B1-POLISH N5 — readText + login-form indicator (ek JS call me). */
+    data class PageInfo(
+        val text: String?,
+        val title: String,
+        val hasLoginForm: Boolean,
+    )
+
+    fun readPageInfo(onDone: (PageInfo) -> Unit) {
+        val w = webView
+        if (w == null) {
+            onDone(PageInfo(null, "", false))
+            return
+        }
+        val js = "(function(){var hasPw=!!document.querySelector('input[type=\"password\"]');" +
+            "var hasLoginBtn=false;" +
+            "var btns=document.querySelectorAll('button,input[type=\"submit\"],input[type=\"button\"],a');" +
+            "for(var i=0;i<btns.length;i++){var t=((btns[i].innerText||btns[i].value||'')+'').toLowerCase();" +
+            "if(t.indexOf('sign in')>=0||t.indexOf('log in')>=0||t.indexOf('login')>=0||t.indexOf('sign up')>=0){hasLoginBtn=true;break;}}" +
+            "var b=document.body;" +
+            "return JSON.stringify({text:(document.title+'\\n'+(b?b.innerText:'')),title:document.title,hasLoginForm:(hasPw||hasLoginBtn)});})()"
+        w.post {
+            w.evaluateJavascript(js) { raw ->
+                val text = decodeJsString(raw)
+                if (text == null) {
+                    onDone(PageInfo(null, "", false))
+                    return@evaluateJavascript
+                }
+                try {
+                    val o = org.json.JSONObject(text)
+                    val body = o.optString("text", "").trim().take(4000)
+                    onDone(
+                        PageInfo(
+                            if (body.isEmpty()) null else body,
+                            o.optString("title", ""),
+                            o.optBoolean("hasLoginForm", false),
+                        )
+                    )
+                } catch (e: Exception) {
+                    onDone(PageInfo(null, "", false))
+                }
+            }
+        }
+    }
+
     /** Page ke pehle 20 links: "text | url" ki list. */
     fun links(onDone: (List<String>?) -> Unit) {
         val w = webView
@@ -224,22 +268,42 @@ object BrowserController {
     /** B1 G6 — page ka varg: wall page ko content ki tarah kabhi mat dikhao/sunao. */
     enum class PageClass { Content, LoginWall, Captcha, Unsupported }
 
-    fun classifyPageText(text: String?): PageClass {
+    /**
+     * B1-POLISH N5 — login-wall ke liye keyword AKELA kaafi nahi:
+     * login/login-wall shabd + DOM me login-form indicator
+     * (password input ya login/sign-in button, readPageInfo se)
+     * dono chahiye. Bina form ke "please log in" jaisa zikr
+     * karne wala article/help text ab galat wall nahi banega.
+     * Captcha keyword akele par bhi Captcha hi rahega
+     * (fail-closed — captcha kabhi content nahi banega).
+     * Unsupported keyword-only hi rehta hai (browser capability
+     * ka sandesh, galat-wall ka khatra kam hai).
+     * Ek-arg overload sirf tab jab DOM jaankari uplabdh na ho —
+     * tab login-wall nahi mana jata; read path hamesha
+     * readPageInfo se flag deta hai.
+     */
+    fun classifyPageText(text: String?, hasLoginForm: Boolean): PageClass {
         val t = text?.lowercase() ?: return PageClass.Content
         return when {
             t.contains("captcha") || t.contains("verify you are human") ||
                 t.contains("verify you're human") || t.contains("not a robot") ||
                 t.contains("human verification") -> PageClass.Captcha
-            t.contains("sign in to continue") || t.contains("log in to continue") ||
-                t.contains("login to continue") || t.contains("sign in to view") ||
-                t.contains("log in to view") || t.contains("create an account to continue") ||
-                t.contains("sign up to continue") || t.contains("please sign in") ||
-                t.contains("please log in") -> PageClass.LoginWall
+            hasLoginForm && (
+                t.contains("sign in to continue") || t.contains("log in to continue") ||
+                    t.contains("login to continue") || t.contains("sign in to view") ||
+                    t.contains("log in to view") || t.contains("create an account to continue") ||
+                    t.contains("sign up to continue") || t.contains("please sign in") ||
+                    t.contains("please log in")
+                ) -> PageClass.LoginWall
             t.contains("browser not supported") || t.contains("unsupported browser") ||
                 t.contains("this browser is not supported") ||
                 t.contains("please update your browser") -> PageClass.Unsupported
             else -> PageClass.Content
         }
+    }
+
+    fun classifyPageText(text: String?): PageClass {
+        return classifyPageText(text, false)
     }
 
     fun wallReason(cls: PageClass): String {
@@ -264,6 +328,8 @@ object BrowserController {
         data class Filled(val label: String) : WebFillOutcome()
         data class NotFound(val label: String) : WebFillOutcome()
         data class PasswordRefused(val label: String) : WebFillOutcome()
+        /** B1-POLISH N2 — ek se zyada match: chupchaap pehla kabhi nahi. */
+        data class Ambiguous(val label: String, val candidates: List<String>) : WebFillOutcome()
         object NoWebView : WebFillOutcome()
     }
 
@@ -337,38 +403,101 @@ object BrowserController {
      * mask variation par bharosa nahi (B1 G8: DOM-level
      * type=password check hi asli pehchan hai; code-review +
      * CI se verify, phone-test ka daava nahi).
+     *
+     * B1-POLISH N2 — substring-first-match HATAYA: pehle
+     * exact match (label/name/id barabar) dhoondho, phir
+     * substring. Ek se zyada match hon to Ambiguous wapas
+     * do (candidates ke saath) — chupchaap pehla match
+     * kabhi mat bharo. Ek match ho to Filled me wahi label
+     * bataya jata hai jo bhara gaya. Matching detectFields
+     * ki DOM-order list par hoti hai, isliye set bhi usi
+     * index par hota hai; set ke waqt password check
+     * dobara hota hai (defence in depth).
      */
     fun fillWebField(labelOrName: String, value: String, onDone: (WebFillOutcome) -> Unit) {
+        if (webView == null) {
+            onDone(WebFillOutcome.NoWebView)
+            return
+        }
+        val want = labelOrName.trim().lowercase()
+        if (want.isEmpty()) {
+            onDone(WebFillOutcome.NotFound(labelOrName))
+            return
+        }
+        detectFields { fields ->
+            if (fields == null) {
+                if (webView == null) onDone(WebFillOutcome.NoWebView)
+                else onDone(WebFillOutcome.NotFound(labelOrName))
+                return@detectFields
+            }
+            val exact = fields.indices.filter { i ->
+                val f = fields[i]
+                f.label.lowercase() == want || f.name.lowercase() == want || f.id.lowercase() == want
+            }
+            if (exact.size > 1) {
+                onDone(
+                    WebFillOutcome.Ambiguous(
+                        labelOrName,
+                        exact.map { fields[it].label }.distinct().take(5),
+                    )
+                )
+                return@detectFields
+            }
+            if (exact.size == 1) {
+                fillFieldAt(fields, exact[0], labelOrName, value, onDone)
+                return@detectFields
+            }
+            val sub = fields.indices.filter { i ->
+                val f = fields[i]
+                (f.label + " " + f.name + " " + f.id).lowercase().contains(want)
+            }
+            when {
+                sub.isEmpty() -> onDone(WebFillOutcome.NotFound(labelOrName))
+                sub.size > 1 -> onDone(
+                    WebFillOutcome.Ambiguous(
+                        labelOrName,
+                        sub.map { fields[it].label }.distinct().take(5),
+                    )
+                )
+                else -> fillFieldAt(fields, sub[0], labelOrName, value, onDone)
+            }
+        }
+    }
+
+    private fun fillFieldAt(
+        fields: List<WebFormField>,
+        index: Int,
+        labelOrName: String,
+        value: String,
+        onDone: (WebFillOutcome) -> Unit,
+    ) {
+        val field = fields[index]
+        if (field.isPassword) {
+            onDone(WebFillOutcome.PasswordRefused(labelOrName))
+            return
+        }
         val w = webView
         if (w == null) {
             onDone(WebFillOutcome.NoWebView)
             return
         }
-        val wanted = org.json.JSONObject.quote(labelOrName.trim().lowercase())
         val jsValue = org.json.JSONObject.quote(value)
-        val js = "(function(){var want=$wanted;var val=$jsValue;" +
+        val js = "(function(){var idx=$index;var val=$jsValue;" +
             "var els=document.querySelectorAll('input,textarea,select');" +
-            "for(var i=0;i<els.length;i++){var el=els[i];" +
+            "if(idx>=els.length)return 'NOT_FOUND';" +
+            "var el=els[idx];" +
             "var type=((el.type||el.tagName)||'').toLowerCase();" +
-            "var id=el.id||'';var name=el.name||'';var ph=el.placeholder||'';var lab='';" +
-            "if(id){var l=document.querySelector('label[for=\"'+id+'\"]');if(l)lab=l.innerText||'';}" +
-            "if(!lab){var p=el.closest('label');if(p)lab=p.innerText||'';}" +
-            "var hay=(lab+' '+ph+' '+name+' '+id).toLowerCase();" +
-            "if(hay.indexOf(want)<0)continue;" +
             "var ac=(el.getAttribute('autocomplete')||'').toLowerCase();" +
             "if(type==='password'||ac.indexOf('password')>=0)return 'PASSWORD_REFUSED';" +
             "try{el.focus();el.value=val;" +
             "el.dispatchEvent(new Event('input',{bubbles:true}));" +
             "el.dispatchEvent(new Event('change',{bubbles:true}));" +
-            "return 'FILLED:'+(lab||ph||name||id);}catch(e){return 'SET_FAILED';}}" +
-            "return 'NOT_FOUND';})()"
+            "return 'FILLED';}catch(e){return 'SET_FAILED';}})()"
         w.post {
             w.evaluateJavascript(js) { raw ->
                 val text = decodeJsString(raw) ?: ""
                 when {
-                    text.startsWith("FILLED:") -> onDone(
-                        WebFillOutcome.Filled(text.removePrefix("FILLED:").ifEmpty { labelOrName })
-                    )
+                    text == "FILLED" -> onDone(WebFillOutcome.Filled(field.label))
                     text == "PASSWORD_REFUSED" -> onDone(WebFillOutcome.PasswordRefused(labelOrName))
                     else -> onDone(WebFillOutcome.NotFound(labelOrName))
                 }
