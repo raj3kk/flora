@@ -23,6 +23,21 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// S2-1 (Cycle 2 FIX, PARTIAL — sirf free functions): CORS preflight.
+// Browser calls (panel/website, Authorization header wali) par
+// OPTIONS ko 200 + allow headers do; wahi headers har response
+// par bhi. Ye sirf browser preflight kholta hai — JWT/admin
+// gates waise hi rahenge (CORS auth nahi hatata). LFMS functions
+// (licence-verify, brain-proxy, tts-proxy, admin-licences,
+// admin-plan-features, push-token-sync, usage-count, send-push)
+// par CORS abhi NAHI laga hai, isliye poora S2-1 item QUEUED
+// barkaraar hai — ye partial fix akela panel unblock nahi karega.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 async function loadEmails(svc: any): Promise<Record<string, string>> {
   const emails: Record<string, string> = {};
   try {
@@ -39,7 +54,10 @@ async function loadEmails(svc: any): Promise<Record<string, string>> {
 }
 
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("POST only", { status: 405 });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: { ...CORS_HEADERS } });
+  }
+  if (req.method !== "POST") return new Response("POST only", { status: 405, headers: { ...CORS_HEADERS } });
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -47,13 +65,13 @@ Deno.serve(async (req) => {
   const anon = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } });
   const { data: userData, error: userErr } = await anon.auth.getUser();
   if (userErr || !userData?.user) {
-    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   }
   const adminId = userData.user.id;
   const svc = createClient(url, serviceKey);
   const { data: adminRow } = await svc.from("users").select("is_admin").eq("id", adminId).maybeSingle();
   if (!adminRow?.is_admin) {
-    return new Response(JSON.stringify({ error: "admin only" }), { status: 403, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "admin only" }), { status: 403, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   }
   const { data: users } = await svc.from("users").select("id,device_id,is_admin").limit(200);
   const { data: usageAll } = await svc.from("usage").select("user_id,day,talk_seconds,tool_calls").order("day", { ascending: false }).limit(1000);
@@ -111,5 +129,5 @@ Deno.serve(async (req) => {
       usage_returned: usageFetched.slice(0, 200).length,
       push_users: Object.keys(push).length,
     },
-  }), { headers: { "Content-Type": "application/json" } });
+  }), { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
 });

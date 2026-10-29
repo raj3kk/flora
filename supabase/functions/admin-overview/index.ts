@@ -5,7 +5,12 @@
 // Wapas deta hai (sirf admin ko — emails/UTRs isi me hain):
 //   users_total, linked, admins, pro_active, free_count,
 //   pro_expiring_7d, revenue_paisa, pending_count, pending_paisa,
-//   pending_actions (pending payments + unclaimed licences),
+//   pending_actions (pending payments + unclaimed licences —
+//   PURANA field waisa hi hai, panel shayad padhta hai) +
+//   S2-4 (Cycle 2 FIX, ADDITIVE): pending_payments (pending
+//   payments ki count) aur unclaimed_licences (NULL-device Pro
+//   licences ki count) alag-alag — koi maujooda field na hati
+//   hai, na badli hai.
 //   usage_today_seconds, usage_today_tools,
 //   recent_payments (5), recent_audit (5), push_recent (10),
 //   heartbeats ({user_id: last_seen}), heartbeats_24h,
@@ -20,10 +25,28 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// S2-1 (Cycle 2 FIX, PARTIAL — sirf free functions): CORS preflight.
+// Browser calls (panel/website, Authorization header wali) par
+// OPTIONS ko 200 + allow headers do; wahi headers har response
+// par bhi. Ye sirf browser preflight kholta hai — JWT/admin
+// gates waise hi rahenge (CORS auth nahi hatata). LFMS functions
+// (licence-verify, brain-proxy, tts-proxy, admin-licences,
+// admin-plan-features, push-token-sync, usage-count, send-push)
+// par CORS abhi NAHI laga hai, isliye poora S2-1 item QUEUED
+// barkaraar hai — ye partial fix akela panel unblock nahi karega.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("POST only", { status: 405 });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: { ...CORS_HEADERS } });
+  }
+  if (req.method !== "POST") return new Response("POST only", { status: 405, headers: { ...CORS_HEADERS } });
   const json = (obj, status = 200) =>
-    new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
+    new Response(JSON.stringify(obj), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -159,6 +182,8 @@ Deno.serve(async (req) => {
     revenue_paisa: revenuePaisa,
     pending_count: pendRows.length, pending_paisa: pendingPaisa,
     pending_actions: pendRows.length + unclaimed,
+    pending_payments: pendRows.length,
+    unclaimed_licences: unclaimed,
     usage_today_seconds: usageTodaySeconds, usage_today_tools: usageTodayTools,
     recent_payments: recentPayments, recent_audit: recentAudit,
     push_recent: pushRecent, heartbeats, heartbeats_24h: heartbeats24h,

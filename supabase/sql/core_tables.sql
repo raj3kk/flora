@@ -38,6 +38,14 @@
 --      instructions / feature_flags / provider_keys ke live
 --      columns confirm karo; maujooda tables par ye file sirf
 --      missing columns jodti hai, maujooda columns NAHI badalti.
+--   9. push_tokens columns (S1-39, Cycle 2 FIX) — live columns
+--      deploy-check se CONFIRM karo: push-token-sync upsert
+--      (user_id, device_id, fcm_token, platform) + admin-list
+--      select (user_id, updated_at) par nirbhar hai; device_id
+--      ka type (yahan uuid, users.device_id jaisa) app se aane
+--      wale value se match hona chahiye, warna upsert fail hoga.
+--      Unique (user_id, device_id) tabhi banega jab duplicate
+--      rows na hon (hon to pehle saaf karo — loud failure).
 --
 -- IDEMPOTENT: har statement IF NOT EXISTS / DO-block guard ke
 -- saath hai — live par dobara chalane se duplicate-policy ya
@@ -249,3 +257,50 @@ end $$;
 -- sthiti deploy-check me confirm karo (functions service-role
 -- se chalte hain, isliye RLS unhe nahi rokta; client-side reads
 -- par RLS ka asar deploy-check ke baad hi tay karo).
+
+-- --- push_tokens (S1-39, Cycle 2 FIX) ---
+-- push-token-sync upsert (user_id, device_id, fcm_token,
+-- platform; onConflict user_id,device_id) + admin-list select
+-- (user_id, updated_at) isi table par nirbhar hain — iske bina
+-- push-token sync 500 dega aur admin-list push presence khaali
+-- rahega. push-token-sync FUNCTION ko mat chhuo (LFMS-reserved)
+-- — sirf ye SQL definition free hai. Idempotent: CREATE IF NOT
+-- EXISTS + missing-column guards + unique index IF NOT EXISTS.
+-- Live columns deploy-check #9 se confirm karo (upar).
+create table if not exists public.push_tokens (
+  user_id uuid not null,
+  device_id uuid,
+  fcm_token text not null,
+  platform text not null default 'android',
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+do $$
+begin
+  if not exists (select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'push_tokens'
+    and column_name = 'device_id') then
+    alter table public.push_tokens add column device_id uuid;
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'push_tokens'
+    and column_name = 'fcm_token') then
+    alter table public.push_tokens add column fcm_token text;
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'push_tokens'
+    and column_name = 'platform') then
+    alter table public.push_tokens add column platform text not null default 'android';
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'push_tokens'
+    and column_name = 'updated_at') then
+    alter table public.push_tokens add column updated_at timestamptz not null default now();
+  end if;
+end $$;
+-- Unique (user_id, device_id): push-token-sync ka onConflict
+-- isi par nirbhar hai. NULL device_id wali rows aapas me nahi
+-- takrati (Postgres NULL rule) — device wali rows par hi unique
+-- lagu hota hai.
+create unique index if not exists push_tokens_user_device_uidx
+  on public.push_tokens (user_id, device_id);

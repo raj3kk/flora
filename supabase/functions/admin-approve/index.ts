@@ -15,6 +15,13 @@
 // 1. JWT se user nikalo (anon client, auth.getUser). Na mile -> 401.
 // 2. Service client se users row check: is_admin=true na ho -> 403.
 // 3. Payment row load karo: status pending na ho -> 400.
+// 3c. S2-5 (Cycle 2 FIX, non-licence pre-check ONLY): approve
+//     par, licence regions se PEHLE, approved-UTR duplicate
+//     check — usi UTR par koi DOOSRI submission pehle approved
+//     ho chuki ho (status approved, id != current) to 400 +
+//     admin_audit, licence NAHI banegi, payment pending hi
+//     rahega. Reject path par ye check NAHI hai. UTR khaali/
+//     missing ho to check skip (purani rows).
 // 3b. Approve par amount check (S1-4, Cycle 1 FIX): approve
 //     hamesha 'pro' 30-din licence deta hai — expected amount
 //     pricing.html + panel Plans text se hai (dono: Pro
@@ -85,6 +92,22 @@ Deno.serve(async (req) => {
         after_json: { expected_paisa: EXPECTED_PAISA_FOR_PRO, actual_paisa: amt, plan_id: "pro" },
       });
       return new Response(JSON.stringify({ error: "amount mismatch: expected 19900 paisa (Pro ₹199/mahina) for pro licence" }), { status: 400, headers: { "Content-Type": "application/json" } });
+    }
+  }
+  // S2-5 approved-UTR duplicate check (approve path par hi;
+  // licence-insert/supersede/stacking regions ko chhua nahi
+  // gaya hai — ye block unse pehle, alag hai).
+  if (action === "approve" && payment.utr) {
+    const { data: dupApproved } = await svc.from("payment_submissions")
+      .select("id").eq("utr", payment.utr).eq("status", "approved")
+      .neq("id", payment_id).limit(1).maybeSingle();
+    if (dupApproved) {
+      await svc.from("admin_audit").insert({
+        admin_user_id: adminId, action: "payment_approve_duplicate_utr",
+        target_user_id: payment.user_id, before_json: payment,
+        after_json: { duplicate_of_payment_id: dupApproved.id, utr: payment.utr },
+      });
+      return new Response(JSON.stringify({ error: "duplicate UTR: is UTR par ek payment pehle hi approved ho chuka hai" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
   }
   const now = new Date().toISOString();

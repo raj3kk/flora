@@ -16,6 +16,21 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// S2-1 (Cycle 2 FIX, PARTIAL — sirf free functions): CORS preflight.
+// Browser calls (panel/website, Authorization header wali) par
+// OPTIONS ko 200 + allow headers do; wahi headers har response
+// par bhi. Ye sirf browser preflight kholta hai — JWT/admin
+// gates waise hi rahenge (CORS auth nahi hatata). LFMS functions
+// (licence-verify, brain-proxy, tts-proxy, admin-licences,
+// admin-plan-features, push-token-sync, usage-count, send-push)
+// par CORS abhi NAHI laga hai, isliye poora S2-1 item QUEUED
+// barkaraar hai — ye partial fix akela panel unblock nahi karega.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 const FLAG_KEYS = [
   "talk", "calls", "sms", "whatsapp", "browser", "macros",
   "image_gen", "screen_vision", "camera", "overlay_mic", "wakeword",
@@ -23,9 +38,12 @@ const FLAG_KEYS = [
 ];
 
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("POST only", { status: 405 });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: { ...CORS_HEADERS } });
+  }
+  if (req.method !== "POST") return new Response("POST only", { status: 405, headers: { ...CORS_HEADERS } });
   const json = (obj, status = 200) =>
-    new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
+    new Response(JSON.stringify(obj), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
