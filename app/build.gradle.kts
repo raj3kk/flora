@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.gms.google-services")
 }
 
@@ -49,6 +50,10 @@ dependencies {
     implementation("com.google.mlkit:text-recognition:16.0.0")
     implementation("com.google.mlkit:text-recognition-devanagari:16.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    // B2 Builder core — sirf ye ek dep: project metadata models ke liye.
+    // Room (B4), WorkManager, Hilt, Retrofit, Timber, AppSearch,
+    // Logging Interceptor B2 me jaanboojh kar NAHI jode gaye.
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.firebase:firebase-messaging:24.0.0")
     // Shizuku (v2.22, G19): system permissions bina root ke, user ki
