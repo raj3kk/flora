@@ -344,7 +344,10 @@ fun PlannerScreen(
                     if (sub.detail.isNotBlank()) {
                         Text(text = "   ${sub.detail}")
                     }
-                    if (sub.status == GoalSubStatus.WAITING_APPROVAL && sub.planId.isNotBlank()) {
+                    // R-A2-11(iv): ruka hua (PAUSED) goal par approval offer hi nahi.
+                    if (sub.status == GoalSubStatus.WAITING_APPROVAL && sub.planId.isNotBlank() &&
+                        run.status != GoalStatus.PAUSED
+                    ) {
                         val apStep = orchApproveSteps[sub.planId]
                         if (apStep == null) {
                             Row {
@@ -370,9 +373,12 @@ fun PlannerScreen(
                             Row {
                                 OutlinedButton(
                                     onClick = {
-                                        orchestrator.approveSubPlan(run.goalId, sub.planId, apStep)
-                                        orchApproveSteps = orchApproveSteps - sub.planId
-                                        message = "Sub-plan approval di gayi — sirf ye sub-plan aage badhega."
+                                        if (orchestrator.approveSubPlan(run.goalId, sub.planId, apStep)) {
+                                            orchApproveSteps = orchApproveSteps - sub.planId
+                                            message = "Sub-plan approval di gayi — sirf ye sub-plan aage badhega."
+                                        } else {
+                                            message = "Goal ruka hua hai — ruke hue goal ka sub-plan approval se nahi chalega."
+                                        }
                                     }
                                 ) {
                                     Text(text = "Confirm karke ye sub-plan aage badhao (step ${apStep + 1})")
@@ -385,7 +391,7 @@ fun PlannerScreen(
                     Button(
                         onClick = {
                             if (!orchestrator.startGoal(run.goalId)) {
-                                message = "Ye goal pehle se chal raha hai ya poora ho chuka hai."
+                                message = "Ye goal pehle se chal chuka hai (ya chal raha hai) — dobara chalana ho to naya goal banao."
                             } else {
                                 message = "Goal chal raha hai — sub-plans ek-ek karke chalenge."
                             }

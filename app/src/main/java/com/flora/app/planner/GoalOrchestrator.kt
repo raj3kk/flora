@@ -37,10 +37,16 @@ import java.util.UUID
  *
  * Parent stop/pause = SAARE sub-plans rukenge: chal raha
  * sub-plan engine.stopPlan se rukega, shuru na hue subs
- * PARENT_STOPPED honge. Ruka hua (PAUSED) sub-plan background
- * me kuch nahi chalata — Room ki inert row hai, isliye koi
- * orphan background sub-agent nahi banta. Waiting sub-plan
- * user ki explicit approval par hi dobara chalega.
+ * PARENT_STOPPED honge (WAITING_APPROVAL subs bhi — stop
+ * ke baad koi approval UI nahi bachta). Ruka hua sub-plan
+ * background me kuch nahi chalata — YE SIRF NORMAL STOP
+ * PATH PAR SAHI HAI: stop ke baad approval-resume REFUSE
+ * hota hai (stopRequested/PAUSED check), aur approval-resume
+ * ke baad stop aaye to resumed plan ka poll job + planId
+ * track karke engine.stopPlan lagta hai — isliye stopped
+ * goal ka koi plan background me nahi chalta. Waiting
+ * sub-plan (goal ruka na ho) user ki explicit approval
+ * par hi dobara chalega.
  *
  * Replan per-sub-plan hai (engine ke runLoop ka max 2 replan
  * rule andar hi chalta hai); parent goal ka silent full-replan
@@ -48,7 +54,9 @@ import java.util.UUID
  *
  * Stops/approvals per-sub-plan, alag-alag: parent ki ek
  * approval sub-plans par carryover NAHI hoti. Har sub-plan
- * ka stop uske apne plan ke approveAndResume se khulta hai.
+ * ka stop uske apne plan ke approveAndResume se khulta hai
+ * — SIRF tab jab parent goal ruka na ho; parent stop ke
+ * baad approveSubPlan REFUSE karta hai (koi resume nahi).
  *
  * Gating: orchestrator koi ToolRegistry/PlanTool entry NAHI
  * leta (wo plans ko compose karta hai, plan ke andar ka tool
@@ -144,6 +152,10 @@ class GoalOrchestrator(
 
     private val goalsMap = mutableMapOf<String, MutableGoal>()
     private val runJobs = mutableMapOf<String, Job>()
+    // Approval-resume poll jobs, planId se tracked — stopGoal
+    // inhe cancel + inke planIds par engine.stopPlan karta hai.
+    // Stale entries harmless hain (cancel no-op, planId unique).
+    private val approvalJobs = mutableMapOf<String, Job>()
     private val goalsFlow = MutableStateFlow<List<GoalRun>>(emptyList())
     val goals: StateFlow<List<GoalRun>> = goalsFlow.asStateFlow()
 
@@ -175,13 +187,17 @@ class GoalOrchestrator(
         return GoalCreation.Created(snapshot(mutable))
     }
 
-    /** Goal chalao — sub-plans ek-ek karke engine se chalte hain. */
+    /** Goal chalao — sirf fresh goal; sub-plans ek-ek karke engine se chalte hain. */
     fun startGoal(goalId: String): Boolean {
         val goal = synchronized(lock) { goalsMap[goalId] } ?: return false
         synchronized(lock) {
             if (runJobs[goalId]?.isActive == true) return false
         }
-        if (goal.status == GoalStatus.DONE) return false
+        // BLOCK route (R-A2-12): sirf FRESH goal chalega. Jo goal
+        // pehle chal chuka hai (DONE/PAUSED/PARTIAL koi bhi),
+        // uska dobara-run block hai — dobara chalana ho to naya
+        // goal banao (header comment ke mutabiq).
+        if (goal.started) return false
         goal.stopRequested = false
         goal.started = true
         val job = orchScope.launch {
@@ -201,32 +217,61 @@ class GoalOrchestrator(
     fun stopGoal(goalId: String) {
         val goal = synchronized(lock) { goalsMap[goalId] } ?: return
         goal.stopRequested = true
-        val current = goal.currentPlanId
-        if (current != null) {
-            engine.stopPlan(current, "goal roka gaya")
-        }
         synchronized(lock) { runJobs[goalId] }?.cancel()
+        // Approval-poll jobs cancel + saare sub-planIds jama karo
+        // (current + approval-resume wala — currentPlanId null hone
+        // par bhi resumed plan stop se bach na sake).
+        val planIds = mutableSetOf<String>()
+        val current = goal.currentPlanId
+        if (!current.isNullOrBlank()) planIds += current
+        for (sub in goal.subs) {
+            if (sub.planId.isNotBlank()) {
+                synchronized(lock) { approvalJobs[sub.planId] }?.cancel()
+                planIds += sub.planId
+            }
+        }
         orchScope.launch {
+            // Room hi source of truth: DONE/FAILED/BLOCKED plan par
+            // stopPlan NAHI (warna DONE plan PAUSED mark ho jayega).
+            for (planId in planIds) {
+                val fresh = try {
+                    engine.loadPlan(planId)
+                } catch (e: Exception) {
+                    null
+                } ?: continue
+                if (fresh.status == PlanStatus.DONE || fresh.status == PlanStatus.FAILED ||
+                    fresh.status == PlanStatus.BLOCKED
+                ) {
+                    continue
+                }
+                engine.stopPlan(planId, "goal roka gaya")
+            }
             // Agar execute job pehle hi finalize kar chuka ho to ye
             // dobara kuch nahi badlega (finalize idempotent hai).
             finalizeStopped(goal, "goal roka gaya")
         }
     }
 
-    /** Per-sub-plan approval — sirf isi sub-plan ka stop khulta hai, siblings par carryover nahi. */
-    fun approveSubPlan(goalId: String, planId: String, stepIndex: Int) {
-        val goal = synchronized(lock) { goalsMap[goalId] } ?: return
-        val sub = goal.subs.firstOrNull { it.planId == planId } ?: return
+    /** Per-sub-plan approval — sirf isi sub-plan ka stop khulta hai, siblings par carryover nahi.
+     *  Stopped goal par REFUSE (false): approval-resume stopped goal par kabhi nahi. */
+    fun approveSubPlan(goalId: String, planId: String, stepIndex: Int): Boolean {
+        val goal = synchronized(lock) { goalsMap[goalId] } ?: return false
+        if (goal.stopRequested || goal.status == GoalStatus.PAUSED) return false
+        val sub = goal.subs.firstOrNull { it.planId == planId } ?: return false
         engine.approveAndResume(planId, stepIndex)
         sub.status = GoalSubStatus.RUNNING
         sub.detail = "approval ke baad resume hua"
         emit()
-        orchScope.launch {
+        val pollJob = orchScope.launch {
             logGoal(goalId, planId, "sub-plan approval ke baad resume (step $stepIndex)")
-            pollSub(goal, sub, respectParentStop = false)
+            // respectParentStop = true: stop ke baad ye poll khud
+            // plan rok kar lautega (job cancel ka backup).
+            pollSub(goal, sub, respectParentStop = true)
             recompute(goal)
             emit()
         }
+        synchronized(lock) { approvalJobs[planId] = pollJob }
+        return true
     }
 
     /** Sub-plan statuses Room se dobara padho (waiting subs ka haal update karne ke liye). */
@@ -264,6 +309,13 @@ class GoalOrchestrator(
             if (goal.stopRequested) {
                 finalizeStopped(goal, "goal roka gaya")
                 return
+            }
+            // Dobara-run guard (BLOCK route ki doosri deewar):
+            // pehle se planned/DONE sub ka planId kabhi overwrite
+            // nahi hoga, purana plan orphan nahi hoga. Fresh run
+            // me ye kabhi trigger nahi hota (sab QUEUED + blank).
+            if (sub.status == GoalSubStatus.DONE || sub.planId.isNotBlank()) {
+                continue
             }
             sub.status = GoalSubStatus.RUNNING
             sub.detail = "plan ban raha hai"
@@ -381,11 +433,13 @@ class GoalOrchestrator(
         PlanStatus.DRAFT -> GoalSubStatus.QUEUED
     }
 
-    /** Idempotent: sirf QUEUED/RUNNING subs PARENT_STOPPED honge, DONE/FAILED/WAITING nahi chhedega. */
+    /** Idempotent: QUEUED/RUNNING/WAITING_APPROVAL subs PARENT_STOPPED honge, DONE/FAILED/BLOCKED nahi chhedega. */
     private suspend fun finalizeStopped(goal: MutableGoal, reason: String) {
         var changed = false
         for (sub in goal.subs) {
-            if (sub.status == GoalSubStatus.QUEUED || sub.status == GoalSubStatus.RUNNING) {
+            if (sub.status == GoalSubStatus.QUEUED || sub.status == GoalSubStatus.RUNNING ||
+                sub.status == GoalSubStatus.WAITING_APPROVAL
+            ) {
                 sub.status = GoalSubStatus.PARENT_STOPPED
                 sub.detail = reason
                 changed = true
