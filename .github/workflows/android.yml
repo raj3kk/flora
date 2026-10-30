@@ -19,10 +19,11 @@ jobs:
           gradle-version: 8.7
           arguments: :app:assembleDebug
       - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: flora-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="debug-build-${{ github.run_number }}"
+          gh release create "$TAG" --prerelease --title "Flora debug build ${{ github.run_number }}" --notes "Commit ${{ github.sha }}" app/build/outputs/apk/debug/*.apk
       - name: Run unit tests
         uses: gradle/gradle-build-action@v3
         with:
