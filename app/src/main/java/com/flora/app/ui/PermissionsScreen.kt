@@ -153,7 +153,7 @@ fun PermissionsScreen(onShowWizard: () -> Unit) {
             Text("App permissions (row dabao to dialog khulega)")
             val rows = listOf(
                 Manifest.permission.RECORD_AUDIO to "Mic — baat karne aur sunne ke liye",
-                Manifest.permission.CAMERA to "Camera — Scan/photo ke liye",
+                Manifest.permission.CAMERA to "Camera — Scan/photo/torch ke liye",
                 Manifest.permission.READ_CONTACTS to "Contacts — naam se call/SMS ke liye",
                 Manifest.permission.CALL_PHONE to "Call — confirmed call ke liye",
                 Manifest.permission.SEND_SMS to "SMS — confirmed SMS ke liye",

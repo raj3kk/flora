@@ -148,6 +148,13 @@ object ToolRegistry {
             licenceKey = null,
             executesVia = "FloraApp chat branch -> DeviceActions (NoAccess Batch A)",
         ),
+        ToolDescriptor(
+            name = "device_torch",
+            kind = "device-local",
+            permission = "CAMERA runtime grant — wizard/PermissionsScreen se (na mile to fail-closed)",
+            licenceKey = null,
+            executesVia = "FloraApp chat branch -> DeviceActions (NoAccess Batch B)",
+        ),
     )
 
     fun byName(name: String): ToolDescriptor? = all().firstOrNull { it.name == name }

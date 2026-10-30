@@ -1,8 +1,12 @@
 package com.flora.app.tools
 
+import android.Manifest
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -11,6 +15,7 @@ import android.os.Build
 import android.os.StatFs
 import android.provider.AlarmClock
 import android.provider.Settings
+import androidx.core.content.ContextCompat
 import com.flora.app.assistant.BatteryStateReader
 import java.time.LocalDateTime
 import java.time.format.TextStyle
@@ -46,7 +51,15 @@ object DeviceActions {
         data class Dial(val number: String?) : DeviceRequest()
         object WifiSettings : DeviceRequest()
         object SoundSettings : DeviceRequest()
+        object TorchOn : DeviceRequest()
+        object TorchOff : DeviceRequest()
+        object TorchStatus : DeviceRequest()
     }
+
+    /** Torch ka aakhri Flora-action (process-local). CameraManager me
+     * torch state ka getter nahi hai — isliye status ka jawab sirf isi
+     * se diya jayega; bahar se badla ho to "pata nahi" hi jawab hoga. */
+    private var lastTorchState: Boolean? = null
 
     /**
      * Pure phrase matching (koi Android API nahi — unit test me chalti
@@ -74,6 +87,23 @@ object DeviceActions {
         }
         if (t.contains("timer lagao") || t.contains("timer laga")) {
             return DeviceRequest.Timer(parseTimerSeconds(t))
+        }
+        // Torch (Batch B) — status phrases on/off se PEHLE ("torch on hai"
+        // me "torch on" bhi hai).
+        if (t.contains("torch on hai") || t.contains("torch jal raha") ||
+            t.contains("torch status")
+        ) {
+            return DeviceRequest.TorchStatus
+        }
+        if (t.contains("torch on") || t.contains("torch jalao") ||
+            t.contains("flashlight on")
+        ) {
+            return DeviceRequest.TorchOn
+        }
+        if (t.contains("torch off") || t.contains("torch band") ||
+            t.contains("flashlight off")
+        ) {
+            return DeviceRequest.TorchOff
         }
         // Info phrases.
         if (t.contains("time batao") || t.contains("time kya hai") ||
@@ -172,6 +202,9 @@ object DeviceActions {
                 is DeviceRequest.Alarm -> alarmReply(context, req)
                 is DeviceRequest.Timer -> timerReply(context, req)
                 is DeviceRequest.Dial -> dialReply(context, req)
+                is DeviceRequest.TorchOn -> setTorch(context, true)
+                is DeviceRequest.TorchOff -> setTorch(context, false)
+                is DeviceRequest.TorchStatus -> torchStatus()
                 is DeviceRequest.WifiSettings -> intentReply(
                     context,
                     Intent(Settings.ACTION_WIFI_SETTINGS),
@@ -321,5 +354,57 @@ object DeviceActions {
             "Dialer khol raha hun — number khud daal dena, call tumhare haath se lagegi."
         }
         return intentReply(context, intent, text)
+    }
+
+    /** Batch B — torch. Fail-closed: permission / flash / camera-access
+     * har kami par imaandaar message, kabhi jhootha "jal gaya" nahi. */
+    private fun setTorch(context: Context, on: Boolean): SdResult<String> {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return SdResult.Failure(
+                "Torch ke liye Camera permission chahiye — Permissions screen par " +
+                    "Camera ON karo, phir dobara bolo.",
+            )
+        }
+        val cm = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+            ?: return SdResult.Failure("Camera service nahi mila — dobara koshish karo.")
+        val cameraId = try {
+            cm.cameraIdList.firstOrNull { id ->
+                val chars = cm.getCameraCharacteristics(id)
+                val facing = chars.get(CameraCharacteristics.LENS_FACING)
+                val hasFlash = chars.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) ?: false
+                facing == CameraCharacteristics.LENS_FACING_BACK && hasFlash
+            }
+        } catch (e: Exception) {
+            null
+        } ?: return SdResult.Failure("Is phone me flash/torch nahi hai.")
+        return try {
+            cm.setTorchMode(cameraId, on)
+            lastTorchState = on
+            SdResult.Ok(if (on) "Torch ON kar diya hai." else "Torch OFF kar diya hai.")
+        } catch (e: SecurityException) {
+            SdResult.Failure(
+                "Torch ke liye Camera permission chahiye — Permissions screen par " +
+                    "Camera ON karo, phir dobara bolo.",
+            )
+        } catch (e: Exception) {
+            SdResult.Failure(
+                "Torch chal nahi paya — camera kisi aur app me khula ho sakta hai, " +
+                    "us app ko band karke dobara koshish karo.",
+            )
+        }
+    }
+
+    private fun torchStatus(): SdResult<String> {
+        val state = lastTorchState
+            ?: return SdResult.Ok(
+                "Torch ki haalat Flora ko pata nahi hai — is baar maine torch " +
+                    "chalaya hi nahi hai. 'Torch on karo' bolo to jala dungi.",
+            )
+        return SdResult.Ok(
+            "Torch ${if (state) "ON" else "OFF"} hai " +
+                "(aakhri baar Flora ne hi ${if (state) "jalaya" else "band kiya"} tha).",
+        )
     }
 }

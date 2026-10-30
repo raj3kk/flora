@@ -61,6 +61,20 @@ class DeviceMatchTest {
     }
 
     @Test
+    fun torchMatches() {
+        assertTrue(DeviceActions.match("torch on karo") is DeviceActions.DeviceRequest.TorchOn)
+        assertTrue(DeviceActions.match("torch jalao") is DeviceActions.DeviceRequest.TorchOn)
+        assertTrue(DeviceActions.match("torch band karo") is DeviceActions.DeviceRequest.TorchOff)
+        assertTrue(DeviceActions.match("flashlight off") is DeviceActions.DeviceRequest.TorchOff)
+    }
+
+    @Test
+    fun torchStatusBeforeOnOff() {
+        assertTrue(DeviceActions.match("torch on hai") is DeviceActions.DeviceRequest.TorchStatus)
+        assertTrue(DeviceActions.match("torch status") is DeviceActions.DeviceRequest.TorchStatus)
+    }
+
+    @Test
     fun noHijackOfOtherRoutes() {
         assertNull(DeviceActions.match("whatsapp kholo"))
         assertNull(DeviceActions.match("aaj ka mausam kaisa hai"))
