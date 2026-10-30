@@ -5574,7 +5574,14 @@ fun FloraApp(
                 // B4-DOCTOR: PlannerScreen se doctor button sirf
                 // navigation hai — fix wiring DoctorScreen me hi.
                 // Phase 9, A2: G12 orchestrator section isi screen me.
-                com.flora.app.planner.PlannerScreen(plannerEngine, goalOrchestrator) { screen = Screen.DOCTOR }
+                com.flora.app.planner.PlannerScreen(
+                    plannerEngine,
+                    goalOrchestrator,
+                    // Phase 0, Item 2: dono navigation args NAMED (trailing-lambda
+                    // rebind trap se bachne ke liye — Doctor wiring wahi rahe).
+                    onOpenDoctor = { screen = Screen.DOCTOR },
+                    onOpenRoutines = { screen = Screen.ROUTINES },
+                )
             } else if (screen == Screen.TASK_LIST) {
                 TaskListScreen(plannerEngine, autoLogStore) { screen = Screen.CHAT }
             } else if (screen == Screen.SD8_SETTINGS) {

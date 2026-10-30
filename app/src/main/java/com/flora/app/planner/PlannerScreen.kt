@@ -47,6 +47,11 @@ fun PlannerScreen(
     engine: PlannerEngine,
     orchestrator: GoalOrchestrator? = null,
     onOpenDoctor: () -> Unit = {},
+    // Phase 0, Item 2 — ek-tap Routines raasta. Default khali taaki
+    // purane call sites bina badle compile hon; FloraApp call site
+    // named args se Screen.ROUTINES deta hai. Trailing-lambda trap
+    // se bachne ke liye call site par dono args NAMED hain.
+    onOpenRoutines: () -> Unit = {},
 ) {
     val state by engine.state.collectAsState()
     val pendingGoal by engine.pendingGoal.collectAsState()
@@ -201,7 +206,14 @@ fun PlannerScreen(
                     // B4 follow-up P1-1: purana "Macro ho gaya" attestation button HATA DIYA.
                     // Ye button sirf tab VERIFIED karta hai jab Routines runner ka Done log
                     // mile — bina log ke step BLOCKED hi rehta hai (engine me fail-closed).
-                    Text(text = "Macro Routines me save hai ('${engine.plannerMacroName(plan.planId, step.stepIndex)}') — Routines screen par Mere macros se Chalao + confirm se chalao, phir yahan dabao.")
+                    Text(text = "Macro Routines me save hai ('${engine.plannerMacroName(plan.planId, step.stepIndex)}') — neeche wale button se ek tap me Routines kholo, wahan Mere macros se Chalao + confirm se chalao, phir Planner me wapas aakar confirm button dabao.")
+                    Row {
+                        OutlinedButton(
+                            onClick = { onOpenRoutines() }
+                        ) {
+                            Text(text = "Routines me macro chalao (ek tap)")
+                        }
+                    }
                     Row {
                         OutlinedButton(
                             onClick = {
@@ -218,6 +230,10 @@ fun PlannerScreen(
                             Text(text = "Macro chal gaya — runner log se confirm karo")
                         }
                     }
+                    // Phase 0, Item 2 NOTE: upar wala confirm button + engine ka
+                    // fail-closed proof (AutoLog me delivery ke baad ka "Macro: <name>
+                    // -> ho gaya" entry) CHHEDA NAHI gaya — bina runner log ke
+                    // "ho gaya" attestation dobara nahi laya gaya (B4 P1-1 wahi rehta hai).
                 }
                 if (step.tool == PlanTool.SUPABASE_CREATE_PROJECT && step.status == StepStatus.BLOCKED) {
                     // B4 follow-up P1-2: Blocked message "plan amend se ek baar do" kehta tha,
