@@ -92,6 +92,28 @@ class DeviceMatchTest {
     }
 
     @Test
+    fun volumeReadPatterns() {
+        val media = DeviceActions.match("media volume")
+        assertTrue(media is DeviceActions.DeviceRequest.VolumeRead)
+        assertEquals(
+            android.media.AudioManager.STREAM_MUSIC,
+            (media as DeviceActions.DeviceRequest.VolumeRead).stream,
+        )
+        val alarm = DeviceActions.match("alarm volume")
+        assertTrue(alarm is DeviceActions.DeviceRequest.VolumeRead)
+        assertEquals(
+            android.media.AudioManager.STREAM_ALARM,
+            (alarm as DeviceActions.DeviceRequest.VolumeRead).stream,
+        )
+        val ring = DeviceActions.match("ring volume kitna")
+        assertTrue(ring is DeviceActions.DeviceRequest.VolumeRead)
+        assertEquals(
+            android.media.AudioManager.STREAM_RING,
+            (ring as DeviceActions.DeviceRequest.VolumeRead).stream,
+        )
+    }
+
+    @Test
     fun ringerAndSilentMatch() {
         assertTrue(DeviceActions.match("silent karo") is DeviceActions.DeviceRequest.Silent)
         assertTrue(DeviceActions.match("vibrate karo") is DeviceActions.DeviceRequest.RingerVibrate)

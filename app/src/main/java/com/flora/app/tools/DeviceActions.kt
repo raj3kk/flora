@@ -148,6 +148,14 @@ object DeviceActions {
             if (digits != null) {
                 return DeviceRequest.VolumeSet(digits.coerceIn(0, 100), volumeStream(t))
             }
+        }
+        // Read sirf specific patterns par — akela "volume" shabd match
+        // NAHI karta (Batch A ka bare-word rule; Batch C ka generic
+        // "volume" branch is rule ko tod raha tha, isliye hataya gaya).
+        if (t.contains("volume kitna") || t.contains("volume kya hai") ||
+            t.contains("media volume") || t.contains("alarm volume") ||
+            t.contains("ring volume")
+        ) {
             return DeviceRequest.VolumeRead(volumeStream(t))
         }
         // Info phrases.
