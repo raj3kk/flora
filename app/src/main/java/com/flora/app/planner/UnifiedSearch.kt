@@ -40,11 +40,13 @@ import kotlinx.coroutines.flow.first
  *   plan history Room me hai, AutoLog 30-din prune hota hai —
  *   isliye task-log source AutoLog hi hai, Room history nahi).
  *
- * B5 FIX 3 note: AppSearch index is version me NAHI hai
- * (stack-blocked, upar gradle comment + audit log dekho) —
- * search poori tarah store-scan par chalti hai, jo source of
- * truth bhi hai. Index wapas aane par merge() wahi dedup
- * rule se hits ko milayega (koi API change nahi chahiye).
+ * B5-04 DECISION (KEEP STORE-SCAN-ONLY): AppSearch removed
+ * hai - koi AppSearch dep, index build, ya stack bump nahi.
+ * Search poori tarah store-scan par chalti hai, jo source of
+ * truth bhi hai. merge() wahi dedup rule se teeno store
+ * sources ke hits ko milata hai (koi API change nahi chahiye).
+ * Revisit sirf concrete phone/usage evidence par; pehla
+ * candidate tab Room FTS hoga, AppSearch nahi.
  */
 data class UnifiedSearchResult(
     val source: String,
@@ -186,13 +188,14 @@ class UnifiedSearch(
         } catch (e: Exception) {
         }
 
-        // B5 FIX 3: AppSearch index HATA diya gaya hai — poori
-        // 1.1.0 line ko compileSdk 35+ chahiye, pinned stack 34
-        // hai (CI runs 40896889152 / 40899312759 / 40900218424).
-        // Unified search store-scan-only hai (source of truth
-        // wahi tha); AppSearch index tab wapas aayega jab stack
-        // upgrade (compileSdk 35+) coordinator se approve ho.
-        // Koi jhootha "AppSearch-backed" daava nahi hai.
+        // B5-04 DECISION (KEEP STORE-SCAN-ONLY): AppSearch
+        // removed hai - poori 1.1.0 line ko compileSdk 35+
+        // chahiye, pinned stack 34 hai (CI runs 40896889152 /
+        // 40899312759 / 40900218424), par is decision me koi
+        // stack bump nahi hoga. Unified search store-scan-only
+        // hai (source of truth wahi hai). Revisit sirf concrete
+        // phone/usage evidence par; pehla candidate tab Room
+        // FTS hoga. Koi jhootha "AppSearch-backed" daava nahi hai.
 
         return UnifiedSearchLogic.merge(candidates)
     }

@@ -139,8 +139,9 @@ class PlannerEngine(
     private val learnedEngine = LearnedEngine(appContext)
     private val aiBuildQuota = AiBuildQuota(appContext, prefs, licenceClient, androidId)
     private val selfMapClient = SelfMapClient(appContext)
-    // B5 FIX 3: MemoryAppSearchIndex HATA diya gaya (AppSearch
-    // dep stack-blocked hai) — unifiedSearch store-scan-only hai.
+    // B5-04 decision: MemoryAppSearchIndex removed hai -
+    // unifiedSearch store-scan-only hai (koi AppSearch dep,
+    // index build, ya stack bump nahi).
     private val unifiedSearch = UnifiedSearch(
         chatMemoryStore, projectMemoryStore, autoLogStore,
     )

@@ -81,16 +81,17 @@ dependencies {
     // B5-09) + App Startup (registry init ka single point,
     // B5-09). Sab Apache-2.0, AGP 8.5.2 / Kotlin 1.9.24 stack
     // par pinned.
-    // AppSearch DEP BLOCKED (CI-PROVEN ladder, audit log B5 FIX 3):
+    // B5-04 DECISION (KEEP STORE-SCAN-ONLY): AppSearch dep
+    // removed hai (CI-PROVEN ladder, audit log B5 FIX 3):
     // 1.1.0 stable ko compileSdk 36 + AGP 8.9.1 chahiye (CI run
     // 40896889152); 1.1.0-beta01 ko compileSdk 35 chahiye (CI run
     // 40899312759); 1.1.0-alpha07 ko bhi compileSdk 35 chahiye
-    // (CI run 40900218424) — poori 1.1.0 line pinned stack
-    // (compileSdk 34 / AGP 8.5.2) se takrati hai. Stack bump
-    // (35/36, AGP bump) coordinator approval ke bina nahi hoga,
-    // isliye AppSearch dep HATA di gayi hai — unified search
-    // store-scan-only chalti hai (API poori hai, index pending
-    // hai jab tak stack upgrade approve na ho).
+    // (CI run 40900218424) - poori 1.1.0 line pinned stack
+    // (compileSdk 34 / AGP 8.5.2) se takrati hai. Is decision
+    // me koi stack bump nahi hoga aur koi index pending nahi
+    // hai - unified search store-scan-only chalti hai (API
+    // poori hai). Revisit sirf concrete phone/usage evidence
+    // par; pehla candidate tab Room FTS hoga, AppSearch nahi.
     implementation("com.jakewharton.timber:timber:5.0.1")
     implementation("androidx.startup:startup-runtime:1.1.1")
     // B5-11 test-only + debug-only — production/release APK me kabhi nahi.

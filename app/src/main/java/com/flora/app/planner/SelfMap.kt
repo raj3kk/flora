@@ -19,7 +19,7 @@ import org.json.JSONObject
  * SelfMapSafety hi ek enforcement point hai — generator isse
  * filter karke JSON banata hai, client isse filter karke padhta
  * hai, aur UnifiedSearch isse filter karke snippet banata hai
- * (B5 FIX 3: AppSearch index stack-blocked hai, isliye map me
+ * (B5-04 decision: AppSearch removed hai, isliye map me
  * appsearch dependency entry bhi nahi hai). Map me KABHI nahi
  * aayega: koi secret /
  * token / key VALUE, koi token-shape pattern wali line, koi
