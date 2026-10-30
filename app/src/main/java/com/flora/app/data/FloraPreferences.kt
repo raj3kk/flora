@@ -142,6 +142,8 @@ class FloraPreferences(private val context: Context) {
         val AVATAR = stringPreferencesKey("avatar")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
+        // B5 (fix-cycle): cap warning kis date ko di gayi (din me ek baar).
+        val CAP_WARN_DATE = stringPreferencesKey("cap_warn_date")
         val PERMISSIONS_GATE_DONE = booleanPreferencesKey("permissions_gate_done")
         val CONTINUOUS_MIC = booleanPreferencesKey("continuous_mic")
         val VOICE_VIEW = booleanPreferencesKey("voice_view")
@@ -968,6 +970,14 @@ class FloraPreferences(private val context: Context) {
             prefs[Keys.TALK_DATE] = today
             prefs[Keys.TALK_SECONDS] = used + seconds
         }
+    }
+
+    /** B5 (fix-cycle): cap warning kis date ko di gayi ("" = kabhi nahi). */
+    suspend fun capWarnDate(): String =
+        context.floraDataStore.data.map { it[Keys.CAP_WARN_DATE] ?: "" }.first()
+
+    suspend fun setCapWarnDate(date: String) {
+        context.floraDataStore.edit { it[Keys.CAP_WARN_DATE] = date }
     }
 
     // B3 builder-service tokens (B3-04): GitHub/Vercel/user-Supabase

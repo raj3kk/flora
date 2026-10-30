@@ -16,6 +16,7 @@ import com.flora.app.MainActivity
 import com.flora.app.assistant.BatteryTransientNote
 import com.flora.app.assistant.BrainClient
 import com.flora.app.automation.OverlayMicService
+import com.flora.app.data.AutoLogStore
 import com.flora.app.data.ChatMemoryStore
 import com.flora.app.assistant.VisionClient
 import com.flora.app.assistant.VoiceEngine
@@ -488,8 +489,20 @@ class BackgroundMicService : Service() {
         ).format(java.util.Date())
         val used = try { prefs.talkSecondsUsed(today) } catch (e: Exception) { 0L }
         if (cachedPlan != "pro" && used >= 600) {
-            voice?.speak("Aaj ka free talk time (10 minute) khatam ho gaya hai. Kal phir milega, ya Pro (₹199/month) lijiye.")
+            // B5 (fix-cycle): message ki doosri copy nahi — LicenceGate ka const.
+            voice?.speak(LicenceGate.FREE_LIMIT_MESSAGE)
+            try { AutoLogStore(applicationContext).add("Free talk time khatam (10 min/day) — cap laga.") } catch (e: Exception) { }
             return
+        }
+        // B5 (fix-cycle): cap se pehle ek baar chetavni (din me ek baar) —
+        // cap par surprise nahi hona chahiye. Pro par kabhi nahi.
+        if (cachedPlan != "pro" && used >= 540) {
+            val warned = try { prefs.capWarnDate() } catch (e: Exception) { "" }
+            if (warned != today) {
+                try { prefs.setCapWarnDate(today) } catch (e: Exception) { }
+                voice?.speak("Free talk time bas 1 minute bacha hai.")
+                try { AutoLogStore(applicationContext).add("Free talk time warning: bas 1 minute bacha hai.") } catch (e: Exception) { }
+            }
         }
         // N5/NOTCH-07: foreground jaisi history — persisted
         // store se (cap BrainClient.ask ke andar hi lagta hai:

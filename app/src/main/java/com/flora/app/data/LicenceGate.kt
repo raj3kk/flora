@@ -50,7 +50,9 @@ object LicenceGate {
 
     private const val FREE_DAILY_SECONDS =
         FloraConfig.FREE_TALK_SECONDS_PER_DAY.toLong()
-    private const val FREE_LIMIT_MESSAGE =
+    // B5 (fix-cycle): internal — BackgroundMicService isi const ka istemal
+    // karta hai (do copies ka drift khatam; wording bilkul wahi rahegi).
+    internal const val FREE_LIMIT_MESSAGE =
         "Aaj ka free talk time (10 minute) khatam ho gaya hai. " +
             "Kal phir milega, ya Pro (₹199/month) lijiye."
 
