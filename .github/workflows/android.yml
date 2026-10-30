@@ -28,3 +28,8 @@ jobs:
         with:
           gradle-version: 8.7
           arguments: :app:testDebugUnitTest
+      - name: Self-map drift check
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: 8.7
+          arguments: :app:testDebugUnitTest --tests "com.flora.app.planner.SelfMapDriftCheckTest"
