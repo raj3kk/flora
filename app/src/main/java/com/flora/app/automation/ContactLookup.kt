@@ -2,6 +2,7 @@ package com.flora.app.automation
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.provider.ContactsContract
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +65,43 @@ object ContactLookup {
                 exact + rest
             } catch (e: Exception) {
                 emptyList()
+            }
+        }
+
+    /**
+     * Number → naam (call announce v1.2): PhoneLookup se reverse
+     * lookup. Sirf tab chalta hai jab READ_CONTACTS di ho. Naam sirf
+     * usi waqt ke announce me use hoga — kabhi save/log/backup/
+     * server par nahi jayega. Na mile to null (caller "unknown").
+     */
+    suspend fun lookupNameByNumber(context: Context, number: String): String? =
+        withContext(Dispatchers.IO) {
+            if (ContextCompat.checkSelfPermission(
+                    context, android.Manifest.permission.READ_CONTACTS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return@withContext null
+            }
+            val clean = number.trim()
+            if (clean.isEmpty()) return@withContext null
+            try {
+                val uri = Uri.withAppendedPath(
+                    ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+                    Uri.encode(clean),
+                )
+                val projection = arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME)
+                context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val idx = cursor.getColumnIndex(
+                            ContactsContract.PhoneLookup.DISPLAY_NAME
+                        )
+                        val name = if (idx >= 0) cursor.getString(idx) ?: "" else ""
+                        if (name.isNotBlank()) return@withContext name
+                    }
+                }
+                null
+            } catch (e: Exception) {
+                null
             }
         }
 

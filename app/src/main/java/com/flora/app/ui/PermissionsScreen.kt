@@ -159,6 +159,7 @@ fun PermissionsScreen(onShowWizard: () -> Unit) {
                 Manifest.permission.SEND_SMS to "SMS — confirmed SMS ke liye",
                 Manifest.permission.POST_NOTIFICATIONS to "Notifications — push aur background notice ke liye",
                 Manifest.permission.READ_PHONE_STATE to "Phone state — call announce ke liye",
+                Manifest.permission.READ_CALL_LOG to "Call log — caller number padhne ke liye (na ho to announce nahi chalega)",
                 Manifest.permission.ACCESS_FINE_LOCATION to "Location — yahan ka mausam ke liye",
             )
             for ((perm, label) in rows) {

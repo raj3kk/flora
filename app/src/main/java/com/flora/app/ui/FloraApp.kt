@@ -5927,12 +5927,23 @@ private fun SettingsScreen(
         settingsLifecycleOwner.lifecycle.addObserver(observer)
         onDispose { settingsLifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    val phonePermissionLauncher = rememberLauncherForActivityResult(
+    val callLogPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
             callAnnounce = true
             scope.launch { prefs.setCallAnnounce(true) }
+        } else {
+            note = "Call log permission ke bina caller number nahi milega, announce nahi chalega."
+        }
+    }
+    val phonePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            // Call log chain (v1.2): number ke liye READ_CALL_LOG bhi
+            // chahiye — phone state milne ke baad yehi maanga jayega.
+            callLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
         } else {
             note = "Phone permission ke bina call announce nahi chalega."
         }
@@ -6608,7 +6619,7 @@ private fun SettingsScreen(
                     }
                 })
             }
-            Text("Default OFF. Naam batana aur bol kar receive/reject v1.3 me (CallScreening/dialer role ke saath). Naye Android par background broadcast rok diya ja sakta hai.")
+            Text("Default OFF. Caller ka naam (contacts se) 'Boss, X calling you' format me bolta hai; unknown number par digits nahi bole jayenge. Bol-kar-receive/reject isme nahi hai (dialer role alag raasta hai). Phone State + Call Log dono permissions chahiye — na hon to announce nahi chalega.")
             Spacer(modifier = Modifier.height(12.dp))
             Row {
                 Text("Event announce (charger lagna/nikalna, battery low)")
