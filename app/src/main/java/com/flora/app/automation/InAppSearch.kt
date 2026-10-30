@@ -62,7 +62,16 @@ object InAppSearch {
         val typed = service.setTextOnFirstEditable(query) || service.typeIntoFocused(query)
         if (!typed) return InAppSearchOutcome.NoSearchBox
         delay(500)
-        val submitted = service.clickText("Search") || service.clickText("Go") || service.clickText("Khoj")
+        // Phase 0, Item 1 — submit: pehle exact-description +
+        // contains-match (clickSearchSubmit), na mile to ek baar
+        // auto-enter retry (800ms baad — suggestions/results load
+        // hone par submit button mil sakta hai). Password guard,
+        // Done/TypedOnly/NoSearchBox contract wahi hai.
+        var submitted = service.clickSearchSubmit()
+        if (!submitted) {
+            delay(800)
+            submitted = service.clickSearchSubmit()
+        }
         return if (submitted) InAppSearchOutcome.Done else InAppSearchOutcome.TypedOnly
     }
 }

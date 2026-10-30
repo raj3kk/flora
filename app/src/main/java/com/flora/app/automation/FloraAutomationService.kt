@@ -157,6 +157,43 @@ class FloraAutomationService : AccessibilityService() {
     }
 
     /**
+     * Phase 0, Item 1 — content-description exact-match fallback.
+     *
+     * clickText contains-match hai (text YA description me substring):
+     * search-submit jaise button par galat node mil sakta hai (jaise
+     * search field ka container, ya suggestion row). Exact description
+     * ("Search", "Go", "Khoj") pehle try hota hai — icon-only submit
+     * button (koi text nahi, sirf description) isi se milta hai.
+     * Na mile to false; caller phir contains-match par jayega.
+     */
+    fun clickByExactDescription(vararg descriptions: String): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val wanted = descriptions.map { it.trim().lowercase() }.toSet()
+        fun dfs(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+            if (node == null) return null
+            val desc = (node.contentDescription?.toString() ?: "").trim().lowercase()
+            if (node.isClickable && desc in wanted) return node
+            for (i in 0 until node.childCount) {
+                val found = dfs(node.getChild(i))
+                if (found != null) return found
+            }
+            return null
+        }
+        val target = dfs(root) ?: return false
+        return target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+    }
+
+    /**
+     * Phase 0, Item 1 — search submit: pehle exact description,
+     * phir maujooda contains-match (Search/Go/Khoj). Koi naya
+     * behaviour nahi — sirf submit milne ke raaste badhe hain.
+     */
+    fun clickSearchSubmit(): Boolean {
+        if (clickByExactDescription("Search", "Go", "Khoj", "Search YouTube")) return true
+        return clickText("Search") || clickText("Go") || clickText("Khoj")
+    }
+
+    /**
      * Planner-first routing, Batch 2 — YouTube first-result chain ONLY
      * (general tap surface nahi, wo SD-P4 domain hai).
      *

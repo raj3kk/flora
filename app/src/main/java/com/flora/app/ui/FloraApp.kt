@@ -2926,6 +2926,53 @@ fun FloraApp(
                         // Number nahi hai to game background me rehta
                         // hai — baaki commands normal chalenge.
                     }
+                    // Phase 0, Item 1 — InAppSearch ke baad play step.
+                    // Done ke baad: foreground YouTube ho to pehla video
+                    // result tap + foreground verify (song sach me chal
+                    // raha ho, success-check ke saath). YouTube na ho to
+                    // purana Done message hi (generic app me pehla result
+                    // tap karna "play" nahi hota — behaviour same).
+                    // TypedOnly/NoSearchBox par purane messages wahi
+                    // (auto-enter retry ab searchInApp ke andar hai).
+                    // Fail par imaandaar message — jhootha "play ho
+                    // gaya" kabhi nahi. Helper sendChat ke andar hai
+                    // (messages/voice FloraApp scope se, call sites
+                    // scope.launch ke andar se — suspend call valid).
+                    suspend fun handleInAppSearchResult(
+                        service: com.flora.app.automation.FloraAutomationService,
+                        query: String,
+                        outcome: com.flora.app.automation.InAppSearchOutcome,
+                    ) {
+                        if (outcome != com.flora.app.automation.InAppSearchOutcome.Done) {
+                            val msg = if (outcome == com.flora.app.automation.InAppSearchOutcome.TypedOnly) {
+                                "Search box me '$query' likh diya hai, enter dabate hi search ho jayega."
+                            } else {
+                                "Is app me search box nahi mila, isliye andar search nahi kar payi."
+                            }
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                            return
+                        }
+                        val fg = try { service.foregroundPackage() } catch (e: Exception) { null }
+                        if (fg != "com.google.android.youtube") {
+                            val msg = "Is app me '$query' search kar diya hai."
+                            messages = messages + ChatMsg("Flora: $msg", false)
+                            voice.speak(msg)
+                            return
+                        }
+                        delay(1200)
+                        val tapped = try { service.clickFirstVideoResult() } catch (e: Exception) { false }
+                        delay(1500)
+                        val stillYt = try { service.foregroundPackage() } catch (e: Exception) { null } ==
+                            "com.google.android.youtube"
+                        val msg = if (tapped && stillYt) {
+                            "'$query' ka pehla result chala diya hai."
+                        } else {
+                            "Is app me '$query' search kar diya hai, par pehla result tap nahi ho paya — result par khud tap karo."
+                        }
+                        messages = messages + ChatMsg("Flora: $msg", false)
+                        voice.speak(msg)
+                    }
                     // Phase 6: foreground-app context carryover — khuli hui
                     // app ke andar search. Flora foreground me ho to plain
                     // form research branch par hi jayega (behaviour same).
@@ -2982,23 +3029,11 @@ fun FloraApp(
                                     voice.speak("App ke andar search ke liye Accessibility service ON karni hogi, Settings me.")
                                     return@launch
                                 }
-                                when (val res = com.flora.app.automation.InAppSearch.searchInApp(serviceNow, carryQuery)) {
-                                    com.flora.app.automation.InAppSearchOutcome.Done -> {
-                                        val msg = "Is app me '$carryQuery' search kar diya hai."
-                                        messages = messages + ChatMsg("Flora: $msg", false)
-                                        voice.speak(msg)
-                                    }
-                                    com.flora.app.automation.InAppSearchOutcome.TypedOnly -> {
-                                        val msg = "Search box me '$carryQuery' likh diya hai, enter dabate hi search ho jayega."
-                                        messages = messages + ChatMsg("Flora: $msg", false)
-                                        voice.speak(msg)
-                                    }
-                                    else -> {
-                                        val msg = "Is app me search box nahi mila, isliye andar search nahi kar payi."
-                                        messages = messages + ChatMsg("Flora: $msg", false)
-                                        voice.speak(msg)
-                                    }
-                                }
+                                handleInAppSearchResult(
+                                    serviceNow,
+                                    carryQuery,
+                                    com.flora.app.automation.InAppSearch.searchInApp(serviceNow, carryQuery),
+                                )
                             }
                         }
                         return
@@ -3016,23 +3051,11 @@ fun FloraApp(
                             } else {
                                 scope.launch {
                                     val svc = fgService ?: return@launch
-                                    when (val res = com.flora.app.automation.InAppSearch.searchInApp(svc, plainSearchQuery)) {
-                                        com.flora.app.automation.InAppSearchOutcome.Done -> {
-                                            val msg = "Is app me '$plainSearchQuery' search kar diya hai."
-                                            messages = messages + ChatMsg("Flora: $msg", false)
-                                            voice.speak(msg)
-                                        }
-                                        com.flora.app.automation.InAppSearchOutcome.TypedOnly -> {
-                                            val msg = "Search box me '$plainSearchQuery' likh diya hai, enter dabate hi search ho jayega."
-                                            messages = messages + ChatMsg("Flora: $msg", false)
-                                            voice.speak(msg)
-                                        }
-                                        else -> {
-                                            val msg = "Is app me search box nahi mila, isliye andar search nahi kar payi."
-                                            messages = messages + ChatMsg("Flora: $msg", false)
-                                            voice.speak(msg)
-                                        }
-                                    }
+                                    handleInAppSearchResult(
+                                        svc,
+                                        plainSearchQuery,
+                                        com.flora.app.automation.InAppSearch.searchInApp(svc, plainSearchQuery),
+                                    )
                                 }
                             }
                             return
