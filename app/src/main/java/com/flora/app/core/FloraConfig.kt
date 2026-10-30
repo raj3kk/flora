@@ -83,6 +83,18 @@ object FloraConfig {
     const val MODELS_MANIFEST_URL =
         "https://keomyweghrmhqglaxmyv.supabase.co/storage/v1/object/public/flora-models/manifest.json"
 
+    // In-app update (Phase 2 Item 3): version check file repo ke
+    // web/updates/version.json se aati hai — Vercel use static
+    // serve karta hai (models/manifest.json wali pattern). APK
+    // khud Supabase public bucket se aayega jab channel lagega;
+    // tab tak version.json me apkUrl khali hai aur app website
+    // ke download page par bhejega. GitHub releases private repo
+    // ki wajah se no-auth channel nahi ban sakte; Vercel free
+    // 50 MB limit ki wajah se APK host nahi kar sakta.
+    const val UPDATE_VERSION_URL =
+        "https://flora-henna-alpha.vercel.app/updates/version.json"
+    const val UPDATE_PAGE_URL = WEBSITE_URL + "/download.html"
+
     // Google link sign-in (v2.22, Phase 5, G14): Web OAuth
     // client ID dashboard (Firebase/Supabase) par banana
     // baaki hai — tab tak khali hai aur Settings button

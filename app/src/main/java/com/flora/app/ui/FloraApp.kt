@@ -76,6 +76,7 @@ import com.flora.app.automation.AutoActions
 import com.flora.app.automation.ContactLookup
 import com.flora.app.automation.ContactResolver
 import com.flora.app.core.FloraConfig
+import com.flora.app.update.AppUpdate
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
 import com.flora.app.data.LicenceStatus
@@ -6090,6 +6091,12 @@ private fun SettingsScreen(
 
     // Keys-check + background status (v2.12): launcher se PEHLE.
     var keyCheckNote by remember { mutableStateOf("") }
+    // App update (Phase 2 Item 3): states bhi yahin, use se PEHLE.
+    // Koi auto-check/download nahi — har kadam user ke tap par.
+    var updateNote by remember { mutableStateOf("") }
+    var updateInfo by remember { mutableStateOf<AppUpdate.UpdateInfo?>(null) }
+    var updateFile by remember { mutableStateOf<java.io.File?>(null) }
+    var updateProgress by remember { mutableStateOf(-1) }
     var bgNote by remember { mutableStateOf("") }
     var notifGranted by remember { mutableStateOf(false) }
     var batteryIgnored by remember { mutableStateOf(false) }
@@ -6541,6 +6548,100 @@ private fun SettingsScreen(
                 }) { Text("Bhare hue keys check karo (bina save)") }
             }
             Text("Save tumhare haath me hai — sahi ho ya galat, Save dabane par wahi save hogi. 'Keys check karo' saved keys ko check karta hai; 'Bhare hue keys check karo' bina save ke field wali keys ko check karta hai. Check sirf validity batata hai, key ki value kabhi screen par nahi aati. Keys sirf is phone par save hoti hain — har user ki apni key, usi user ke liye istemal hoti hai (koi shared key nahi).")
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("App update — server se (manual check)")
+            Text("Naya version aaya ho to yahan se check karo. Download aur install sirf tumhare tap par hoga — apne aap kuch download ya install nahi hoga.")
+            Row {
+                Button(onClick = {
+                    scope.launch {
+                        updateNote = "Update check ho raha hai..."
+                        updateFile = null
+                        updateProgress = -1
+                        val info = try {
+                            AppUpdate.fetchLatest()
+                        } catch (e: Exception) {
+                            null
+                        }
+                        if (info == null) {
+                            updateInfo = null
+                            updateNote = "Check nahi ho paya — internet dekh kar dobara karo."
+                        } else {
+                            val installed = AppUpdate.installedVersionCode(context)
+                            if (!AppUpdate.isNewer(info, installed)) {
+                                updateInfo = null
+                                updateNote = "Tum latest version par ho."
+                            } else {
+                                updateInfo = info
+                                updateNote = "Naya version mila: ${info.versionName} (code ${info.versionCode})."
+                            }
+                        }
+                    }
+                }) { Text("Update check karo") }
+            }
+            if (updateNote.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(updateNote)
+            }
+            val pendingUpdate = updateInfo
+            if (pendingUpdate != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                if (pendingUpdate.apkUrl.isNotEmpty()) {
+                    Row {
+                        Button(onClick = {
+                            scope.launch {
+                                updateNote = "APK download ho raha hai..."
+                                updateProgress = 0
+                                val file = AppUpdate.downloadApk(
+                                    context, pendingUpdate.apkUrl,
+                                    pendingUpdate.sha256
+                                ) { done, total ->
+                                    updateProgress = if (total > 0) {
+                                        ((done * 100) / total).toInt()
+                                    } else {
+                                        -1
+                                    }
+                                }
+                                if (file == null) {
+                                    updateFile = null
+                                    updateNote = "Download nahi ho paya — dobara karo. (SHA match na ho to bhi yehi dikhega; file install nahi hogi.)"
+                                } else {
+                                    updateFile = file
+                                    updateNote = "Download ho gaya — Install dabao."
+                                }
+                            }
+                        }) { Text("APK download karo") }
+                    }
+                    if (updateProgress in 0..100) {
+                        Text("Download: $updateProgress%")
+                    }
+                    val readyFile = updateFile
+                    if (readyFile != null) {
+                        Row {
+                            Button(onClick = {
+                                if (!AppUpdate.canInstallUnknown(context)) {
+                                    updateNote = "Pehle 'is app se install' ki permission do — settings khul raha hai, wapas aakar Install dobara dabao."
+                                    context.startActivity(
+                                        AppUpdate.unknownSourcesIntent(context)
+                                    )
+                                } else {
+                                    context.startActivity(
+                                        AppUpdate.installIntent(context, readyFile)
+                                    )
+                                }
+                            }) { Text("Install karo") }
+                        }
+                    }
+                } else {
+                    Row {
+                        Button(onClick = {
+                            context.startActivity(
+                                AppUpdate.browserIntent(pendingUpdate.pageUrl)
+                            )
+                        }) { Text("Website se download karo") }
+                    }
+                    Text("Seedha APK download abhi is app se nahi hoga — website ka download page khulega, wahan se lo.")
+                }
+            }
             Spacer(modifier = Modifier.height(12.dp))
             Text("Background aur notifications — app band hone par bhi chale")
             Text(

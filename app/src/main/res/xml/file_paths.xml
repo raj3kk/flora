@@ -3,4 +3,7 @@
      share-sheet ke liye khulta hai; koi shared folder nahi. -->
 <paths>
     <cache-path name="builder_exports" path="builder_exports/" />
+    <!-- Phase 2 Item 3: update APK download (cacheDir/updates/) —
+         sirf install intent ko FileProvider URI dene ke liye. -->
+    <cache-path name="updates" path="updates/" />
 </paths>

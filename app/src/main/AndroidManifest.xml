@@ -4,6 +4,10 @@
      ek baar bolo + ek confirmation, phir poora execution. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Phase 2 Item 3: in-app update ka sideload install — sirf
+         user ke tap par system prompt se; Flora sideload-only hai,
+         Play Store par kabhi nahi. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- NoAccess functions (Batch A/C) — NORMAL permissions, install-time
          grant, koi runtime prompt nahi: volume set, network/Wi-Fi state read. -->
