@@ -1,3 +1,7 @@
+-- SUPERSEDED / DO-NOT-RUN (parent docs pass, 2026-10-30): ye draft canonical
+-- supabase/sql/core_tables.sql se diverge karta hai. Canonical version deploy
+-- session #1 me chal chuka hai (live trap moot hai) — is draft ko dobara
+-- kabhi mat chalao; sirf history/reference ke liye rakha hai.
 -- Flora push_tokens table — DRAFT ONLY, deploy nahi hua.
 -- Chalane se pehle: Supabase dashboard / SQL editor se chalana
 -- hai; is file ko chalane se koi token, key ya secret nahi
