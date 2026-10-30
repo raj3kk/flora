@@ -95,7 +95,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS, APPEARANCE, COMM, FAV_SONGS }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS, APPEARANCE, COMM, FAV_SONGS, VAULT, TEACH_ONCE }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -118,6 +118,8 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.APPEARANCE -> "Appearance"
     Screen.COMM -> "Communication"
     Screen.FAV_SONGS -> "Favourite gaane"
+    Screen.VAULT -> "Vault"
+    Screen.TEACH_ONCE -> "Teach once"
     Screen.PRIVACY -> "Privacy"
     Screen.TERMS -> "Terms"
     Screen.AUTO -> "Auto"
@@ -229,7 +231,7 @@ fun FloraApp(
     val sendChatHolder = remember { arrayOfNulls<((String) -> Unit)>(1) }
     // Theme state (v1.9): states block me, launcher se pehle.
     var theme by remember { mutableStateOf("light") }
-    var messages by remember { mutableStateOf(listOf(ChatMsg("Namaste! Main Flora hun. Kya madad kar sakti hun?", false))) }
+    var messages by remember { mutableStateOf(listOf(ChatMsg("Namaste! Main Flora hun, tumhara dost. Jo bologe wo real me kar dungi, bas bolo kya karna hai.", false))) }
     // P1 appearance flags — Appearance screen se toggle hote
     // hain; CHAT khulne par LaunchedEffect(screen) se refresh
     // hote hain (default OFF, chat header/list wahi rehti hai).
@@ -381,7 +383,7 @@ fun FloraApp(
         if (current.size == persistedCount) return@LaunchedEffect
         val fresh = current.drop(persistedCount).mapNotNull { m ->
             val t = m.text.removePrefix("Flora: ").trim()
-            if (t.isEmpty() || t == "Namaste! Main Flora hun. Kya madad kar sakti hun?" || t == "Namaste! Main Flora hun — tumhare saath waqt bitana mujhe accha lagega. Aaj kya baat karein?") null
+            if (t.isEmpty() || t == "Namaste! Main Flora hun, tumhara dost. Jo bologe wo real me kar dungi, bas bolo kya karna hai." || t == "Namaste! Main Flora hun — tumhare saath waqt bitana mujhe accha lagega. Aaj kya baat karein?") null
             else t to m.fromUser
         }
         if (fresh.isEmpty()) {
@@ -1677,6 +1679,14 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Favourite gaane") },
                             onClick = { screen = Screen.FAV_SONGS; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Vault") },
+                            onClick = { screen = Screen.VAULT; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Teach once") },
+                            onClick = { screen = Screen.TEACH_ONCE; menuOpen = false },
                         )
                         DropdownMenuItem(
                             text = { Text("Auto") },
@@ -5112,6 +5122,25 @@ fun FloraApp(
                             busy = false
                             return@launch
                         }
+                        // Item 36 §3 friend talk: seedha identity sawaal —
+                        // "tum AI ho / asli insaan ho / real dost ho / kaun ho /
+                        // robot ho" — routing se PEHLE, ek line me imaandaar
+                        // jawab. Normal baat me koi repeated disclaimer nahi;
+                        // ye branch sirf seedhe sawaal par jawab deti hai, aur
+                        // kabhi biological insaan hone ka daava nahi karti.
+                        if (lower == "tum ai ho" || lower == "tum ai ho kya" ||
+                            lower == "tum asli insaan ho" || lower == "tum asli insaan ho kya" ||
+                            lower == "tum real dost ho" || lower == "tum real dost ho kya" ||
+                            lower == "tum kaun ho" || lower == "tum robot ho" ||
+                            lower == "tum robot ho kya"
+                        ) {
+                            input = ""
+                            val ans = "Main Flora hun, tumhara AI dost — real me kaam karne wali, insaan nahi."
+                            messages = messages + ChatMsg("Flora: $ans", false)
+                            voice.speak(ans)
+                            busy = false
+                            return@launch
+                        }
                         // B1 G5/G7: live sawal par pehle research
                         // lane (Tavily + DuckDuckGo) — brain.ask
                         // bina live source ke jawab na de. Lane
@@ -5372,6 +5401,24 @@ fun FloraApp(
                 CommConsentScreen(autoLogStore) { screen = Screen.CHAT }
             } else if (screen == Screen.FAV_SONGS) {
                 FavSongsScreen(autoLogStore) { screen = Screen.CHAT }
+            } else if (screen == Screen.VAULT) {
+                VaultScreen(autoLogStore) { screen = Screen.CHAT }
+            } else if (screen == Screen.TEACH_ONCE) {
+                TeachOnceScreen(
+                    autoLogStore = autoLogStore,
+                    onRunMacro = { stored ->
+                        screen = Screen.CHAT
+                        val macro = com.flora.app.automation.MacroJson.parse(stored.json)
+                        if (macro == null) {
+                            voice.speak("Macro '${stored.name}' ka format kharab hai, dobara save karo.")
+                        } else {
+                            messages = messages + ChatMsg("Flora: Macro '${macro.name}' chala rahi hun, har step bol kar bataungi.", false)
+                            voice.speak("Macro ${macro.name} chala rahi hun.")
+                            macroPending = macro to 0
+                            runMacroFrom(macro, 0)
+                        }
+                    },
+                ) { screen = Screen.CHAT }
             } else if (screen == Screen.DOCTOR) {
                 com.flora.app.doctor.DoctorScreen(projectStore, autoLogStore, plannerEngine)
             } else if (screen == Screen.WHITEBOARD) {
