@@ -39,6 +39,23 @@ import com.flora.app.data.CatcherEvents
  * - RMS har frame par NotchState ko jata hai (R-N-6: system
  *   path active ho to yehi wave ka source hai).
  */
+/**
+ * Phase 0, Item 3 — session-internal retry ka pure decision (JVM-testable,
+ * koi Android call nahi; error constants compile-time inline hote hain).
+ * Transient errors par hi retry, cap ke andar. ERROR_CLIENT (stop() ka
+ * side-effect), PERMISSIONS, AUDIO, BUSY, SERVER kabhi retry nahi —
+ * warna stop se ladai ya be-ant loop hoga.
+ */
+internal const val STT_INTERNAL_MAX_RETRIES = 5
+internal const val STT_INTERNAL_RETRY_DELAY_MS = 250L
+internal fun shouldRetrySttError(error: Int, consecutiveRetries: Int): Boolean {
+    if (consecutiveRetries >= STT_INTERNAL_MAX_RETRIES) return false
+    return error == SpeechRecognizer.ERROR_NO_MATCH ||
+        error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
+        error == SpeechRecognizer.ERROR_NETWORK ||
+        error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT
+}
+
 class ContinuousListener(
     context: Context,
     private val onResult: (String) -> Unit,
@@ -52,6 +69,28 @@ class ContinuousListener(
     private val appContext = context.applicationContext
     private var recognizer: SpeechRecognizer? = null
     private var listening = false
+    // Phase 0, Item 3 — session-internal retry state: wahi recognizer
+    // + wahi intent dobara start hoga (naya instance nahi), isliye
+    // listening=true aur beep-mute barkaraar rahenge — mic indicator
+    // off-on nahi hoga. stop() par pending retry cancel hoti hai.
+    private var lastIntent: Intent? = null
+    private var retryCount = 0
+    private val retryRunnable = Runnable {
+        val rec = recognizer
+        val intent = lastIntent
+        if (rec != null && intent != null && listening) {
+            try {
+                rec.startListening(intent)
+            } catch (e: Exception) {
+                // Same-instance restart bhi fail — ab purana terminal raasta.
+                retryCount = 0
+                listening = false
+                unmuteBeeps()
+                CatcherEvents.record("STT", "system STT error (internal retry failed)")
+                onError()
+            }
+        }
+    }
 
     /**
      * Mic beep mute (v2.15): system SpeechRecognizer kuch phones
@@ -121,6 +160,9 @@ class ContinuousListener(
             rec.setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {}
                 override fun onBeginningOfSpeech() {
+                    // Phase 0, Item 3: bolna shuru hua to session healthy —
+                    // consecutive-retry counter reset (silence ke baad wapas).
+                    retryCount = 0
                     try {
                         onSpeechStarted()
                     } catch (e: Exception) {
@@ -148,6 +190,7 @@ class ContinuousListener(
                 override fun onEvent(eventType: Int, params: Bundle?) {}
 
                 override fun onResults(results: Bundle?) {
+                    retryCount = 0
                     listening = false
                     unmuteBeeps()
                     // B3 (fix-cycle): pehle sirf firstOrNull liya jata tha —
@@ -169,6 +212,23 @@ class ContinuousListener(
                 }
 
                 override fun onError(error: Int) {
+                    // Phase 0, Item 3 — session-internal retry: transient
+                    // error par wahi recognizer 250ms baad dobara start
+                    // hoga; listening=true, beeps muted, onError callback
+                    // NAHI — isliye caller ka 600ms naya-recognizer
+                    // restart nahi chalega aur mic indicator off-on
+                    // flicker nahi hoga. Cap ke baad (ya non-transient
+                    // error par) neeche wala purana terminal raasta —
+                    // caller restart backstop wahi hai (chheda nahi).
+                    if (recognizer != null && listening &&
+                        shouldRetrySttError(error, retryCount)
+                    ) {
+                        retryCount++
+                        mainHandler.postDelayed(retryRunnable, STT_INTERNAL_RETRY_DELAY_MS)
+                        return
+                    }
+                    retryCount = 0
+                    mainHandler.removeCallbacks(retryRunnable)
                     listening = false
                     unmuteBeeps()
                     CatcherEvents.record("STT", "system STT error code=$error")
@@ -186,10 +246,17 @@ class ContinuousListener(
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             }
             recognizer = rec
+            // Phase 0, Item 3: naya session — pending internal retry
+            // cancel, counter reset, intent session ke liye save.
+            mainHandler.removeCallbacks(retryRunnable)
+            retryCount = 0
+            lastIntent = intent
             listening = true
             muteBeeps()
             rec.startListening(intent)
         } catch (e: Exception) {
+            mainHandler.removeCallbacks(retryRunnable)
+            retryCount = 0
             listening = false
             recognizer = null
             unmuteBeeps()
@@ -199,6 +266,10 @@ class ContinuousListener(
     }
 
     fun stop() {
+        // Phase 0, Item 3: stop ke baad koi internal retry nahi —
+        // pending retry cancel (warna stop se ladai hogi).
+        mainHandler.removeCallbacks(retryRunnable)
+        retryCount = 0
         try {
             recognizer?.stopListening()
         } catch (e: Exception) {
