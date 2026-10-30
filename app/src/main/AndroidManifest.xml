@@ -144,6 +144,9 @@
         <receiver
             android:name="com.flora.app.automation.ReminderAlarmReceiver"
             android:exported="false" />
+        <receiver
+            android:name="com.flora.app.automation.TriggerAlarmReceiver"
+            android:exported="false" />
         <service
             android:name="com.flora.app.automation.FloraNotificationListener"
             android:exported="false"
