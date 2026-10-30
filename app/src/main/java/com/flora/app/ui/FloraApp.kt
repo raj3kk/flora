@@ -3043,7 +3043,9 @@ fun FloraApp(
                                             appContext, com.flora.app.automation.AppAutomation.GEMINI_PKG
                                         )
                                         if (!installed) {
-                                            voice.speak("Gemini app installed nahi hai, Play Store khol raha hun — install poora hote hi dobara bol dena.")
+                                            val absentMsg = "Gemini app installed nahi hai, Play Store khol raha hun — install poora hote hi dobara bol dena. Ya chaho to Flora ke andar Pollinations se bana dun — 'image banao $prompt' bolo."
+                                            messages = messages + ChatMsg("Flora: $absentMsg", false)
+                                            voice.speak(absentMsg)
                                             com.flora.app.automation.AppAutomation.openPlayStoreDetails(
                                                 appContext, com.flora.app.automation.AppAutomation.GEMINI_PKG
                                             )
@@ -3063,6 +3065,9 @@ fun FloraApp(
                                         // yahan khud karo, warna "Saved" jhooth hota.
                                         val ok = runChatGptImage(prompt)
                                         if (!ok) {
+                                            val offerMsg = "ChatGPT se image nahi bana payi. Chaho to Flora ke andar Pollinations se bana dun — 'image banao $prompt' bolo."
+                                            messages = messages + ChatMsg("Flora: $offerMsg", false)
+                                            voice.speak(offerMsg)
                                             null
                                         } else {
                                             val jpeg = try { service.screenshotJpeg() } catch (e: Exception) { null }
@@ -3075,12 +3080,12 @@ fun FloraApp(
                                     }
                                     when (outcome) {
                                         is com.flora.app.automation.ImageOutcome.Saved -> {
-                                            val msg = "Image ban gayi hai aur Gallery ke Flora folder me save kar di hai — Photos me dekh lo."
+                                            val msg = "Image '$app' se ban gayi hai — Flora ne khud nahi banayi — aur Gallery ke Flora folder me save kar di hai, Photos me dekh lo."
                                             messages = messages + ChatMsg("Flora: $msg", false)
                                             voice.speak(msg)
                                         }
                                         is com.flora.app.automation.ImageOutcome.AppOnly -> {
-                                            val msg = "Image '$app' me ban gayi hai, par screenshot nahi le payi — app me hi dekh lo."
+                                            val msg = "Image '$app' se ban gayi hai — Flora ne khud nahi banayi — par screenshot nahi le payi, isliye app me hi dekh lo."
                                             messages = messages + ChatMsg("Flora: $msg", false)
                                             voice.speak(msg)
                                         }
