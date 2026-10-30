@@ -124,6 +124,13 @@ class FloraPreferences(private val context: Context) {
         val P1_ORB_DEPTH = booleanPreferencesKey("p1_orb_depth")
         val P1_CHARM = booleanPreferencesKey("p1_charm")
         val P1_EDGE_GLOW = booleanPreferencesKey("p1_edge_glow")
+        // P2 consent-gated communication: har sub-action ka
+        // apna flag, default OFF (8.12 master flags alag hain).
+        val P2_WA_ALERT = booleanPreferencesKey("p2_wa_alert")
+        val P2_WA_GROUP = booleanPreferencesKey("p2_wa_group")
+        val P2_EMAIL_READ = booleanPreferencesKey("p2_email_read")
+        val P2_EMAIL_REPLY = booleanPreferencesKey("p2_email_reply")
+        val P2_SOCIAL_POST = booleanPreferencesKey("p2_social_post")
         val AVATAR = stringPreferencesKey("avatar")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
@@ -480,6 +487,42 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setP1EdgeGlow(value: Boolean) {
         context.floraDataStore.edit { it[Keys.P1_EDGE_GLOW] = value }
+    }
+
+    /** P2 consent flags — default OFF. */
+    suspend fun p2WaAlert(): Boolean =
+        context.floraDataStore.data.map { it[Keys.P2_WA_ALERT] ?: false }.first()
+
+    suspend fun setP2WaAlert(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.P2_WA_ALERT] = value }
+    }
+
+    suspend fun p2WaGroup(): Boolean =
+        context.floraDataStore.data.map { it[Keys.P2_WA_GROUP] ?: false }.first()
+
+    suspend fun setP2WaGroup(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.P2_WA_GROUP] = value }
+    }
+
+    suspend fun p2EmailRead(): Boolean =
+        context.floraDataStore.data.map { it[Keys.P2_EMAIL_READ] ?: false }.first()
+
+    suspend fun setP2EmailRead(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.P2_EMAIL_READ] = value }
+    }
+
+    suspend fun p2EmailReply(): Boolean =
+        context.floraDataStore.data.map { it[Keys.P2_EMAIL_REPLY] ?: false }.first()
+
+    suspend fun setP2EmailReply(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.P2_EMAIL_REPLY] = value }
+    }
+
+    suspend fun p2SocialPost(): Boolean =
+        context.floraDataStore.data.map { it[Keys.P2_SOCIAL_POST] ?: false }.first()
+
+    suspend fun setP2SocialPost(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.P2_SOCIAL_POST] = value }
     }
 
     /** SD-P1 Batch 2 (SD-1) connector secrets — Deepgram pattern

@@ -95,7 +95,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS, APPEARANCE }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS, APPEARANCE, COMM }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -116,6 +116,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.TASK_LIST -> "Task list"
     Screen.SD8_SETTINGS -> "SD-8 Settings"
     Screen.APPEARANCE -> "Appearance"
+    Screen.COMM -> "Communication"
     Screen.PRIVACY -> "Privacy"
     Screen.TERMS -> "Terms"
     Screen.AUTO -> "Auto"
@@ -1667,6 +1668,10 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Appearance") },
                             onClick = { screen = Screen.APPEARANCE; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Communication") },
+                            onClick = { screen = Screen.COMM; menuOpen = false },
                         )
                         DropdownMenuItem(
                             text = { Text("Auto") },
@@ -5358,6 +5363,8 @@ fun FloraApp(
                 Sd8SettingsScreen(autoLogStore) { screen = Screen.CHAT }
             } else if (screen == Screen.APPEARANCE) {
                 AppearanceScreen(autoLogStore) { screen = Screen.CHAT }
+            } else if (screen == Screen.COMM) {
+                CommConsentScreen(autoLogStore) { screen = Screen.CHAT }
             } else if (screen == Screen.DOCTOR) {
                 com.flora.app.doctor.DoctorScreen(projectStore, autoLogStore, plannerEngine)
             } else if (screen == Screen.WHITEBOARD) {
