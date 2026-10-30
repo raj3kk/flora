@@ -120,6 +120,10 @@ class FloraPreferences(private val context: Context) {
         val SD8_THINKING_VISIBLE = booleanPreferencesKey("sd8_thinking_visible")
         val SD8_EMAIL_CONSENT = booleanPreferencesKey("sd8_email_consent")
         val SD8_SOCIAL_CONSENT = booleanPreferencesKey("sd8_social_consent")
+        // P1 appearance bundle: teenon toggles default OFF.
+        val P1_ORB_DEPTH = booleanPreferencesKey("p1_orb_depth")
+        val P1_CHARM = booleanPreferencesKey("p1_charm")
+        val P1_EDGE_GLOW = booleanPreferencesKey("p1_edge_glow")
         val AVATAR = stringPreferencesKey("avatar")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
@@ -454,6 +458,28 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setSd8SocialConsent(value: Boolean) {
         context.floraDataStore.edit { it[Keys.SD8_SOCIAL_CONSENT] = value }
+    }
+
+    /** P1 appearance toggles — default OFF. */
+    suspend fun p1OrbDepth(): Boolean =
+        context.floraDataStore.data.map { it[Keys.P1_ORB_DEPTH] ?: false }.first()
+
+    suspend fun setP1OrbDepth(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.P1_ORB_DEPTH] = value }
+    }
+
+    suspend fun p1Charm(): Boolean =
+        context.floraDataStore.data.map { it[Keys.P1_CHARM] ?: false }.first()
+
+    suspend fun setP1Charm(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.P1_CHARM] = value }
+    }
+
+    suspend fun p1EdgeGlow(): Boolean =
+        context.floraDataStore.data.map { it[Keys.P1_EDGE_GLOW] ?: false }.first()
+
+    suspend fun setP1EdgeGlow(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.P1_EDGE_GLOW] = value }
     }
 
     /** SD-P1 Batch 2 (SD-1) connector secrets — Deepgram pattern

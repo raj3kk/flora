@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
@@ -38,6 +39,28 @@ enum class FloraOrbState {
     CONVERSATION_OPEN,
 }
 
+/**
+ * P1 appearance bundle — avatar rang-jodi ka ek hi source (N3
+ * colors, badle nahi gaye). FloraOrb, FloraOrbDepth aur Edge
+ * Glow teeno isi se rang lete hain, taaki theme kabhi alag
+ * na dikhe.
+ */
+fun orbOuterColor(avatar: String): Color = when (avatar) {
+    "neela" -> Color(0xFF1E3A8A)
+    "hara" -> Color(0xFF14532D)
+    "baingani" -> Color(0xFF581C87)
+    "sunehra" -> Color(0xFF713F12)
+    else -> Color(0xFF7C4A03)
+}
+
+fun orbInnerColor(avatar: String): Color = when (avatar) {
+    "neela" -> Color(0xFF93C5FD)
+    "hara" -> Color(0xFF86EFAC)
+    "baingani" -> Color(0xFFD8B4FE)
+    "sunehra" -> Color(0xFFFDE68A)
+    else -> Color(0xFFFFC978)
+}
+
 @Composable
 fun FloraOrb(
     busy: Boolean,
@@ -45,13 +68,8 @@ fun FloraOrb(
     state: FloraOrbState? = null,
     amplitude: Float = 0f,
 ) {
-    val (outer, inner) = when (avatar) {
-        "neela" -> Color(0xFF1E3A8A) to Color(0xFF93C5FD)
-        "hara" -> Color(0xFF14532D) to Color(0xFF86EFAC)
-        "baingani" -> Color(0xFF581C87) to Color(0xFFD8B4FE)
-        "sunehra" -> Color(0xFF713F12) to Color(0xFFFDE68A)
-        else -> Color(0xFF7C4A03) to Color(0xFFFFC978)
-    }
+    val outer = orbOuterColor(avatar)
+    val inner = orbInnerColor(avatar)
     val showBusy = busy || state == FloraOrbState.SPEAKING ||
         state == FloraOrbState.THINKING
     val waveAmp = amplitude.coerceIn(0f, 1f)
@@ -106,5 +124,81 @@ fun FloraOrb(
                 center = Offset(size.width / 2f, size.height / 2f)
             )
         }
+    }
+}
+
+/**
+ * P1 appearance bundle — 3D-style orb (SPEC-FREEZE: ye shaded
+ * 2D depth hai, koi alag OpenGL 3D engine nahi — isliye UI me
+ * iska naam "3D-style" hi likha jayega, "3D engine" kabhi nahi).
+ *
+ * Wahi avatar rang, wahi states, wahi pulse/wave contract
+ * jaise FloraOrb ka hai — sirf rendering me gehrai hai:
+ * radial-gradient highlight (upar-bayen), neeche ka halka
+ * shadow arc, aur specular dot. Static rehne par koi
+ * animation loop nahi chalta (battery ka wahi niyam).
+ */
+@Composable
+fun FloraOrbDepth(
+    busy: Boolean,
+    avatar: String = "gulabi",
+    state: FloraOrbState? = null,
+    amplitude: Float = 0f,
+) {
+    val outer = orbOuterColor(avatar)
+    val inner = orbInnerColor(avatar)
+    val showBusy = busy || state == FloraOrbState.SPEAKING ||
+        state == FloraOrbState.THINKING
+    val waveAmp = amplitude.coerceIn(0f, 1f)
+    val pulseScale: Float
+    if (showBusy) {
+        val transition = rememberInfiniteTransition()
+        val pulse by transition.animateFloat(
+            initialValue = 0.85f,
+            targetValue = 1.15f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1000),
+                repeatMode = RepeatMode.Reverse
+            )
+        )
+        pulseScale = pulse
+    } else {
+        pulseScale = 1f
+    }
+    Canvas(modifier = Modifier.size(64.dp)) {
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val r = (size.minDimension / 2.5f) * pulseScale
+        if (waveAmp > 0.02f) {
+            drawCircle(
+                color = outer.copy(alpha = 0.35f),
+                radius = r * (1f + waveAmp * 0.45f),
+                center = Offset(cx, cy)
+            )
+        }
+        drawCircle(color = outer, radius = r, center = Offset(cx, cy))
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.85f),
+                    inner.copy(alpha = 0.55f),
+                    Color.Transparent
+                ),
+                center = Offset(cx - r * 0.35f, cy - r * 0.4f),
+                radius = r * 1.15f
+            ),
+            radius = r,
+            center = Offset(cx, cy)
+        )
+        drawCircle(
+            color = Color.White.copy(alpha = 0.9f),
+            radius = r * 0.12f,
+            center = Offset(cx - r * 0.35f, cy - r * 0.4f)
+        )
+        drawCircle(
+            color = Color.Black.copy(alpha = 0.22f),
+            radius = r * 0.55f,
+            center = Offset(cx, cy + r * 0.45f)
+        )
     }
 }

@@ -134,6 +134,15 @@
                 <action android:name="android.intent.action.BATTERY_LOW" />
             </intent-filter>
         </receiver>
+        <!-- P1 floating charm: tairta orb, tap par chat. Mic se alag service. -->
+        <service
+            android:name="com.flora.app.automation.FloraCharmService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Flora floating charm" />
+        </service>
         <!-- Overlay mic button (v2.22, Phase 1): har screen par mic. -->
         <service
             android:name="com.flora.app.automation.OverlayMicService"

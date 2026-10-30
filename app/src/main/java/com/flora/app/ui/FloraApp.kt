@@ -9,6 +9,7 @@ import android.provider.MediaStore
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -94,7 +95,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS, APPEARANCE }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -114,6 +115,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.SD_CONNECTORS -> "SD-1 Connectors"
     Screen.TASK_LIST -> "Task list"
     Screen.SD8_SETTINGS -> "SD-8 Settings"
+    Screen.APPEARANCE -> "Appearance"
     Screen.PRIVACY -> "Privacy"
     Screen.TERMS -> "Terms"
     Screen.AUTO -> "Auto"
@@ -226,6 +228,11 @@ fun FloraApp(
     // Theme state (v1.9): states block me, launcher se pehle.
     var theme by remember { mutableStateOf("light") }
     var messages by remember { mutableStateOf(listOf(ChatMsg("Namaste! Main Flora hun. Kya madad kar sakti hun?", false))) }
+    // P1 appearance flags — Appearance screen se toggle hote
+    // hain; CHAT khulne par LaunchedEffect(screen) se refresh
+    // hote hain (default OFF, chat header/list wahi rehti hai).
+    var orbDepthOn by remember { mutableStateOf(false) }
+    var edgeGlowOn by remember { mutableStateOf(false) }
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     // N4 commit gate (shared): Flora ki apni awaaz speaker se
@@ -1658,6 +1665,10 @@ fun FloraApp(
                             onClick = { screen = Screen.SD8_SETTINGS; menuOpen = false },
                         )
                         DropdownMenuItem(
+                            text = { Text("Appearance") },
+                            onClick = { screen = Screen.APPEARANCE; menuOpen = false },
+                        )
+                        DropdownMenuItem(
                             text = { Text("Auto") },
                             onClick = { screen = Screen.AUTO; menuOpen = false },
                         )
@@ -1777,6 +1788,12 @@ fun FloraApp(
                 Spacer(modifier = Modifier.height(8.dp))
 
             if (screen == Screen.CHAT) {
+                // P1 appearance flags refresh — CHAT khulne par hi
+                // (Appearance screen se wapas aane par bhi taaza).
+                LaunchedEffect(screen) {
+                    try { orbDepthOn = prefs.p1OrbDepth() } catch (e: Exception) { }
+                    try { edgeGlowOn = prefs.p1EdgeGlow() } catch (e: Exception) { }
+                }
                 // Due jobs (v2.22, chunk 4): alarm par flag laga tha —
                 // CHAT khulte hi routine chalegi (Auto Mode ON ho to
                 // khud, warna sirf batayegi). Ek se zyada due hon to
@@ -1911,15 +1928,26 @@ fun FloraApp(
                 } else {
                     FloraOrbState.IDLE
                 }
-                FloraOrb(busy, avatarStyle, state = orbState, amplitude = notchAmplitude)
+                // P1: depth toggle ON ho to depth orb, warna purana orb.
+                if (orbDepthOn) FloraOrbDepth(busy, avatarStyle, state = orbState, amplitude = notchAmplitude)
+                else FloraOrb(busy, avatarStyle, state = orbState, amplitude = notchAmplitude)
                 Spacer(modifier = Modifier.height(8.dp))
                 // Baat view (v2.15): transcript nahi dikhega — sirf
                 // orb + mic, taaki baat-cheet lage, chat nahi.
                 if (!voiceView) {
-                LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    items(messages) { msg ->
-                        Text((if (msg.fromUser) "Aap: " else "Flora: ") + msg.text)
-                        Spacer(modifier = Modifier.height(6.dp))
+                // P1 edge glow: chat-area ke kinaron par animated
+                // border — sirf jab toggle ON ho aur Flora bol/sun
+                // rahi ho. Box clickable nahi hai, scroll/input
+                // par koi asar nahi.
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(messages) { msg ->
+                            Text((if (msg.fromUser) "Aap: " else "Flora: ") + msg.text)
+                            Spacer(modifier = Modifier.height(6.dp))
+                        }
+                    }
+                    if (edgeGlowOn && (orbState == FloraOrbState.SPEAKING || orbState == FloraOrbState.LISTENING)) {
+                        EdgeGlowBorder(avatarStyle)
                     }
                 }
                 }
@@ -5328,6 +5356,8 @@ fun FloraApp(
                 TaskListScreen(plannerEngine, autoLogStore) { screen = Screen.CHAT }
             } else if (screen == Screen.SD8_SETTINGS) {
                 Sd8SettingsScreen(autoLogStore) { screen = Screen.CHAT }
+            } else if (screen == Screen.APPEARANCE) {
+                AppearanceScreen(autoLogStore) { screen = Screen.CHAT }
             } else if (screen == Screen.DOCTOR) {
                 com.flora.app.doctor.DoctorScreen(projectStore, autoLogStore, plannerEngine)
             } else if (screen == Screen.WHITEBOARD) {
