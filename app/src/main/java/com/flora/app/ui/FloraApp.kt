@@ -574,6 +574,28 @@ fun FloraApp(
         }
     }
 
+    // VoicePlan execute (planner routing fix, Batch 1 + fix):
+    // composable-body level par hai taaki sendChat hook (andar
+    // wale block me) AUR planConfirm dialog (dialog block me)
+    // dono ise dekh sakein. Pehle ye sendChat ke paas wale
+    // andar wale block me tha — dialog se Unresolved reference
+    // aaya tha (CI run 41023346683), isliye yahan laaya gaya.
+    // runGuardedVoice jaisa hi pattern: guardian gate ke andar.
+    fun executeVoicePlan(plan: com.flora.app.automation.VoicePlan) {
+        runGuardedVoice { scope.launch {
+            com.flora.app.automation.VoicePlanRunner.execute(
+                plan,
+                com.flora.app.automation.VoicePlanRunner.Host(
+                    context = appContext,
+                    addMessage = { msg -> messages = messages + ChatMsg("Flora: $msg", false) },
+                    speak = { msg -> voice.speak(msg) },
+                    log = { entry -> autoLogStore.add(entry) },
+                ),
+            )
+        }
+        }
+    }
+
     // Cycle 3, F1: Face Lock session ka EK sach (foreground).
     // Lock OFF ho to hamesha khula; ON ho to sirf tab jab
     // chatUnlocked ho AUR unlock ka waqt timeout ke andar ho.
@@ -2222,21 +2244,6 @@ fun FloraApp(
                 // Planner-first routing, Batch 1: VoicePlan execute
                 // (Host lambdas yahi ek jagah — hook + dialog dono ise
                 // bulate hain; confirm gate hook/dialog me rehta hai).
-                fun executeVoicePlan(plan: com.flora.app.automation.VoicePlan) {
-                    runGuardedVoice { scope.launch {
-                        com.flora.app.automation.VoicePlanRunner.execute(
-                            plan,
-                            com.flora.app.automation.VoicePlanRunner.Host(
-                                context = appContext,
-                                addMessage = { msg -> messages = messages + ChatMsg("Flora: $msg", false) },
-                                speak = { msg -> voice.speak(msg) },
-                                log = { entry -> autoLogStore.add(entry) },
-                            ),
-                        )
-                    }
-                    }
-                }
-
                 // Clarification ke baad kaam chalana (v2.22): confirm
                 // ya auto flow — call/sms branches jaisa hi.
                 fun runContactAction(number: String, action: String, text: String) {

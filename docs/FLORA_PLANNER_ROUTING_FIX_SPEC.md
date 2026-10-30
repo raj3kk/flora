@@ -90,16 +90,18 @@ Kram (har step Auto Log me):
 
 ## 4. Batch 2 — YouTube media chain + doosra common flow (pehle verticals)
 
-### 4.1 YouTube chain (steps, har step par success check)
+### 4.1 YouTube chain (steps, har step par success check) — Batch 2 design
 
-1. **Open:** `VerifiedAppLauncher.openVerified(YouTube)` — pass: Opened/AlreadyOpen; NoVerifier → stop + imaandaar line + Settings intent.
-2. **Search:** pehle `InAppSearch.searchInApp(service, song)` (service enabled + YouTube foreground ho to); outcome Done na ho to fallback: search URL `https://www.youtube.com/results?search_query=<encode>` via `openWebsiteVerified`.
+1. **Open:** `VerifiedAppLauncher.openVerified(YouTube)` — pass: Opened/AlreadyOpen; NoVerifier → stop + imaandaar line + Settings intent; **cold-start retry:** `NotVisible` par ek baar dobara open (audit W4 — badi app pehli baar der se khule to pehla try fail ho sakta hai).
+2. **Search:** pehle `InAppSearch.searchInApp(service, song)` (service enabled + YouTube foreground ho to); outcome Done na ho to fallback: search URL `https://www.youtube.com/results?search_query=<encode>` via `openWebsiteVerified`. Fallback use hua to aakhri report me "(search web se khola gaya)" judta hai (fallback transparency).
 3. **Play first result (nayi narrow chain — SD-5 general surface NAHI):** naya service helper `clickFirstVideoResult()` (`FloraAutomationService` me):
-   - `waitForForeground(YouTube pkg, timeout)` → phir tree traverse: search-box/header/navigation nodes chhodo, pehla clickable node jiska text non-empty ho aur jo "Search"/"Khoj"/nav label na ho → click.
-   - Verify: click ke baad short wait + foreground abhi bhi YouTube → report "pehla result khol diya hai (auto-play YouTube app me shuru hota hai)".
-   - Koi candidate na mile → search results khule rehne do + imaandaar report ("Search khol diya hai, video par khud tap karo") — jhootha "play ho gaya" kabhi nahi.
+   - Video ka title TextView khud clickable nahi hota — uska item container clickable hota hai — isliye **sabse GEHRA clickable container** chuna jata hai jiske neeche (2 level tak) title-jaisa text ho. Search-box/nav labels (Search/Khoj/Home/Shorts/Subscriptions/Library/You/Create/Notifications/Filter/Cast/All) aur editable fields ko chhoda jata hai. Tree traversal 800 nodes par capped hai.
+   - Verify: `waitForForeground(YouTube pkg, 3000)` → click → 1500ms wait → foreground abhi bhi YouTube → pass ("pehla result khol diya hai, YouTube app me auto-play shuru hota hai").
+   - Koi candidate na mile ya foreground badal jaye → step ka `failMessage`: "Search khol diya hai, pehla result khud tap karo (auto-play chain yahan ruka)." — jhootha "play ho gaya" kabhi nahi.
+   - **Limit imaandaari se:** ye heuristic hai — asli YouTube UI par verify Phase 10 me hoga (Batch 2 ka gate code+CI+tip hai, phone-play ka daava nahi).
    - **Boundary saaf:** ye sirf YouTube first-result chain hai; poora tap/type/swipe surface SD-P4 me hi banega.
-4. **Purani "gaana bajao" branch ka behaviour:** is chain ke aane ke baad wo branch sirf tab chalegi jab parser plan na bana paaye (fallback) — uska "khol raha hun" bina-verify bolna tab bhi galat hai, isliye Batch 2 me us branch ko bhi verify-after-open par laaya jayega (result check ke baad hi message).
+4. **UI-ready wait (audit step 5) — Batch 2 me NAHI, wajah ke saath:** `visibleTexts` me "Search" text dhoondhna YouTube home par bharosa-layak nahi hai (search icon-only ho sakta hai — audit khud W3/W8 me ye gap maanta hai). `searchInApp` ka apna outcome hi asli signal hai; us par fallback hai. Isliye text-poll wait nahi joda gaya (galat signal par plan rokna zyada nuksaan hai).
+5. **Purani "gaana bajao" branch ka behaviour:** parser gaana-naam wali media ko claim karta hai, isliye main gaana branch ab sirf missing-song question ke liye bachti hai (uska bina-verify "khol raha hun" us raaste par kabhi nahi chalta). Routine runner ka gaana step (`FloraApp.kt:1055-1064`, result ignore) Batch 4 me result-check par laaya jayega (W3/W4) — Batch 2 me routine runner nahi chheda gaya (W8 mini-router alag domain hai, chhote batch ka usool).
 
 ### 4.2 Doosra common flow (audit se chuna gaya — routine nahi, kyunki routine runner me compound/in-app support hi nahi hai, W8)
 
@@ -125,10 +127,10 @@ Kram (har step Auto Log me):
 - Entry **maujood** hai: TopAppBar me "Menu ▾" button (~FloraApp.kt:1507) → DropdownMenu me "Builder" item (~1560) → `Screen.BUILDER` → `BuilderScreen` call site (~5427); voice se "builder kholo" → generic screen map (~4698) → `Screen.BUILDER`.
 - **Asli kaaran (audit ne pakda — sirf discoverability nahi):** Menu item ungated hai (B2-11 ruling), **par screen gated hai**: `ui/BuilderScreen.kt:303-323` par `PlanFeatures.isAllowed("builder")` check hai. Licence-verify se mili list non-empty ho aur usme `"builder"` key na ho, to screen sirf ye message dikha kar return kar deti hai: "Builder abhi is plan me nahi hai." Usi block ka comment: server hissa (F2: seed 14→15, allowlist 14→15, panel editor) **pending** hai. Fail-open sirf tab jab list kabhi mili hi nahi ya khali hai (`core/PlanFeatures.kt:33`).
 - Matlab: Menu me Builder dikhna + andar sirf gate line milna = user ki nazar me "builder hai hi nahi". Ye entitlement ka mamla hai, code missing ka nahi.
-- **Batch 3 wiring (sirf entry + imaandaar message, entitlement change NAHI):**
-  1. Gate message ko wajah + raasta ke saath saaf karo (kaun si key/plan chahiye, kahan se milega) — gate hatana NAHI hai (wo F2/server faisla hai, user-gated).
-  2. Voice exact "builder" (bina "kholo" ke) → `Screen.BUILDER` (generic map se pehle ek chhota exact check).
-  3. Menu item par gate ka ishara (jaise "Builder" ke saath Pro nishaan jab allowed na ho) — sirf tab jab `PlanFeatures` check menu se seedha ho sake, warna chhodo (over-engineering nahi).
+- **Batch 3 wiring (sirf entry + consistency, entitlement change NAHI):**
+  1. **Gate message pehle se imaandaar hai (sudhaar ki zaroorat nahi):** `BuilderScreen.kt:303-323` ka block do lines dikhata hai — "Builder abhi is plan me nahi hai." + "Builder (Pro) chahiye — plan-features me 'builder' key aane ke baad ye screen khulegi. Agar licence list abhi mili hi nahi hai to purana vyavhaar hi rahega (fail-open)." Gate hatana NAHI hai (wo F2/server faisla hai, user-gated).
+  2. Voice exact "builder" (bina "kholo" ke) → `Screen.BUILDER` (generic map se pehle ek chhota exact check — aaj bare "builder" Brain par girta hai).
+  3. Menu item par gate ka ishara: `PlanFeatures.isAllowed("builder")` pure sync read hai (cached volatile list, `core/PlanFeatures.kt:33`) — menu khulte waqt padha ja sakta hai; allowed na ho to item "Builder (Pro)" dikhega, taaki menu aur screen ka bartaav ek jaisa lage (audit suggestion #4). Menu har baar khulne par dobara compose hota hai, isliye cached value hi kaafi hai.
   4. Final report + parent message me user ko seedha raasta + gate ki wajah likhna: Menu ▾ → Builder, ya bolo "builder kholo"; gate line dikhe to F2 server pending ki wajah se hai.
   5. Koi naya builder feature nahi; Settings row / Home shortcut (jo audit me missing mile) Batch 3 me nahi — wo design pass ka area hai.
 
@@ -186,6 +188,7 @@ Kram (har step Auto Log me):
 - **Single app-open Batch 1 me migrate NAHI hua:** maujooda single-open branch pehle se confirm-once compliant hai (Auto Mode ON → seedha execute, OFF → ek `voiceAppConfirm` dialog) — toota hua nahi hai, isliye churn nahi kiya. Planner migration ka agla charan (follow-up) me aayega.
 - **Gaane ka naam na mile to runner question nahi poochhta:** parser null lautaata hai, maujooda gaana branch shuru me ek baar poochhti hai ("Kaun sa gaana bajau?") — ye bhi pre-execution hai, rule ka ullanghan nahi; doosra question path banane se bacha gaya.
 - **Batch 1 media plan search par khatam hota hai (play Batch 2 me):** TAP step bina `clickFirstVideoResult` ke jhootha hota, isliye Batch 1 me plan steps [open, search] hain aur final report imaandaari se search tak ka daava karta hai. Poora play Batch 2 me aayega.
+- **Fix (CI run 41023346683 fail ke baad):** `executeVoicePlan` pehle sendChat ke paas wale andar wale block me tha (16-space level) — hook se dikhta tha, par `planConfirm` dialog (dialog block) se `Unresolved reference: executeVoicePlan` aaya (FloraApp.kt:5824). Wajah: Kotlin local fun sirf apne block ke andar dikhta hai; dialog alag block me hai. Fix: fun ko composable-body level (4-space, `runGuardedVoice` ke bagal) par laaya gaya — wahan se hook aur dialog dono dekh sakte hain. Lesson: FloraApp.kt me naya helper fun hamesha 4-space composable-body level par rakho, ya dialog me logic inline karo (jaise `voiceAppConfirm` dialog karta hai) — andar wale block ka fun dialog se kabhi nahi dikhega.
 
 ## 9. Pre-audit (implement se PEHLE — result 2026-10-30, tip 4e4c5a91 se verify)
 
