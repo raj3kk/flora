@@ -222,13 +222,16 @@ class LicenceClient(private val prefs: FloraPreferences) {
     @Volatile
     private var lastPlan: String? = null
 
-    private fun post(path: String, body: JSONObject, anonKey: String, userJwt: String? = null): JSONObject? {
+    // B2 (fix-cycle): gate-path posts (verify/verifyWithKey) ko chhota
+    // socket timeout milta hai; baaki callers defaults (15s/15s) par hi
+    // rahenge — koi caller behavior change nahi.
+    private fun post(path: String, body: JSONObject, anonKey: String, userJwt: String? = null, connectTimeoutMs: Int = 15_000, readTimeoutMs: Int = 15_000): JSONObject? {
         // G17 (Phase 8): Supabase host pin-checked connection.
         val conn = (PinnedTrust.openConnection(URL(FloraConfig.SUPABASE_URL + path)) as HttpURLConnection)
         return try {
             conn.requestMethod = "POST"
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 15_000
+            conn.connectTimeout = connectTimeoutMs
+            conn.readTimeout = readTimeoutMs
             conn.doOutput = true
             conn.setRequestProperty("Content-Type", "application/json")
             if (anonKey.isNotEmpty()) {
@@ -266,7 +269,7 @@ class LicenceClient(private val prefs: FloraPreferences) {
         } catch (e: Exception) {
             null
         }
-        val res = post(FloraConfig.LICENCE_FUNCTION_PATH, body, key, jwt)
+        val res = post(FloraConfig.LICENCE_FUNCTION_PATH, body, key, jwt, connectTimeoutMs = 5_000, readTimeoutMs = 8_000)
             ?: return@withContext LicenceStatus("free", "error", false)
         parseVerifyResponse(res)
     }
@@ -289,7 +292,7 @@ class LicenceClient(private val prefs: FloraPreferences) {
             return@withContext LicenceStatus("free", "local_free", false)
         }
         val body = JSONObject().put("licence_key", licenceKey).put("device_id", deviceId)
-        val res = post(FloraConfig.LICENCE_FUNCTION_PATH, body, key)
+        val res = post(FloraConfig.LICENCE_FUNCTION_PATH, body, key, connectTimeoutMs = 5_000, readTimeoutMs = 8_000)
             ?: return@withContext LicenceStatus("free", "error", false)
         parseVerifyResponse(res)
     }
