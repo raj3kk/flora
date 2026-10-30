@@ -19,10 +19,23 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// S2-1 (Cycle 122 FIX): CORS block — browser preflight ke liye.
+// OPTIONS par 200 + wahi headers har response par; JWT gate
+// waisa hi rahega. Allow-Origin "*" maujooda convention hai
+// (S3-4 allowlist HELD — host list parent se aane par badlega).
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 serve(async (req) => {
-  if (req.method !== "POST") return new Response("POST only", { status: 405 });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: { ...CORS_HEADERS } });
+  }
+  if (req.method !== "POST") return new Response("POST only", { status: 405, headers: { ...CORS_HEADERS } });
   const json = (obj, status = 200) =>
-    new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
+    new Response(JSON.stringify(obj), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
 
   const url = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -87,6 +100,9 @@ serve(async (req) => {
           Authorization: `Token ${dgKey}`,
           "Content-Type": "application/json",
         },
+        // S1-16 (Cycle 122 FIX): provider fetch par 30s timeout —
+        // pehle koi timeout nahi tha. 30s engineering default hai.
+        signal: AbortSignal.timeout(30000),
         body: JSON.stringify({ text }),
       },
     );

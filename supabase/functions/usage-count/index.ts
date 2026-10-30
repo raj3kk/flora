@@ -33,10 +33,21 @@
 //   me hai (isi table ko padh kar, UTC day).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// S2-1 (Cycle 122 FIX): CORS block — browser preflight ke liye.
+// OPTIONS par 200 + wahi headers har response par; gates waise hi.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("POST only", { status: 405 });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: { ...CORS_HEADERS } });
+  }
+  if (req.method !== "POST") return new Response("POST only", { status: 405, headers: { ...CORS_HEADERS } });
   const json = (obj, status = 200) =>
-    new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
+    new Response(JSON.stringify(obj), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   const body = await req.json().catch(() => ({}));
   const url = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -73,6 +84,20 @@ Deno.serve(async (req) => {
   if (typeof body.tool_calls === "number" && body.tool_calls > 0) tools = body.tool_calls;
 
   const day = new Date().toISOString().slice(0, 10);
+  // S1-20 (Cycle 122 FIX): pehle read-modify-write race thi — do
+  // concurrent reports me se ek ka increment kho jaata tha. Ab
+  // atomic RPC (supabase/sql/usage_atomic_increment.sql se deploy
+  // hota hai). RPC na mile (SQL deploy se pehle) to purana path
+  // fallback hai — function kabhi nahi tootega, sirf race tab tak
+  // barkaraar rahegi jab tak SQL na chale. Per-call cap ka koi
+  // product number repo contract me nahi hai, isliye cap is pass
+  // me nahi lagaya gaya (number aane par alag se lagega).
+  const { data: rpcSecs, error: rpcErr } = await svc.rpc("increment_usage", {
+    p_user_id: targetUserId, p_day: day, p_secs: secs, p_tools: tools,
+  });
+  if (!rpcErr && typeof rpcSecs === "number") {
+    return json({ counted: true, day, talk_seconds: rpcSecs });
+  }
   const { data: row } = await svc.from("usage").select("*").eq("user_id", targetUserId).eq("day", day).maybeSingle();
   if (row) {
     const { error } = await svc.from("usage").update({

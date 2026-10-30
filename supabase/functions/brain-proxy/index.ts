@@ -44,10 +44,24 @@ const STYLE = "Tum Flora ho, ek friendly AI assistant. User se aise baat karo " 
   "language me bole usi me jawab do. Kaam ki baat pehle; extra detail " +
   "sirf poochhe par.";
 
+// S2-1 (Cycle 122 FIX): CORS block — live probe me OPTIONS par
+// 405 aata tha (koi CORS header nahi), browser preflight fail.
+// OPTIONS par 200 + wahi headers har response par; JWT gate
+// waisa hi rahega. Allow-Origin "*" maujooda convention hai
+// (S3-4 allowlist HELD — host list parent se aane par badlega).
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 serve(async (req) => {
-  if (req.method !== "POST") return new Response("POST only", { status: 405 });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: { ...CORS_HEADERS } });
+  }
+  if (req.method !== "POST") return new Response("POST only", { status: 405, headers: { ...CORS_HEADERS } });
   const json = (obj, status = 200) =>
-    new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
+    new Response(JSON.stringify(obj), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
 
   // JWT gate (step 2): caller ka Supabase Auth JWT chahiye.
   const url = Deno.env.get("SUPABASE_URL")!;
@@ -137,13 +151,20 @@ serve(async (req) => {
   if (geminiKey) {
     // v2.22: chain me verified-working models bhi (user key par
     // 2.5-flash/lite 404 dete hain; flash-lite-latest + 3.5 chalte hain).
+    // S1-29 (Cycle 122 FIX): key URL query (?key=) me nahi — header
+    // (x-goog-api-key) me, taaki key logs/URLs me na ghume.
+    // S1-16 (Cycle 122 FIX): provider fetch par 30s timeout — pehle
+    // koi timeout nahi tha, hang par call latakti rehti thi. 30s
+    // engineering default hai (koi product number nahi); parent
+    // badal sakta hai.
     for (const model of ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash"]) {
       try {
         const r = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
+            signal: AbortSignal.timeout(30000),
             body: JSON.stringify({
               contents: [{ parts: [{ text: `${STYLE}${globalSuffix} Sawal: ${effPrompt}` }] }],
             }),
@@ -164,6 +185,7 @@ serve(async (req) => {
       const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqKey}` },
+        signal: AbortSignal.timeout(30000),
         body: JSON.stringify({
           model: "openai/gpt-oss-20b",
           messages: [
@@ -180,5 +202,10 @@ serve(async (req) => {
     } catch (_e) { /* honest error below */ }
   }
 
+  // S2-2 (Cycle 122 FIX): pehle sab provider fail hone par bhi 503
+  // "brain keys not configured" milta tha — keys configured hon tab
+  // bhi farq nahi dikhta tha. Ab: koi key hi nahi to 503 (keys
+  // missing); key thi par provider fail hue to 502 (provider down).
+  if (geminiKey || groqKey) return json({ error: "brain provider unavailable" }, 502);
   return json({ error: "brain keys not configured" }, 503);
 });

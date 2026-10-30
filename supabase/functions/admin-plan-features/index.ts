@@ -31,15 +31,27 @@ const FLAG_KEYS = [
   "image_gen", "screen_vision", "camera", "overlay_mic", "wakeword",
   "home", "routines", "form_fill", "builder",
 ];
+
+// S2-1 (Cycle 122 FIX): CORS block — panel browser calls par
+// preflight ke liye. OPTIONS par 200 + wahi headers har response
+// par; JWT/admin gates waise hi.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
 const DEFAULTS = {
   free: ["talk", "builder"],
   pro: FLAG_KEYS.slice(),
 };
 
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("POST only", { status: 405 });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: { ...CORS_HEADERS } });
+  }
+  if (req.method !== "POST") return new Response("POST only", { status: 405, headers: { ...CORS_HEADERS } });
   const json = (obj, status = 200) =>
-    new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
+    new Response(JSON.stringify(obj), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;

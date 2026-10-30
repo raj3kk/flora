@@ -24,13 +24,25 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// S2-1 (Cycle 122 FIX): CORS block — browser preflight ke liye.
+// OPTIONS par 200 + wahi headers har response par; JWT gate
+// waisa hi rahega.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 serve(async (req) => {
   const json = (obj: unknown, status = 200) =>
     new Response(JSON.stringify(obj), {
       status,
-      headers: { "Content-Type": "application/json" },
+      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
     });
   try {
+    if (req.method === "OPTIONS") {
+      return new Response(null, { status: 200, headers: { ...CORS_HEADERS } });
+    }
     if (req.method !== "POST") {
       return json({ ok: false, error: "POST only" }, 405);
     }
@@ -61,10 +73,22 @@ serve(async (req) => {
       return json({ ok: false, error: "user_id does not match token" }, 403);
     }
 
+    // S1-8 (Cycle 122 FIX — prior-owner guard, registration path
+    // par): device_id pehle se kisi DOOSRE user ke naam par ho to
+    // overwrite NAHI — 403 + imaandaar message. Ye command path
+    // NAHI banata (command endpoint abhi bhi maujood nahi hai);
+    // sirf registration hijack vector band hota hai. Wahi user
+    // dobara register kare to upsert se box_code update hota hai
+    // (legit re-register chalta rahega). G10 command revisit
+    // abhi bhi AAKHRI phase me HELD hai.
+    const svc = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: priorBox } = await svc.from("home_boxes").select("user_id").eq("device_id", deviceId).maybeSingle();
+    if (priorBox && priorBox.user_id !== userId) {
+      return json({ ok: false, error: "device already registered to another account" }, 403);
+    }
     // Service-role upsert: ek device_id = ek row (box badle to
     // update, naya device ho to insert). user_id audit ke liye
     // bhi save hota hai (kis account ka box hai).
-    const svc = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { error: upErr } = await svc.from("home_boxes").upsert(
       {
         device_id: deviceId,
@@ -79,6 +103,10 @@ serve(async (req) => {
     }
     return json({ ok: true, stored: true });
   } catch (e) {
-    return json({ ok: false, error: String(e) }, 400);
+    // S1-21 (Cycle 122 FIX): pehle har exception 400 + String(e)
+    // leak karta tha (andar ki detail response me). Ab generic
+    // 500 + detail sirf Edge logs me.
+    console.error(e);
+    return json({ ok: false, error: "store failed" }, 500);
   }
 });

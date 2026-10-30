@@ -21,10 +21,22 @@ function maskKey(k) {
   return "FLORA-••••-••••-" + String(k).slice(-4);
 }
 
+// S2-1 (Cycle 122 FIX): CORS block — app/website browser calls
+// par preflight ke liye. OPTIONS par 200 + wahi headers har
+// response par; JWT/caller-match gates waise hi.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("POST only", { status: 405 });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: { ...CORS_HEADERS } });
+  }
+  if (req.method !== "POST") return new Response("POST only", { status: 405, headers: { ...CORS_HEADERS } });
   const json = (obj, status = 200) =>
-    new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
+    new Response(JSON.stringify(obj), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -49,7 +61,17 @@ Deno.serve(async (req) => {
       key_last4: r.licence_key ? String(r.licence_key).slice(-4) : null,
       revoked_reason: r.revoked_reason || null,
     }));
-    return json({ ok: true, licences: out });
+    // S2-6 (Cycle 122 FIX): pehle list limit 50 thi par total/
+    // truncated flag nahi tha (S1-12/S1-36 pattern yahan nahi
+    // laga tha) — panel ko pata hi nahi chalta tha ki aur
+    // licences chhupi hain. Ab total + truncated milta hai.
+    let total: number | null = null;
+    try {
+      const { count, error: countErr } = await svc.from("licences")
+        .select("id", { count: "exact", head: true }).eq("user_id", jwtUserId);
+      if (!countErr && typeof count === "number") total = count;
+    } catch (_e) { /* total null hi rahega */ }
+    return json({ ok: true, licences: out, total, truncated: (rows || []).length >= 50 });
   }
 
   if (action === "reveal") {

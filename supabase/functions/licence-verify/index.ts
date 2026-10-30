@@ -59,10 +59,27 @@ const PRO_FEATURES = [
   "home", "routines", "form_fill",
 ];
 
+// S2-1 (Cycle 122 FIX): CORS block — website (account.html) se
+// licence-verify browser call par preflight OPTIONS 405 deta tha
+// (live probe 2026-10-30: OPTIONS -> 405, koi CORS header nahi).
+// OPTIONS par 200 + wahi headers har response par; JWT gate
+// waisa hi rahega — CORS sirf preflight kholta hai, auth nahi
+// hatata. Allow-Origin "*" maujooda convention hai (S3-4
+// allowlist abhi HELD hai — host list parent se aane par hi
+// badlega, yahan guess nahi kiya gaya).
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("POST only", { status: 405 });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: { ...CORS_HEADERS } });
+  }
+  if (req.method !== "POST") return new Response("POST only", { status: 405, headers: { ...CORS_HEADERS } });
   const json = (obj, status = 200) =>
-    new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
+    new Response(JSON.stringify(obj), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
 
   // JWT gate (v2): caller ka Supabase Auth JWT chahiye.
   const url = Deno.env.get("SUPABASE_URL")!;

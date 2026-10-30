@@ -55,10 +55,22 @@ function maskKey(k) {
   return "FLORA-••••-••••-" + String(k).slice(-4);
 }
 
+// S2-1 (Cycle 122 FIX): CORS block — panel browser calls par
+// preflight ke liye. OPTIONS par 200 + wahi headers har response
+// par; JWT/admin gates waise hi.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("POST only", { status: 405 });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: { ...CORS_HEADERS } });
+  }
+  if (req.method !== "POST") return new Response("POST only", { status: 405, headers: { ...CORS_HEADERS } });
   const json = (obj, status = 200) =>
-    new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
+    new Response(JSON.stringify(obj), { status, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -152,6 +164,17 @@ Deno.serve(async (req) => {
     }
     let q = svc.from("licences").select("*").order("activated_at", { ascending: false }).limit(200);
     if (status) q = q.eq("status", status);
+    // S1-19 (Cycle 122 FIX, list leg — hissa): pehle search sirf
+    // limit-200 ke baad client-filter tha, isliye 200 se aage ki
+    // row kabhi milti hi nahi thi. Ab UUID-shape search seedha DB
+    // par user_id se filter hota hai (poori table me). Email
+    // search DB par nahi ho sakta (email licences table me nahi
+    // hai — Auth API se aata hai), isliye email/device/key-last4
+    // search waisa hi client-filter rahega (neeche).
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (typeof search === "string" && UUID_RE.test(search.trim())) {
+      q = q.eq("user_id", search.trim());
+    }
     const { data: rows, error } = await q;
     if (error) return json({ error: error.message }, 500);
     // Emails best-effort (admin-payments pattern).
@@ -203,6 +226,10 @@ Deno.serve(async (req) => {
     const { data: row } = await svc.from("licences").select("id,user_id,status").eq("id", licence_id).maybeSingle();
     if (!row) return json({ error: "licence not found" }, 404);
     if (row.status === "revoked") return json({ error: "already revoked" }, 400);
+    // S1-19 (Cycle 122 FIX): pehle superseded/expired row par bhi
+    // revoke ho jaata tha (status wapas revoked likh deta tha —
+    // history bigadti thi). Ab sirf active row revoke hogi.
+    if (row.status !== "active") return json({ error: "only active licence can be revoked" }, 400);
     const now = new Date().toISOString();
     const { error } = await svc.from("licences").update({
       status: "revoked", revoked_reason: reason, revoked_by: adminId, revoked_at: now,
@@ -227,8 +254,14 @@ Deno.serve(async (req) => {
   if (action === "reveal") {
     const { licence_id } = body;
     if (!licence_id) return json({ error: "licence_id required" }, 400);
-    const { data: row } = await svc.from("licences").select("id,user_id,licence_key").eq("id", licence_id).maybeSingle();
+    // S5-1 (Cycle 122 FIX): pehle revoked/superseded licence ki
+    // full key bhi reveal ho jaati thi (koi status guard nahi).
+    // Ab sirf active licence ki key reveal hoti hai — S1-19
+    // revoke guard ke barabar ka niyam (revoked/superseded ki
+    // key ka dobara dikhna koi kaam ka nahi, sirf leak surface).
+    const { data: row } = await svc.from("licences").select("id,user_id,licence_key,status").eq("id", licence_id).maybeSingle();
     if (!row) return json({ error: "licence not found" }, 404);
+    if (row.status !== "active") return json({ error: "only active licence key can be revealed" }, 400);
     if (!row.licence_key) return json({ error: "keyless licence (payment row)" }, 400);
     await audit("licence_revealed", row.user_id, { licence_id });
     return json({ ok: true, licence_key: row.licence_key });
