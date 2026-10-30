@@ -2,7 +2,7 @@
 
 **Order:** user order 2026-10-30 ~11:27 IST — bina AccessibilityService ke jo
 function ho sake, Flora me add karo (torch, volume, time, battery, etc.).
-**Status:** SPEC ONLY — implementation Phase 1 pre-audit PASS ke baad hi hogi.
+**Status:** IMPLEMENTED — 4/4 batches GATE PASS (register Section C, tip 4e4c5a91); phone verification Phase 10 me baaki hai.
 **Domain:** app/ + docs/ only. web/, supabase/, workflows kabhi nahi.
 **Gates:** code + CI + tip-content only. Phone verification Phase 10 me hogi —
 is plan par kabhi "phone-verified" claim nahi hoga.

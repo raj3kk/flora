@@ -399,11 +399,14 @@ class LicenceClient(private val prefs: FloraPreferences) {
     /**
      * FCM token server sync (v2.5). Fire-and-forget: fail ho to
      * local token phir bhi saved rehta hai, agle app-open par
-     * dobara try hoga. Token kabhi log nahi hota. Server
-     * function users row bhi bana deta hai (isliye usage-count
-     * FK + admin-approve device lookup us user ke liye chalne
-     * lagte hain). JWT auth nahi hai (app me Auth session
-     * nahi) — user_id random UUID hi pehchaan hai.
+     * dobara try hoga. Token kabhi log nahi hota.
+     * Do raaste (push-token-sync v2): LINKED path (JWT
+     * caller-match) users row upsert karta hai; UNLINKED path
+     * (app ka anon-key call — app me Auth session nahi) users
+     * row claim NAHI karta, sirf pehle se registered device ka
+     * token upsert karta hai, warna "device not registered
+     * (link ke baad sync hoga)". Isliye token sync poora
+     * tabhi chalta hai jab device app-link se registered ho.
      */
     suspend fun syncPushToken(userId: String, deviceId: String, token: String): Boolean =
         withContext(Dispatchers.IO) {
