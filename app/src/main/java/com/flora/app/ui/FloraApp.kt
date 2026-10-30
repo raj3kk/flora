@@ -99,7 +99,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS, APPEARANCE, COMM, FAV_SONGS, VAULT, TEACH_ONCE }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS, APPEARANCE, COMM, FAV_SONGS, VAULT, TEACH_ONCE, CATCHER }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -107,6 +107,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.PERMISSIONS -> "Anumati"
     Screen.LICENCE -> "Plan"
     Screen.AUTO_LOG -> "Auto Log"
+    Screen.CATCHER -> "Problem report"
     Screen.SETTINGS -> "Settings"
     Screen.MEMORIES -> "Yaadein"
     Screen.SCAN -> "Scan"
@@ -1700,6 +1701,10 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Auto Log") },
                             onClick = { screen = Screen.AUTO_LOG; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Problem report karo (Catcher)") },
+                            onClick = { screen = Screen.CATCHER; menuOpen = false },
                         )
                         DropdownMenuItem(
                             text = { Text("Settings") },
@@ -4773,6 +4778,7 @@ fun FloraApp(
                             "permissions" -> Screen.PERMISSIONS
                             "licence", "license" -> Screen.LICENCE
                             "auto log" -> Screen.AUTO_LOG
+                            "catcher", "problem report" -> Screen.CATCHER
                             "models" -> Screen.MODELS
                             "awaaz sikhao", "voice enrol" -> Screen.VOICE_ENROL
                             "notifications" -> Screen.NOTIFICATIONS
@@ -5481,7 +5487,7 @@ fun FloraApp(
                         } catch (e: Exception) { }
                         if (value) AutoModeNotifier.show(appContext) else AutoModeNotifier.cancel(appContext)
                     }
-                }, { screen = Screen.AUTO_LOG }, licence)
+                }, { screen = Screen.AUTO_LOG }, { screen = Screen.CATCHER }, licence)
             } else if (screen == Screen.PERMISSIONS) {
                 PermissionsScreen(onShowWizard = { showGate = true })
             } else if (screen == Screen.LICENCE) {
@@ -5497,6 +5503,8 @@ fun FloraApp(
                 })
             } else if (screen == Screen.AUTO_LOG) {
                 AutoLogScreen(autoLogStore)
+            } else if (screen == Screen.CATCHER) {
+                CatcherScreen(autoLogStore, licence, autoMode)
             } else if (screen == Screen.MODELS) {
                 ModelsScreen(voice, prefs)
             } else if (screen == Screen.VOICE_ENROL) {
@@ -5931,6 +5939,7 @@ private fun SettingsScreen(
     autoMode: Boolean,
     onAutoModeChange: (Boolean) -> Unit,
     onShowAutoLog: () -> Unit,
+    onShowCatcher: () -> Unit,
     licence: LicenceStatus? = null,
 ) {
     val scope = rememberCoroutineScope()
@@ -7063,6 +7072,8 @@ private fun SettingsScreen(
             }
             Text("ON hone par Flora call, SMS, app-kholo aur routine ke call/SMS steps bina har baar poochhe karegi, aur har kaam bol kar batayegi. Har kaam Auto Log me dikhega aur notification me 'Auto mode ON' dikhega. 'Auto mode band' bolte hi band. Ek confirmation abhi bhi lagega: payment, delete-all, ek se zyada app milne par chunna, pehli baar permission, aur SOS emergency.")
             Button(onClick = { onShowAutoLog() }) { Text("Auto Log dekho") }
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(onClick = { onShowCatcher() }) { Text("Problem report karo (Catcher)") }
             Spacer(modifier = Modifier.height(12.dp))
             Text("Theme — Flora ka rang (sirf colors, koi asset nahi)")
             Row {
