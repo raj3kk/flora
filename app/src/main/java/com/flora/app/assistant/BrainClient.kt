@@ -74,6 +74,17 @@ class BrainClient(private val prefs: FloraPreferences) {
             prefs.geminiApiKey2().trim(),
             prefs.groqApiKey().trim(),
             prefs.groqApiKey2().trim(),
+            // Parity batch 2026-10-31, provider lanes: khali lane
+            // band hai; saare khali hon to hi BasicTalk raasta.
+            prefs.openAiApiKey().trim(),
+            prefs.anthropicApiKey().trim(),
+            prefs.mistralApiKey().trim(),
+            prefs.togetherApiKey().trim(),
+            prefs.xaiApiKey().trim(),
+            prefs.deepseekApiKey().trim(),
+            prefs.deepinfraApiKey().trim(),
+            prefs.nvidiaApiKey().trim(),
+            prefs.openrouterApiKey().trim(),
         )
         if (keys.all { it.isEmpty() }) {
             // v2.20 user order: Flora apne bare me technical baat
@@ -103,6 +114,11 @@ class BrainClient(private val prefs: FloraPreferences) {
             ?: groqAsk(providerPrompt, keys[2], laneCodes, memoryContext, cappedHistory)
             ?: groqAsk(providerPrompt, keys[3], laneCodes, memoryContext, cappedHistory)
         if (reply != null) return@withContext reply
+        // Parity batch 2026-10-31, provider lanes: Gemini→Groq ke
+        // baad provider lanes, phir BasicTalk. Khali key wala lane
+        // skip hota hai; fail hone wala lane agle par girta hai.
+        val providerReply = providerChain(providerPrompt, memoryContext, cappedHistory, laneCodes)
+        if (providerReply != null) return@withContext providerReply
         // Catcher (G2): saare lanes fail — sirf HTTP codes record
         // hote hain, na model naam, na key, na body.
         CatcherEvents.record("API", "brain lanes fail codes=${laneCodes.map { it.second }}")
@@ -115,6 +131,41 @@ class BrainClient(private val prefs: FloraPreferences) {
                 "isliye poora jawab nahi de pa rahi hun. Tum phir se " +
                 "bolo na, main sun rahi hun — main yahin hun, " +
                 "tumhare saath."
+    }
+
+    /** Parity batch 2026-10-31, provider lanes: Gemini→Groq ke
+     *  baad 8 OpenAI-compatible lanes + Anthropic. Har lane ka
+     *  HTTP code laneCodes me (Catcher ke liye), key kabhi nahi. */
+    private suspend fun providerChain(
+        prompt: String,
+        memoryContext: String,
+        history: List<ChatTurn>,
+        laneCodes: MutableList<Pair<String, Int>>,
+    ): String? {
+        val keysByName = mapOf(
+            "OpenAI" to prefs.openAiApiKey().trim(),
+            "Mistral" to prefs.mistralApiKey().trim(),
+            "Together" to prefs.togetherApiKey().trim(),
+            "xAI" to prefs.xaiApiKey().trim(),
+            "DeepSeek" to prefs.deepseekApiKey().trim(),
+            "DeepInfra" to prefs.deepinfraApiKey().trim(),
+            "NVIDIA" to prefs.nvidiaApiKey().trim(),
+            "OpenRouter" to prefs.openrouterApiKey().trim(),
+        )
+        for (def in ProviderLanes.OPENAI_COMPATIBLE) {
+            val key = keysByName[def.displayName] ?: ""
+            if (key.isEmpty()) continue
+            val (code, text) = ProviderLanes.openAiCompatibleAsk(def, key, prompt, memoryContext, history)
+            laneCodes += (def.displayName to code)
+            if (text != null) return text
+        }
+        val anthropicKey = prefs.anthropicApiKey().trim()
+        if (anthropicKey.isNotEmpty()) {
+            val (code, text) = ProviderLanes.anthropicAsk(anthropicKey, prompt, memoryContext, history)
+            laneCodes += ("Anthropic" to code)
+            if (text != null) return text
+        }
+        return null
     }
 
     /**
@@ -134,6 +185,16 @@ class BrainClient(private val prefs: FloraPreferences) {
             prefs.braveApiKey().trim(),
             prefs.serpApiKey().trim(),
             prefs.mapsApiKey().trim(),
+            // Parity batch 2026-10-31, provider lanes.
+            openai = prefs.openAiApiKey().trim(),
+            anthropic = prefs.anthropicApiKey().trim(),
+            mistral = prefs.mistralApiKey().trim(),
+            together = prefs.togetherApiKey().trim(),
+            xai = prefs.xaiApiKey().trim(),
+            deepseek = prefs.deepseekApiKey().trim(),
+            deepinfra = prefs.deepinfraApiKey().trim(),
+            nvidia = prefs.nvidiaApiKey().trim(),
+            openrouter = prefs.openrouterApiKey().trim(),
         )
     }
 
@@ -155,6 +216,18 @@ class BrainClient(private val prefs: FloraPreferences) {
         brave: String = "",
         serp: String = "",
         maps: String = "",
+        // Parity batch 2026-10-31, provider lanes: naye params ke
+        // defaults hain, isliye purani call sites bina badle
+        // compile hoti hain.
+        openai: String = "",
+        anthropic: String = "",
+        mistral: String = "",
+        together: String = "",
+        xai: String = "",
+        deepseek: String = "",
+        deepinfra: String = "",
+        nvidia: String = "",
+        openrouter: String = "",
     ): List<LaneCheck> = withContext(Dispatchers.IO) {
         val checks = mutableListOf<LaneCheck>()
         checks += checkOne("Gemini 1", gemini) { key ->
@@ -191,6 +264,34 @@ class BrainClient(private val prefs: FloraPreferences) {
             checks += LaneCheck("Maps", saved = false, valid = false, note = "saved nahi hai")
         } else {
             checks += mapsCheck(maps)
+        }
+        // Parity batch 2026-10-31, provider lanes: sirf /models
+        // GET probe — koi generation call nahi, koi token kharch
+        // nahi. Anthropic ka bhi models-list GET hi hai.
+        val providerKeys = mapOf(
+            "OpenAI" to openai,
+            "Mistral" to mistral,
+            "Together" to together,
+            "xAI" to xai,
+            "DeepSeek" to deepseek,
+            "DeepInfra" to deepinfra,
+            "NVIDIA" to nvidia,
+            "OpenRouter" to openrouter,
+        )
+        for (def in ProviderLanes.OPENAI_COMPATIBLE) {
+            val key = providerKeys[def.displayName] ?: ""
+            checks += checkOne(def.displayName, key) { k ->
+                getCode("${def.baseUrl}/models", "Bearer $k")
+            }
+        }
+        checks += checkOne("Anthropic", anthropic) { k ->
+            getCode(
+                "${ProviderLanes.ANTHROPIC_BASE}/v1/models", null,
+                extraHeaders = mapOf(
+                    "x-api-key" to k,
+                    "anthropic-version" to ProviderLanes.ANTHROPIC_VERSION,
+                )
+            )
         }
         checks
     }
@@ -248,13 +349,19 @@ class BrainClient(private val prefs: FloraPreferences) {
         }
     }
 
-    private fun getCode(urlText: String, authHeader: String?, headerName: String = "Authorization"): Int {
+    private fun getCode(
+        urlText: String,
+        authHeader: String?,
+        headerName: String = "Authorization",
+        extraHeaders: Map<String, String> = emptyMap(),
+    ): Int {
         val conn = PinnedTrust.openConnection(URL(urlText)) as HttpURLConnection
         return try {
             conn.requestMethod = "GET"
             conn.connectTimeout = 15_000
             conn.readTimeout = 15_000
             if (authHeader != null) conn.setRequestProperty(headerName, authHeader)
+            for ((name, value) in extraHeaders) conn.setRequestProperty(name, value)
             conn.responseCode
         } catch (e: Exception) {
             -1

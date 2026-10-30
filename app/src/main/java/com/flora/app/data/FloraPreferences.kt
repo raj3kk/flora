@@ -92,6 +92,17 @@ class FloraPreferences(private val context: Context) {
         val LEARNED_CONTACTS = stringPreferencesKey("learned_contacts_json")
         val GEMINI_API_KEY2 = stringPreferencesKey("gemini_api_key_2")
         val GROQ_API_KEY2 = stringPreferencesKey("groq_api_key_2")
+        // Parity batch 2026-10-31, provider lanes: 9 naye provider
+        // keys — sab readSecret/writeSecret se KeyStore-encrypted.
+        val OPENAI_API_KEY = stringPreferencesKey("openai_api_key")
+        val ANTHROPIC_API_KEY = stringPreferencesKey("anthropic_api_key")
+        val MISTRAL_API_KEY = stringPreferencesKey("mistral_api_key")
+        val TOGETHER_API_KEY = stringPreferencesKey("together_api_key")
+        val XAI_API_KEY = stringPreferencesKey("xai_api_key")
+        val DEEPSEEK_API_KEY = stringPreferencesKey("deepseek_api_key")
+        val DEEPINFRA_API_KEY = stringPreferencesKey("deepinfra_api_key")
+        val NVIDIA_API_KEY = stringPreferencesKey("nvidia_api_key")
+        val OPENROUTER_API_KEY = stringPreferencesKey("openrouter_api_key")
         val TAVILY_API_KEY = stringPreferencesKey("tavily_api_key")
         val BRAVE_API_KEY = stringPreferencesKey("brave_api_key")
         val SERPAPI_API_KEY = stringPreferencesKey("serpapi_api_key")
@@ -658,6 +669,70 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setGroqApiKey2(value: String) {
         writeSecret(Keys.GROQ_API_KEY2, value)
+    }
+
+    /** Provider lanes (parity batch 2026-10-31): khali = lane band. */
+    suspend fun openAiApiKey(): String =
+        readSecret(Keys.OPENAI_API_KEY)
+
+    suspend fun setOpenAiApiKey(value: String) {
+        writeSecret(Keys.OPENAI_API_KEY, value)
+    }
+
+    suspend fun anthropicApiKey(): String =
+        readSecret(Keys.ANTHROPIC_API_KEY)
+
+    suspend fun setAnthropicApiKey(value: String) {
+        writeSecret(Keys.ANTHROPIC_API_KEY, value)
+    }
+
+    suspend fun mistralApiKey(): String =
+        readSecret(Keys.MISTRAL_API_KEY)
+
+    suspend fun setMistralApiKey(value: String) {
+        writeSecret(Keys.MISTRAL_API_KEY, value)
+    }
+
+    suspend fun togetherApiKey(): String =
+        readSecret(Keys.TOGETHER_API_KEY)
+
+    suspend fun setTogetherApiKey(value: String) {
+        writeSecret(Keys.TOGETHER_API_KEY, value)
+    }
+
+    suspend fun xaiApiKey(): String =
+        readSecret(Keys.XAI_API_KEY)
+
+    suspend fun setXaiApiKey(value: String) {
+        writeSecret(Keys.XAI_API_KEY, value)
+    }
+
+    suspend fun deepseekApiKey(): String =
+        readSecret(Keys.DEEPSEEK_API_KEY)
+
+    suspend fun setDeepseekApiKey(value: String) {
+        writeSecret(Keys.DEEPSEEK_API_KEY, value)
+    }
+
+    suspend fun deepinfraApiKey(): String =
+        readSecret(Keys.DEEPINFRA_API_KEY)
+
+    suspend fun setDeepinfraApiKey(value: String) {
+        writeSecret(Keys.DEEPINFRA_API_KEY, value)
+    }
+
+    suspend fun nvidiaApiKey(): String =
+        readSecret(Keys.NVIDIA_API_KEY)
+
+    suspend fun setNvidiaApiKey(value: String) {
+        writeSecret(Keys.NVIDIA_API_KEY, value)
+    }
+
+    suspend fun openrouterApiKey(): String =
+        readSecret(Keys.OPENROUTER_API_KEY)
+
+    suspend fun setOpenrouterApiKey(value: String) {
+        writeSecret(Keys.OPENROUTER_API_KEY, value)
     }
 
     suspend fun tavilyApiKey(): String =

@@ -100,7 +100,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS, APPEARANCE, COMM, FAV_SONGS, VAULT, TEACH_ONCE, CATCHER, REMINDERS, PICTURES, NOTICES, TRIGGERS, MARKETS }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS, APPEARANCE, COMM, FAV_SONGS, VAULT, TEACH_ONCE, CATCHER, REMINDERS, PICTURES, NOTICES, TRIGGERS, MARKETS, PROVIDER_KEYS }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -114,6 +114,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.NOTICES -> "Notices"
     Screen.TRIGGERS -> "Event triggers"
     Screen.MARKETS -> "Markets"
+    Screen.PROVIDER_KEYS -> "Provider keys"
     Screen.SETTINGS -> "Settings"
     Screen.MEMORIES -> "Yaadein"
     Screen.SCAN -> "Scan"
@@ -5566,9 +5567,9 @@ fun FloraApp(
                         } catch (e: Exception) { }
                         if (value) AutoModeNotifier.show(appContext) else AutoModeNotifier.cancel(appContext)
                     }
-                }, { screen = Screen.AUTO_LOG }, { screen = Screen.CATCHER }, licence) { value ->
-                    typingMode = value
-                }
+                }, { screen = Screen.AUTO_LOG }, { screen = Screen.CATCHER }, licence,
+                    onTypingModeChange = { value -> typingMode = value },
+                    onShowProviderKeys = { screen = Screen.PROVIDER_KEYS })
             } else if (screen == Screen.PERMISSIONS) {
                 PermissionsScreen(onShowWizard = { showGate = true })
             } else if (screen == Screen.LICENCE) {
@@ -5741,6 +5742,9 @@ fun FloraApp(
             } else if (screen == Screen.MARKETS) {
                 // Parity batch 2026-10-31, M7: read-only watchlist.
                 MarketsScreen()
+            } else if (screen == Screen.PROVIDER_KEYS) {
+                // Parity batch 2026-10-31, provider lanes: 9 keys.
+                ProviderKeysScreen(prefs, brain)
             } else {
                 ToolsScreen(searchTools)
             }
@@ -6047,6 +6051,7 @@ private fun SettingsScreen(
     onShowCatcher: () -> Unit,
     licence: LicenceStatus? = null,
     onTypingModeChange: ((Boolean) -> Unit)? = null,
+    onShowProviderKeys: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -6610,6 +6615,12 @@ private fun SettingsScreen(
                 }) { Text("Bhare hue keys check karo (bina save)") }
             }
             Text("Save tumhare haath me hai — sahi ho ya galat, Save dabane par wahi save hogi. 'Keys check karo' saved keys ko check karta hai; 'Bhare hue keys check karo' bina save ke field wali keys ko check karta hai. Check sirf validity batata hai, key ki value kabhi screen par nahi aati. Keys sirf is phone par save hoti hain — har user ki apni key, usi user ke liye istemal hoti hai (koi shared key nahi).")
+            Spacer(modifier = Modifier.height(12.dp))
+            // Parity batch 2026-10-31, provider lanes: 9 provider
+            // keys ki alag screen (Gemini/Groq yahan hi rehte hain).
+            Row {
+                Button(onClick = { onShowProviderKeys() }) { Text("Provider keys (OpenAI, Anthropic, Mistral…)") }
+            }
             Spacer(modifier = Modifier.height(12.dp))
             Text("App update — server se (manual check)")
             Text("Naya version aaya ho to yahan se check karo. Download aur install sirf tumhare tap par hoga — apne aap kuch download ya install nahi hoga.")
