@@ -116,17 +116,17 @@ parent ke paas), `FLORA_FIX_CYCLE_REGISTER.md`.
 | # | Cheez | Sequence / note |
 |---|---|---|
 | M1 | QR / barcode live scan (Maya `qr_scan` route) | **IS CYCLE ME KIYA GAYA** — ScanScreen me QR mode + ML Kit barcode dep (§H) |
-| M2 | Reminders UI (Maya ReminderReceiver + alarms) | Infra maujood hai (`automation/JobScheduler.kt` schedule/cancel/rescheduleAll) — user-facing ReminderStore + screen + Job wiring agle cycle me (design: Job model par ride karega, naya alarm infra nahi) |
-| M3 | Face-attempts log screen (Maya `settings_face_attempts`) | Chhota: PinVault me failed-count accessor + LockScreen/FaceScreen me section (counting + lockout pehle se hai) — agle cycle me |
-| M4 | My pictures screen (Maya `my_pictures`/`photos_of`) | Chhota: MediaStore `Pictures/Flora` listing (Flora ki save ki hui photos) — agle cycle me |
-| M5 | Event triggers (Maya `event_triggers`) | Design decision chahiye (kaunse triggers: time/call/notification?) — bina definition ke build nahi |
-| M6 | Marketing 8.9 (SD-8) | SPEC-FIRST pending — spec ke baad hi build |
-| M7 | Markets / trading (Maya `markets`, ~32 tools DAAVA) | SPEC-FIRST + daava kabhi fact nahi — scope definition ke baad hi build |
-| M8 | Docs Excel/PDF export | Scope decision (kaunsa format, share ka raasta) ke baad |
-| M9 | Email read/reply (consent-gated) | P2 bundle follow-up — Gmail OAuth decision K10 par gated; silent forms kabhi nahi |
-| M10 | Typing mode / media mode (Maya settings) | Definitions chahiye (typing = bolne ki jagah type? media = ?) — bina definition ke build nahi |
-| M11 | Driving-mode SMS | Chhota — SOS SMS maujood hai; driving SMS confirmation-gated rahega (silent kabhi nahi) |
-| M12 | Notices / vibes routes (Maya cosmetic routes) | Cosmetic, sabse aakhir me — NotificationsScreen + AvatarScreen se kaam chal raha hai |
+| M2 | Reminders UI (Maya ReminderReceiver + alarms) | **PRODUCTION BATCH ME KIYA GAYA** — alag ReminderStore (JobStore overwrite risk se bachav) + ReminderScheduler + ReminderAlarmReceiver + RemindersScreen + BootReceiver reschedule + Manifest entry + FloraApp route. Fire par sirf notification, koi routine/action kabhi nahi. Commit `e93bd58a`. CI gate pending. |
+| M3 | Face-attempts log screen (Maya `settings_face_attempts`) | **PRODUCTION BATCH ME KIYA GAYA** — PinVault me public `failedCount()` + FaceScreen me guard-status section (failed count + lockout status + refresh). Commit `b34f47d8`. CI gate pending. |
+| M4 | My pictures screen (Maya `my_pictures`/`photos_of`) | **PRODUCTION BATCH ME KIYA GAYA** — PicturesScreen, MediaStore Pictures/Flora read-only listing (Scan/Whiteboard/ImageGen ki confirmed save location); tap par system viewer; koi Coil dep nahi. Commit `b34f47d8`. CI gate pending. |
+| M5 | Event triggers (Maya `event_triggers`) | **PRODUCTION BATCH ME KIYA GAYA — Flora-new time-only v1** — Maya semantics UNVERIFIED the, isliye spec pehle (`docs/FLORA_EVENT_TRIGGERS_SPEC.md`), phir TriggerStore + TriggerScheduler + TriggerAlarmReceiver + TriggersScreen + FloraApp/BootReceiver/Manifest wiring. Action `routine` (due-flag, app-open rule) ya `message` (notification) hi; call/SMS/payment/delete trigger kabhi nahi. Commit `d0155ad9`. CI gate pending. |
+| M6 | Marketing 8.9 (SD-8) | **SPEC ONLY — build NAHI** — marketing ka content vyavhaar records me UNVERIFIED hai (sirf menu naam + MarketingAlarmReceiver naam mila); bina definition ke marketing tool banana silent-action risk hota. Spec `docs/FLORA_MARKETING_8_9_SPEC.md`. Build tabhi jab verified vyavhaar mile ya user definition de. |
+| M7 | Markets / trading (Maya `markets`, ~32 tools DAAVA) | **PRODUCTION BATCH ME KIYA GAYA — read-only watchlist** — spec `docs/FLORA_MARKETS_SPEC.md` + WatchlistStore + MarketsScreen (maujooda Yahoo Finance lane, bina key). "~32 tools" daava kabhi fact nahi — screen par bhi nahi. Koi trading/buy/sell/advice kabhi nahi. Commit `26c8c637`. CI gate pending. |
+| M8 | Docs Excel/PDF export | **PRODUCTION BATCH ME KIYA GAYA — scope decided + implement** — scope: CSV (Excel-compatible) + PDF via Android PdfDocument (built-in, koi POI dep nahi), Downloads/Flora me MediaStore se save, user-tap buttons DocsScreen me. Koi auto-share/server upload nahi. Commit `26c8c637`. CI gate pending. |
+| M9 | Email read/reply (consent-gated) | **GATED — implement NAHI** — Gmail OAuth decision K10 par gated; report me gated hi rahega jab tak decision na aaye. |
+| M10 | Typing mode / media mode (Maya settings) | **PRODUCTION BATCH ME KIYA GAYA — Flora-new definitions** — Maya definition nahi mili, isliye spec `docs/FLORA_TYPING_MEDIA_MODES_SPEC.md` pehle, phir prefs + Settings toggles + chat Mic gate (typing) + system-TTS stream (media: ON = media stream default, OFF = voice-call stream; neural path par nahi). Commit `d716f0d2`. CI gate pending. |
+| M11 | Driving-mode SMS | **PRODUCTION BATCH ME KIYA GAYA** — DrivingScreen me SMS section, ACTION_SENDTO draft (Send user khud apne SMS app me dabayega; silent send kabhi nahi, SEND_SMS permission nahi). Commit `1ce9a315`. CI gate pending. |
+| M12 | Notices / vibes routes (Maya cosmetic routes) | **PRODUCTION BATCH ME KIYA GAYA** — Screen.NOTICES (= NotificationsScreen alias route) + AvatarScreen me Vibes section (mood naam → wahi avatar rang; naya art nahi). Commit `1ce9a315`. CI gate pending. |
 
 ## D. GATED — cycle force nahi karega
 
@@ -257,15 +257,101 @@ parent ke paas), `FLORA_FIX_CYCLE_REGISTER.md`.
   `ui/FloraApp.kt` (collision se bachav), workflow file, koi admin
   action, koi secret.
 
+## H2. PRODUCTION BATCH (2026-10-31 ~01:13 IST order — M2–M12 + provider lanes + automation)
+
+- **M2 — Reminders UI** — `data/ReminderStore.kt`,
+  `automation/ReminderScheduler.kt`,
+  `automation/ReminderAlarmReceiver.kt`, `ui/RemindersScreen.kt`,
+  BootReceiver reschedule, Manifest receiver entry, FloraApp
+  Screen.REMINDERS + menu. Design: reminders RoutineStore/
+  JobStore se ALAG store me (JobStore upsert routineName se
+  hota hai — wahi store use karte to reminder kisi routine ka
+  alarm overwrite kar sakta tha). Fire par sirf notification.
+  Commit `e93bd58a` (tip 731c2c6a se). CI gate pending.
+- **M3+M4 — Face-attempts + My pictures** — PinVault me public
+  `failedCount()` + FaceScreen guard-status section;
+  `ui/PicturesScreen.kt` (MediaStore Pictures/Flora read-only,
+  tap par system viewer, thumbnails ContentResolver se, koi
+  Coil dep nahi); Manifest READ_MEDIA_IMAGES +
+  READ_EXTERNAL_STORAGE (maxSdkVersion 32); FloraApp
+  Screen.PICTURES + menu. Commit `b34f47d8` (tip e93bd58a se).
+  CI gate pending.
+- **M11+M12 — Driving SMS + Notices/Vibes** — DrivingScreen me
+  SMS section (ACTION_SENDTO draft — Send user khud apne SMS
+  app me dabayega, silent send kabhi nahi, SEND_SMS permission
+  nahi); AvatarScreen me Vibes section (mood naam → wahi
+  avatar rang; naya art nahi); FloraApp Screen.NOTICES (=
+  NotificationsScreen alias route) + menu. Commit `1ce9a315`
+  (tip b34f47d8 se). CI gate pending.
+- **M5 — Event triggers (Flora-new time-only v1)** — spec
+  `docs/FLORA_EVENT_TRIGGERS_SPEC.md` + `data/TriggerStore.kt`
+  + `automation/TriggerScheduler.kt` +
+  `automation/TriggerAlarmReceiver.kt` + `ui/TriggersScreen.kt`
+  + FloraApp Screen.TRIGGERS + menu + BootReceiver reschedule
+  + Manifest entry. Maya semantics UNVERIFIED the — sirf time
+  trigger; action `routine` (due-flag, app-open Auto-Mode rule)
+  ya `message` (notification); call/SMS/payment/delete trigger
+  kabhi nahi. Commit `d0155ad9` (tip 1ce9a315 se). CI gate
+  pending.
+- **M6 — Marketing 8.9: SPEC ONLY, build NAHI** —
+  `docs/FLORA_MARKETING_8_9_SPEC.md`: marketing vyavhaar
+  records me UNVERIFIED (sirf menu naam + receiver naam) —
+  bina definition ke marketing tool silent-action risk hota.
+- **M7 — Markets read-only watchlist** — spec
+  `docs/FLORA_MARKETS_SPEC.md` + `data/WatchlistStore.kt` +
+  `ui/MarketsScreen.kt` (maujooda Yahoo Finance lane, bina
+  key) + FloraApp Screen.MARKETS + menu. "~32 tools" daava
+  kabhi fact nahi. Koi trading kabhi nahi.
+- **M8 — Docs CSV/PDF export** — scope decided: CSV
+  (Excel-compatible) + PDF via Android PdfDocument (built-in,
+  koi POI dep nahi), Downloads/Flora me MediaStore se save,
+  user-tap buttons DocsScreen me; DocsStore header comment bhi
+  update (export ab maujood hai, auto-share nahi). M7+M8 commit
+  `26c8c637` (tip d0155ad9 se). CI gate pending.
+- **M10 — Typing/media modes (Flora-new definitions)** — spec
+  `docs/FLORA_TYPING_MEDIA_MODES_SPEC.md` + FloraPreferences
+  TYPING_MODE/MEDIA_MODE + VoiceEngine.mediaMode (system TTS
+  stream: ON = media default, OFF = voice-call stream; neural
+  path par nahi) + Settings toggles + chat Mic gate + main
+  composable state sync (Settings toggle → chat gate turant).
+  Commit `d716f0d2` (tip 26c8c637 se). CI gate pending.
+- **M9 — Email read/reply: GATED, implement NAHI** — Gmail
+  OAuth decision K10 par gated; is batch me sirf gated report.
+- **Provider lanes (§I missing lanes)** —
+  `assistant/ProviderLanes.kt` (8 OpenAI-compatible lanes +
+  alag Anthropic client; default models starting points hain,
+  galat naam par lane agle par girta hai, fake jawab nahi) +
+  FloraPreferences 9 secret keys (KeyStore-encrypted) +
+  `ui/ProviderKeysScreen.kt` (password-masked fields, save +
+  saved/typed check — result me sirf status, value kabhi nahi)
+  + BrainClient.ask chain (Gemini→Groq→provider lanes→
+  BasicTalk; all-empty check me provider keys bhi) +
+  checkKeys/checkKeysFor (9 naye optional params — purani call
+  sites bina badle compile hoti hain; probe sirf /models GET,
+  koi token kharch nahi) + FloraApp Screen.PROVIDER_KEYS +
+  Settings se button. Notion + ElevenLabs gated hi rahe (user
+  token/decision) — force nahi kiye. Commit `1f156e00` (tip
+  d716f0d2 se). CI gate pending.
+- **Automation completeness verify** —
+  `docs/FLORA_AUTOMATION_CHAIN_VERIFY.md`: planner verified-step
+  execution, routines, macros (teach-by-doing + Auto Log),
+  Auto Mode ON, reboot-resume last VERIFIED step se — paanchon
+  code paths par PASS mile, koi code fix zaroori nahi mila.
+  Phone behaviour Phase 10-gated rahega.
+- **Phone-verified NAHI** — is batch ka sab kuch sirf code +
+  CI gate hai; M2–M12/provider-lane/automation phone proof
+  Phase 10 me hoga. Koi bhi item DONE-CODE nahi jab tak uska
+  CI run green na ho.
+
 ## I. MAYA BRAIN INVENTORY MAPPING (audit se, verify karke)
 
 | Maya brain cheez | Flora status |
 |---|---|
 | LLM app→direct: Gemini, Groq | HAVE (`assistant/BrainClient.kt`: Gemini 6-model chain + Groq 2-model chain, user keys) |
-| LLM app→direct: Anthropic, OpenAI, Mistral, Together, xAI, DeepSeek, DeepInfra, NVIDIA, OpenRouter | MISSING — agle cycle ka batch: generic OpenAI-compatible lane (ye 7 providers OpenAI-compatible `/chat/completions` shape bolte hain) + Anthropic alag client; iske liye prefs key storage + Settings UI + checkKeys probe + ask-chain integration chahiye — bina key-UI ke dead code hota, isliye is cycle me nahi joda gaya |
+| LLM app→direct: Anthropic, OpenAI, Mistral, Together, xAI, DeepSeek, DeepInfra, NVIDIA, OpenRouter | **PRODUCTION BATCH ME HAVE** — `assistant/ProviderLanes.kt` (8 OpenAI-compatible `/chat/completions` lanes + alag Anthropic client) + FloraPreferences 9 KeyStore-encrypted keys + `ui/ProviderKeysScreen.kt` + BrainClient ask-chain (Gemini→Groq→provider lanes→BasicTalk) + checkKeys probe (sirf /models GET). Commit `1f156e00`. CI gate pending; phone proof Phase 10 me. |
 | Search/tools: Tavily, Brave, SerpAPI, DuckDuckGo, Yahoo Finance, Open-Meteo, Google Maps | HAVE (`tools/SearchTools.kt`: Tavily key lane, Brave lane, SerpAPI lane, DuckDuckGo free fallback, Yahoo Finance bina key, Open-Meteo, Google Maps geocode user key se) |
-| Integrations: Notion, Todoist, Linear, Telegram | Todoist/Linear/Telegram HAVE (`tools/SdConnectors.kt`); Notion MISSING (SdConnectors me nahi — agle batch me, user token se) |
-| Integrations: Google TTS, Drive, Deepgram, ElevenLabs | Google/system TTS HAVE; Drive HAVE (backup); Deepgram HAVE (client + tts/stt-proxy); ElevenLabs MISSING (koi code nahi — provider decision chahiye, user key ke bina dead code hota) |
+| Integrations: Notion, Todoist, Linear, Telegram | Todoist/Linear/Telegram HAVE (`tools/SdConnectors.kt`); Notion MISSING (SdConnectors me nahi — user token se, gated; is batch me force nahi kiya) |
+| Integrations: Google TTS, Drive, Deepgram, ElevenLabs | Google/system TTS HAVE; Drive HAVE (backup); Deepgram HAVE (client + tts/stt-proxy); ElevenLabs MISSING (koi code nahi — provider decision chahiye, user key ke bina dead code hota; is batch me force nahi kiya) |
 | Voice: Hunter on-device STT + Deepgram + system | Deepgram + system HAVE; Hunter JNI absent — Flora equivalent: Kokoro on-device (code-landed, Gate 6 held) + stt-proxy (deploy #2) |
 | Voice: Pocket on-device TTS + Hunter cloud TTS + system | System HAVE; Pocket ki jagah Kokoro HAVE (code); Hunter cloud ki jagah tts-proxy (Deepgram) server lane — divergent-by-design, copy nahi |
 | Memory: Room + DataStore, backup kabhi phone se bahar nahi | Room HAVE (`planner/PlanRoom.kt`) + DataStore HAVE (`data/FloraPreferences.kt`); platform backup HAVE (`allowBackup="false"`); user-initiated Drive backup opt-in hai (alag cheez, documented) |
@@ -276,6 +362,10 @@ parent ke paas), `FLORA_FIX_CYCLE_REGISTER.md`.
 - M1 QR push `ccab0b32` → run #316: in_progress (docs-push waqt)
 - Brain+pacing push `53bb694a` → run #319: in_progress (docs-push waqt)
 - Docs push (ye doc + K11 note + register entry) → run #DOCS: push ke baad number milega; watcher confirm karega
+- Production batch pushes (gate pending — green se pehle DONE-CODE nahi):
+  M2 `e93bd58a`, M3+M4 `b34f47d8`, M11+M12 `1ce9a315`,
+  M5 `d0155ad9`, M7+M8 `26c8c637`, M10 `d716f0d2`,
+  provider lanes `1f156e00`, docs (ye push) → run numbers watcher se
 - Re-audit gate (tip re-fetch se edits verify) CI green ke baad hi
   PASS hoga — usse pehle ye items "pushed, gate pending" hain,
   DONE-CODE nahi.
