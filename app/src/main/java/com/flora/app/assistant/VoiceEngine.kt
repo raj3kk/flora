@@ -1,9 +1,20 @@
 package com.flora.app.assistant
 
 import android.content.Context
+import android.media.MediaPlayer
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import com.flora.app.data.CatcherEvents
+import com.flora.app.voice.ServerTtsClient
+import java.io.File
 import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
  * Neural-first + system-TTS fallback (free, on-device voices). Neural engine
@@ -13,8 +24,33 @@ import java.util.Locale
  * the UI speaks the reply as soon as it arrives.
  */
 class VoiceEngine(context: Context) {
+    private val appContext: Context = context
     private var tts: TextToSpeech? = null
     private var ready = false
+
+    /**
+     * Phase 1 (server-shift) Item B — cloud TTS lane (optional,
+     * attach-only). MainActivity attach karta hai (prefs +
+     * licenceClient wahi maujood hain); FloraInCallService /
+     * BackgroundMicService attach nahi karte — wahan lane null
+     * rehta hai aur system path bilkul waisa hi chalta hai.
+     * Lane attach hone par bhi koi hard dependency nahi:
+     * fetch fail/unavailable/free-limit/error par speak()
+     * turant system path par girta hai — awaaz kabhi nahi
+     * rukti. Key PENDING hai, isliye aaj lane 503 dega aur
+     * fallback hi bolega; fallback tab tak rahega.
+     */
+    var cloudTts: ServerTtsClient? = null
+        private set
+
+    fun attachCloudTts(client: ServerTtsClient) {
+        cloudTts = client
+    }
+
+    private val cloudScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var cloudJob: Job? = null
+    private var cloudPlayer: MediaPlayer? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     /**
      * Har bolne par ASLI bola hua time (seconds, stopwatch se).
@@ -187,14 +223,141 @@ class VoiceEngine(context: Context) {
     fun speak(text: String) {
         val clean = sanitizeForSpeech(text)
         if (clean.isEmpty()) return
+        utteranceSeq += 1
+        val seq = utteranceSeq
+        val lane = cloudTts
+        if (lane != null) {
+            // Nayi utterance purani ko flush karti hai (QUEUE_FLUSH
+            // jaisa): purana cloud fetch cancel, purana player stop.
+            // Seq guard (neeche) purani job ko dobara bolne nahi dega.
+            cloudJob?.cancel()
+            cloudJob = null
+            try {
+                cloudPlayer?.stop()
+            } catch (e: Exception) {
+            }
+            try {
+                cloudPlayer?.release()
+            } catch (e: Exception) {
+            }
+            cloudPlayer = null
+            utteranceStartMs = System.currentTimeMillis()
+            utteranceCounted = true
+            cloudJob = cloudScope.launch {
+                val res = try {
+                    lane.fetchAudio(clean)
+                } catch (e: Exception) {
+                    ServerTtsClient.TtsResult.Error("tts-proxy call fail")
+                }
+                // Playback + fallback main thread par — pehle wala
+                // speak() bhi UI thread se hi chalta tha, isliye
+                // MediaPlayer/TTS ka thread wahi rahega.
+                mainHandler.post {
+                    if (seq != utteranceSeq) return@post
+                    when (res) {
+                        is ServerTtsClient.TtsResult.Audio -> playCloudAudio(clean, seq, res.bytes)
+                        else -> speakLocal(clean, seq)
+                    }
+                }
+            }
+            return
+        }
+        speakLocal(clean, seq)
+    }
+
+    /**
+     * Phase 1 Item B — cloud audio playback. Cache file me
+     * likh kar MediaPlayer se bajta hai (byte array seedha
+     * nahi bajta); complete/error par file delete + release.
+     * Start se pehle error aaye to system path par fallback
+     * (ek baar); start ke baad error par sirf finish — dobara
+     * bolna double-speak hoga, isliye nahi.
+     */
+    private fun playCloudAudio(clean: String, seq: Int, bytes: ByteArray) {
+        var started = false
+        var fellBack = false
+        try {
+            val file = File(appContext.cacheDir, "flora-tts-$seq.mp3")
+            file.writeBytes(bytes)
+            val player = MediaPlayer()
+            cloudPlayer = player
+            player.setDataSource(file.absolutePath)
+            player.setOnCompletionListener {
+                if (seq != utteranceSeq) return@setOnCompletionListener
+                finishUtterance(seq)
+                try {
+                    file.delete()
+                } catch (e: Exception) {
+                }
+                try {
+                    player.release()
+                } catch (e: Exception) {
+                }
+                if (cloudPlayer == player) cloudPlayer = null
+                mainHandler.post { onSpeechDone?.invoke() }
+            }
+            player.setOnErrorListener { _, _, _ ->
+                if (seq != utteranceSeq) return@setOnErrorListener true
+                try {
+                    file.delete()
+                } catch (e: Exception) {
+                }
+                try {
+                    player.release()
+                } catch (e: Exception) {
+                }
+                if (cloudPlayer == player) cloudPlayer = null
+                if (!started && !fellBack) {
+                    fellBack = true
+                    speakLocal(clean, seq)
+                } else {
+                    finishUtterance(seq)
+                    mainHandler.post { onSpeechDone?.invoke() }
+                }
+                true
+            }
+            player.prepare()
+            if (seq != utteranceSeq) {
+                try {
+                    player.release()
+                } catch (e: Exception) {
+                }
+                if (cloudPlayer == player) cloudPlayer = null
+                try {
+                    file.delete()
+                } catch (e: Exception) {
+                }
+                return
+            }
+            player.start()
+            started = true
+            utteranceStartMs = System.currentTimeMillis()
+            utteranceCounted = false
+            mainHandler.post { onSpeechStart?.invoke() }
+        } catch (e: Exception) {
+            if (seq != utteranceSeq) return
+            if (!started && !fellBack) {
+                fellBack = true
+                speakLocal(clean, seq)
+            } else {
+                finishUtterance(seq)
+                mainHandler.post { onSpeechDone?.invoke() }
+            }
+        }
+    }
+
+    /**
+     * Pehle wala speak() body — neural engine, phir system
+     * TTS (Lily profile). Cloud lane ka fallback bhi yahi hai,
+     * isliye seq caller se aata hai (dobara increment nahi).
+     */
+    private fun speakLocal(clean: String, seq: Int) {
         // Phase 8 neural voice: engine juda ho to wahi bolega
         // (Kokoro hf_alpha jab engine + model dono hon) — iske
         // liye system TTS ka ready hona zaroori nahi. Engine
         // na ho ya fail ho to neeche system TTS (Lily profile)
         // hi chalega — system TTS is build me hataya NAHI gaya
         // (gate: hatana sirf phone test pass ke baad).
-        utteranceSeq += 1
-        val seq = utteranceSeq
         utteranceStartMs = System.currentTimeMillis()
         // Counted=true jab tak onStart na aaye: purani utterance
         // ka late onDone/onError nayi utterance ko samay se
@@ -233,6 +396,19 @@ class VoiceEngine(context: Context) {
     }
 
     fun stop() {
+        // Phase 1 Item B: cloud fetch cancel + cloud player stop
+        // pehle — warna stop ke baad bhi cloud audio baj sakta hai.
+        cloudJob?.cancel()
+        cloudJob = null
+        try {
+            cloudPlayer?.stop()
+        } catch (e: Exception) {
+        }
+        try {
+            cloudPlayer?.release()
+        } catch (e: Exception) {
+        }
+        cloudPlayer = null
         // Interrupt par bhi ab tak bola hua waqt gino — poora
         // text kabhi count nahi hoga jab aadha hi bola ho.
         finishUtterance(utteranceSeq)
@@ -244,6 +420,14 @@ class VoiceEngine(context: Context) {
     }
 
     fun shutdown() {
+        cloudJob?.cancel()
+        cloudJob = null
+        try {
+            cloudPlayer?.release()
+        } catch (e: Exception) {
+        }
+        cloudPlayer = null
+        cloudScope.cancel()
         tts?.shutdown()
         tts = null
         ready = false

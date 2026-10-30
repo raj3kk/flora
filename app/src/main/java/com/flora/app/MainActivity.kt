@@ -19,6 +19,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import com.flora.app.assistant.VoiceEngine
 import com.flora.app.voice.BackgroundMicService
+import com.flora.app.voice.ServerTtsClient
 import com.flora.app.voice.ContinuousListener
 import com.flora.app.voice.NotchState
 import com.flora.app.voice.FloraCommandBus
@@ -162,6 +163,12 @@ class MainActivity : ComponentActivity() {
             speakingState.value = true
         }
         val licenceClient = LicenceClient(prefs)
+        // Phase 1 (server-shift) Item B: cloud TTS lane attach.
+        // Deepgram key PENDING hai, isliye tts-proxy abhi 503
+        // dega aur VoiceEngine system TTS fallback par bolega;
+        // attach hone se koi awaaz nahi rukti, lane tab tak
+        // fallback hi rahega jab tak key + deploy live na ho.
+        voice.attachCloudTts(ServerTtsClient(prefs, licenceClient))
         voice.onSpoken = { seconds ->
             talkScope.launch {
                 val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
