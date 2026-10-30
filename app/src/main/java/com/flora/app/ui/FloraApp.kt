@@ -6669,7 +6669,7 @@ private fun SettingsScreen(
                             if (existing.isEmpty()) {
                                 val seed = mutableSetOf<String>()
                                 try {
-                                    android.telephony.Telephony.Sms.getDefaultSmsPackage(context)?.let { seed.add(it) }
+                                    android.provider.Telephony.Sms.getDefaultSmsPackage(context)?.let { seed.add(it) }
                                 } catch (e: Exception) {
                                 }
                                 try {
