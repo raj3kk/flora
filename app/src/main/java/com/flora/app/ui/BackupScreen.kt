@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
@@ -268,7 +267,7 @@ fun BackupScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Text("Backup / Restore")
         Spacer(modifier = Modifier.height(4.dp))
         Text(

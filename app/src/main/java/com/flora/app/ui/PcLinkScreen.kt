@@ -4,7 +4,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,9 +35,9 @@ fun PcLinkScreen(prefs: FloraPreferences) {
     var note by remember { mutableStateOf("") }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp)
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
     ) {
-        Text("PC Link (taiyaari)")
+        Text("PC jodo (taiyaari)")
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             "Taiyaari stage: PC client abhi nahi hai, isliye ye " +

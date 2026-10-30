@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,7 +45,7 @@ fun AvatarScreen(prefs: FloraPreferences, onPick: (String) -> Unit) {
         "sunehra" to "Sunehra",
     )
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Text("Avatar — Flora ka rang-roop chuno")
         Spacer(modifier = Modifier.height(8.dp))
         Text("Sirf orb ka rang badlega; awaaz aur baat karne ka tareeqa wahi rahega.")

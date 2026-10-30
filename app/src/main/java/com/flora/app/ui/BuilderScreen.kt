@@ -312,7 +312,7 @@ fun BuilderScreen(
     // baad test dobara hoga (audit log me limit darj hai).
     if (!PlanFeatures.isAllowed("builder")) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(12.dp)
+            modifier = Modifier.fillMaxSize()
         ) {
             Text("Builder abhi is plan me nahi hai.")
             Spacer(modifier = Modifier.height(8.dp))
@@ -322,7 +322,7 @@ fun BuilderScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
     ) {
         Text("Builder — project banao, code likho ya bolo, preview dekho.")
         Spacer(modifier = Modifier.height(4.dp))
