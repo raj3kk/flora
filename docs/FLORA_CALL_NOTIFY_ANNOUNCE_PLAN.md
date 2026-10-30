@@ -364,10 +364,11 @@ karta hai. Baaki deferred/out hai (§6 ke saath padho).
 
 ## §9. REVISED BATCH LIST (Batch 4 jud gaya)
 
-- Batch 1 — Call announce upgrade (PUSHED: ec583832, CI pending).
-- Batch 2 — Notification announce (+ driving DND-override rule).
+- Batch 1 — Call announce upgrade (commit ec583832, CI 41015668729 SUCCESS, re-audit gate PASS).
+- Batch 2 — Notification announce (+ driving DND-override rule). Commit 45023aff + fix d0af98ff (android.provider.Telephony package fix — Sms class android.provider me hai, android.telephony me nahi; isi galti se CI me Unresolved reference aaya tha), CI 41017483287 SUCCESS, re-audit gate PASS (fix diff sirf 1 line, tip-content verified).
 - Batch 3 — Reliability + visibility (AnnounceService id 2008, stop,
-  boot restore, Vivo guidance).
+  boot restore, Vivo guidance). Is push me implemented; CI run +
+  re-audit gate push ke baad declare hoga.
 - **Batch 4 — Maya-parity self-activation + missed-call:** manifest
   USE_FULL_SCREEN_INTENT + IncomingCallActivity (FSI) + overlay
   fallback + receiver FSI post + MISSED_ANNOUNCE toggle + missed state
@@ -377,3 +378,46 @@ karta hai. Baaki deferred/out hai (§6 ke saath padho).
   unlocked par heads-up, FSI denied par overlay fallback, FSI + overlay
   dono denied par sirf voice; missed call ke baad summary; driving mode
   me DND override; "call wapas karo" par dialer khulna (auto-dial nahi).
+
+## §10. BATCH 3 — IMPLEMENTED (reliability + visibility)
+
+- **AnnounceService** (`automation/AnnounceService.kt`, NOTIF_ID 2008,
+  channel `flora_announce`, specialUse — FloraCharmService mirror):
+  foreground notification "Flora announce chalu hai" (tap → Flora
+  chat) + "Band karo" action (AnnounceStopReceiver). Khud kuch
+  announce NAHI karti — announce ab bhi CallAnnouncementReceiver /
+  FloraNotificationListener se hota hai; ye sirf visible presence +
+  stop control hai. START_NOT_STICKY: system kill par khud wapas
+  nahi aayegi.
+- **AnnounceStopReceiver** (`automation/AnnounceStopReceiver.kt`,
+  exported=false): sirf service rokta hai, toggles nahi badalta.
+  **Semantics (honest, UI me bhi likhi):** "Band karo" = session
+  stop; toggle ON rehne par toggle badalne ya phone restart par
+  service wapas chalu ho jayegi; poori tarah band karne ke liye
+  Call announce + Notification announce dono OFF karo. Stop
+  hamesha kaam karega, chahe toggle koi bhi ho.
+- **Manifest:** service + receiver entries (specialUse subtype
+  "Flora call and notification announce"). Koi naya permission
+  nahi — FOREGROUND_SERVICE + FOREGROUND_SERVICE_SPECIAL_USE
+  pehle se hain. NOTIF_ID 2008 free tha (1001/1002/1003/2002/
+  2003/2004/2007 use me hain).
+- **BootReceiver restore:** boot par call ya notify toggle ON ho to
+  AnnounceService start (try/catch — kuch phones par boot FGS
+  block hota hai, fail ho to toggle dobara layega). PHONE_STATE
+  receiver aur NotificationListenerService ko boot action nahi
+  chahiye (manifest / system-bound).
+- **Settings wiring:** call toggle (grant chain ke aakhri step +
+  OFF branch) aur notify toggle dono `syncFromPrefs` bulate hain
+  (koi announce ON → start, dono OFF → stop). Koi naya state var
+  nahi — declaration-order trap nahi. Koi naya DataStore instance
+  nahi — FloraPreferences reuse.
+- **Settings UI:** "Announce band karo" button (hamesha stop) +
+  Vivo guidance text (Auto-start ON + Battery unrestricted,
+  Permissions screen buttons ka hawala) + force-stop limit text.
+  Vivo steps user khud karega — Flora khud ON nahi kar sakti.
+- **Phone-test (Batch 3, §5 me judenge):** toggle ON → notification
+  dikhe; "Band karo" → notification gayab, announce ruka; dono
+  OFF → service ruki; phone restart (toggle ON) → service wapas;
+  service kill (Settings > Apps > Force stop nahi, system kill)
+  → announce ruka jab tak boot/toggle na ho; Vivo auto-start OFF
+  par announce rukna (expected, user step se wapas).

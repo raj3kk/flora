@@ -46,6 +46,18 @@ class BootReceiver : BroadcastReceiver() {
                     } catch (e: Exception) {
                     }
                 }
+                // Batch 3: call ya notification announce ON ho to
+                // AnnounceService wapas chalu — boot par FGS start
+                // kuch phones par block ho sakta hai, isliye try/catch
+                // (fail ho to toggle dobara service wapas layega).
+                if (prefs.callAnnounce() || prefs.notifyAnnounce()) {
+                    try {
+                        context.startForegroundService(
+                            Intent(context, AnnounceService::class.java)
+                        )
+                    } catch (e: Exception) {
+                    }
+                }
                 try {
                     JobScheduler.rescheduleAll(context.applicationContext)
                 } catch (e: Exception) {

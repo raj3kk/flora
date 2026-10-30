@@ -172,6 +172,20 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Flora planner background execution" />
         </service>
+        <!-- Call + notification announce (Batch 3): visible foreground
+             presence + one-tap stop. Announce receivers/listener se
+             hota hai, ye service sirf dikhti hui presence hai. -->
+        <service
+            android:name="com.flora.app.automation.AnnounceService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Flora call and notification announce" />
+        </service>
+        <receiver
+            android:name="com.flora.app.automation.AnnounceStopReceiver"
+            android:exported="false" />
         <!-- Lane A item 37: viewing notification ka Stop action —
              explicit broadcast only, exported=false. -->
         <receiver

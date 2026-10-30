@@ -34,6 +34,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import android.provider.Settings
 import com.flora.app.automation.AnnounceFilters
+import com.flora.app.automation.AnnounceService
 import com.flora.app.automation.AppAutomation
 import com.flora.app.automation.AutoModeNotifier
 import com.flora.app.automation.FloraAutomationService
@@ -5952,7 +5953,10 @@ private fun SettingsScreen(
     ) { granted ->
         if (granted) {
             callAnnounce = true
-            scope.launch { prefs.setCallAnnounce(true) }
+            scope.launch {
+                prefs.setCallAnnounce(true)
+                AnnounceService.syncFromPrefs(context)
+            }
         } else {
             note = "Call log permission ke bina caller number nahi milega, announce nahi chalega."
         }
@@ -6640,7 +6644,10 @@ private fun SettingsScreen(
                         phonePermissionLauncher.launch(Manifest.permission.READ_PHONE_STATE)
                     } else {
                         callAnnounce = false
-                        scope.launch { prefs.setCallAnnounce(false) }
+                        scope.launch {
+                            prefs.setCallAnnounce(false)
+                            AnnounceService.syncFromPrefs(context)
+                        }
                     }
                 })
             }
@@ -6663,6 +6670,7 @@ private fun SettingsScreen(
                     notifyAnnounce = value
                     scope.launch {
                         prefs.setNotifyAnnounce(value)
+                        AnnounceService.syncFromPrefs(context)
                         if (value) {
                             // Pehli baar ON: default SMS + dialer seed (user baad me badal sakta hai).
                             val existing = prefs.notifyImportantApps()
@@ -6725,6 +6733,13 @@ private fun SettingsScreen(
                     Text(label)
                 }
             }
+            Row {
+                Button(onClick = {
+                    AnnounceService.stop(context)
+                }) { Text("Announce band karo") }
+            }
+            Text("Band karo sirf is waqt ki announce service rokta hai — toggle ON rehne par toggle badalne ya phone restart par service wapas chalu ho jayegi. Poori tarah band karne ke liye Call announce + Notification announce dono OFF karo.")
+            Text("Vivo/iQOO jaise phones par: Settings > Apps > Flora me Auto-start ON + Battery unrestricted rakho (Permissions screen par 'Battery unrestricted karo' + 'Auto-start kholo' buttons hain), warna system announce service maar dega aur call/notification announce ruk jayega. Ye steps user khud karega — Flora khud ON nahi kar sakti. Force-stop hone par bhi announce nahi hoga.")
             Spacer(modifier = Modifier.height(12.dp))
             Text("Persona — Flora ka tone (sirf tone badlega, awaaz nahi)")
             Text("Default (naye install par): Romantic — item 34. Ye default yahan se override nahi hota; yahan sirf apna current role badalta hai.")
