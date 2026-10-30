@@ -234,7 +234,11 @@ class PlannerEngine(
         // side-effect nahi; MACRO sirf adapter-queued hota hai
         // (Routines confirm ke bina execute kabhi nahi). Side-effect
         // tools ka pattern kabhi offline nahi chalta (AI chain hi).
-        when (val learned = learnedEngine.decide(goal, null)) {
+        // SD-P1 Batch 4 (8.14): skills toggle OFF ho to learned
+        // shortcut skip — AI raasta. Default ON hai; prefs fail
+        // ho to fail-open ON (pehle jaisa vyavhaar).
+        val skillsOn = try { prefs.sd8SkillsEnabled() } catch (e: Exception) { true }
+        if (skillsOn) when (val learned = learnedEngine.decide(goal, null)) {
             is LearnedEngine.Route.Offline -> {
                 val pattern = learned.pattern
                 val draft = PlanDraft(

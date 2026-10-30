@@ -94,7 +94,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -113,6 +113,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.CONNECT -> "Connect"
     Screen.SD_CONNECTORS -> "SD-1 Connectors"
     Screen.TASK_LIST -> "Task list"
+    Screen.SD8_SETTINGS -> "SD-8 Settings"
     Screen.PRIVACY -> "Privacy"
     Screen.TERMS -> "Terms"
     Screen.AUTO -> "Auto"
@@ -379,7 +380,15 @@ fun FloraApp(
             return@LaunchedEffect
         }
         try {
-            fresh.forEach { (t, u) -> chatMemoryStore.addTurn(u, t) }
+            // SD-P1 Batch 4 (8.6 Incognito): ON ho to is session
+            // ke turns kabhi save nahi honge. persistedCount
+            // phir bhi badhta hai — warna Incognito OFF hote hi
+            // ye turns retroactively save ho jate (rule toot ta).
+            // Safety stops is gate se alag hain, lagu rahenge.
+            val incognito = try { prefs.sd8Incognito() } catch (e: Exception) { false }
+            if (!incognito) {
+                fresh.forEach { (t, u) -> chatMemoryStore.addTurn(u, t) }
+            }
             persistedCount = current.size
         } catch (e: Exception) {
         }
@@ -1643,6 +1652,10 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Task list") },
                             onClick = { screen = Screen.TASK_LIST; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("SD-8 Settings") },
+                            onClick = { screen = Screen.SD8_SETTINGS; menuOpen = false },
                         )
                         DropdownMenuItem(
                             text = { Text("Auto") },
@@ -5313,6 +5326,8 @@ fun FloraApp(
                 com.flora.app.planner.PlannerScreen(plannerEngine, goalOrchestrator) { screen = Screen.DOCTOR }
             } else if (screen == Screen.TASK_LIST) {
                 TaskListScreen(plannerEngine, autoLogStore) { screen = Screen.CHAT }
+            } else if (screen == Screen.SD8_SETTINGS) {
+                Sd8SettingsScreen(autoLogStore) { screen = Screen.CHAT }
             } else if (screen == Screen.DOCTOR) {
                 com.flora.app.doctor.DoctorScreen(projectStore, autoLogStore, plannerEngine)
             } else if (screen == Screen.WHITEBOARD) {
@@ -6489,6 +6504,7 @@ private fun SettingsScreen(
             Text("Default OFF.")
             Spacer(modifier = Modifier.height(12.dp))
             Text("Persona — Flora ka tone (sirf tone badlega, awaaz nahi)")
+            Text("Default (naye install par): Romantic — item 34. Ye default yahan se override nahi hota; yahan sirf apna current role badalta hai.")
             Row {
                 listOf("flora" to "Flora", "saathi" to "Saathi", "guru" to "Guru", "romantic" to "Romantic").forEach { (id, label) ->
                     Button(onClick = {

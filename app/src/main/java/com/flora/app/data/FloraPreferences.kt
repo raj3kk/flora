@@ -112,6 +112,14 @@ class FloraPreferences(private val context: Context) {
         val SD1_LINEAR_TOKEN = stringPreferencesKey("sd1_linear_token")
         val SD1_TELEGRAM_CHAT_ID = stringPreferencesKey("sd1_telegram_chat_id")
         val SD1_LINEAR_TEAM_ID = stringPreferencesKey("sd1_linear_team_id")
+        // SD-P1 Batch 4 (SD-8): device-only profile + toggles.
+        val SD8_USER_NAME = stringPreferencesKey("sd8_user_name")
+        val SD8_USER_GENDER = stringPreferencesKey("sd8_user_gender")
+        val SD8_INCOGNITO = booleanPreferencesKey("sd8_incognito")
+        val SD8_SKILLS_ENABLED = booleanPreferencesKey("sd8_skills_enabled")
+        val SD8_THINKING_VISIBLE = booleanPreferencesKey("sd8_thinking_visible")
+        val SD8_EMAIL_CONSENT = booleanPreferencesKey("sd8_email_consent")
+        val SD8_SOCIAL_CONSENT = booleanPreferencesKey("sd8_social_consent")
         val AVATAR = stringPreferencesKey("avatar")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
@@ -377,6 +385,75 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setDeepgramApiKey(value: String) {
         writeSecret(Keys.DEEPGRAM_API_KEY, value)
+    }
+
+    /** SD-P1 Batch 4 (SD-8 app settings) — device-only profile +
+     *  toggles. Naam/gender sirf isi phone par rehte hain, server
+     *  par kabhi nahi jate (jab tak user opt-in na de — opt-in
+     *  is batch me nahi hai). Consent flags default OFF hain. */
+    suspend fun sd8UserName(): String =
+        context.floraDataStore.data.map { it[Keys.SD8_USER_NAME] ?: "" }.first()
+
+    suspend fun setSd8UserName(value: String) {
+        context.floraDataStore.edit {
+            if (value.isBlank()) it.remove(Keys.SD8_USER_NAME)
+            else it[Keys.SD8_USER_NAME] = value.trim()
+        }
+    }
+
+    suspend fun sd8UserGender(): String =
+        context.floraDataStore.data.map { it[Keys.SD8_USER_GENDER] ?: "" }.first()
+
+    suspend fun setSd8UserGender(value: String) {
+        context.floraDataStore.edit {
+            if (value.isBlank()) it.remove(Keys.SD8_USER_GENDER)
+            else it[Keys.SD8_USER_GENDER] = value.trim()
+        }
+    }
+
+    /** 8.6 Incognito — ON ho to us session ke turns chat
+     *  memory/history me kabhi save nahi honge (FloraApp ke
+     *  save-effect me gate hai; safety stops phir bhi lagu). */
+    suspend fun sd8Incognito(): Boolean =
+        context.floraDataStore.data.map { it[Keys.SD8_INCOGNITO] ?: false }.first()
+
+    suspend fun setSd8Incognito(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.SD8_INCOGNITO] = value }
+    }
+
+    /** 8.14 Skills toggle — OFF ho to PlannerEngine learned
+     *  shortcut skip karke AI raaste se plan banayega. */
+    suspend fun sd8SkillsEnabled(): Boolean =
+        context.floraDataStore.data.map { it[Keys.SD8_SKILLS_ENABLED] ?: true }.first()
+
+    suspend fun setSd8SkillsEnabled(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.SD8_SKILLS_ENABLED] = value }
+    }
+
+    /** 8.14 Thinking visibility — OFF ho to is screen par
+     *  learned-pattern details chhup jayenge. */
+    suspend fun sd8ThinkingVisible(): Boolean =
+        context.floraDataStore.data.map { it[Keys.SD8_THINKING_VISIBLE] ?: true }.first()
+
+    suspend fun setSd8ThinkingVisible(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.SD8_THINKING_VISIBLE] = value }
+    }
+
+    /** 8.12 Email/social consent — default OFF. Flora ki taraf
+     *  se koi email/social action bina is consent ke nahi hoga;
+     *  consent badalne par Auto Log me entry jati hai. */
+    suspend fun sd8EmailConsent(): Boolean =
+        context.floraDataStore.data.map { it[Keys.SD8_EMAIL_CONSENT] ?: false }.first()
+
+    suspend fun setSd8EmailConsent(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.SD8_EMAIL_CONSENT] = value }
+    }
+
+    suspend fun sd8SocialConsent(): Boolean =
+        context.floraDataStore.data.map { it[Keys.SD8_SOCIAL_CONSENT] ?: false }.first()
+
+    suspend fun setSd8SocialConsent(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.SD8_SOCIAL_CONSENT] = value }
     }
 
     /** SD-P1 Batch 2 (SD-1) connector secrets — Deepgram pattern
