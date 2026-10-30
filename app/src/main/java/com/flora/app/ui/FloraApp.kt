@@ -242,6 +242,9 @@ fun FloraApp(
     // likha hua transcript nahi dikhega, sirf orb + mic. Chat
     // sirf tab jab user khud "Chat kholo" dabaye.
     var voiceView by remember { mutableStateOf(true) }
+    // B6 (fix-cycle): Baat view me orb ke neeche dikhne wali aakhri
+    // suni hui line — sirf committed FINAL transcripts se set hoti hai.
+    var lastHeard by remember { mutableStateOf("") }
     // Avatar style (v2.22, S2): orb ka rang, prefs se.
     var avatarStyle by remember { mutableStateOf("gulabi") }
     val sendChatHolder = remember { arrayOfNulls<((String) -> Unit)>(1) }
@@ -262,13 +265,16 @@ fun FloraApp(
     // par lagta hai, aur partial par sirf stop ka gate hai.
     val isEchoLike: (String) -> Boolean = { rawTranscript ->
         val spoken = rawTranscript.trim().lowercase()
-        val lastFlora = messages.lastOrNull { !it.fromUser }
-            ?.text?.removePrefix("Flora:")?.trim()?.lowercase() ?: ""
         val words = spoken.split(" ").filter { it.isNotBlank() }
-        val overlap = if (words.isEmpty()) 0 else
-            words.count { it in lastFlora.split(" ") }
-        spoken.isNotEmpty() && lastFlora.isNotEmpty() &&
-            (lastFlora.contains(spoken) || overlap * 2 >= words.size)
+        // B1 (fix-cycle): aakhri 1 ke bajay aakhri 3 Flora messages
+        // se compare — rule wahi (contains ya 50%+ overlap).
+        spoken.isNotEmpty() && words.isNotEmpty() &&
+            messages.filter { !it.fromUser }.takeLast(3).any { msg ->
+                val lastFlora = msg.text.removePrefix("Flora:").trim().lowercase()
+                lastFlora.isNotEmpty() &&
+                    (lastFlora.contains(spoken) ||
+                        words.count { it in lastFlora.split(" ") } * 2 >= words.size)
+            }
     }
     // Attachments (v1.7, local — journal PASS ke baad push): ye states
     // launcher se PEHLE declare hain (order trap se bachne ke liye).
@@ -502,6 +508,8 @@ fun FloraApp(
                 val clean = text.trim()
                 if (clean.isNotBlank() && !isEchoLike(clean)) {
                     com.flora.app.voice.NotchState.interrupted = false
+                    // B6 (fix-cycle): committed FINAL hi line me dikhega.
+                    lastHeard = clean
                     sendChatHolder[0]?.invoke(clean)
                 } else {
                     com.flora.app.voice.NotchState.interrupted = false
@@ -1299,6 +1307,8 @@ fun FloraApp(
                                             // ke bina koi turn nahi.
                                             com.flora.app.voice.NotchState.interrupted = false
                                             if (!isEchoLike(transcript)) {
+                                                // B6 (fix-cycle): committed FINAL hi line me dikhega.
+                                                lastHeard = transcript
                                                 sendChatHolder[0]?.invoke(transcript)
                                             }
                                         }
@@ -1995,8 +2005,19 @@ fun FloraApp(
                 if (orbDepthOn) FloraOrbDepth(busy, avatarStyle, state = orbState, amplitude = notchAmplitude)
                 else FloraOrb(busy, avatarStyle, state = orbState, amplitude = notchAmplitude)
                 Spacer(modifier = Modifier.height(8.dp))
-                // Baat view (v2.15): transcript nahi dikhega — sirf
-                // orb + mic, taaki baat-cheet lage, chat nahi.
+                // B6 (fix-cycle): voice view me orb ke neeche aakhri
+                // suna transcript ki chhoti line (blank ho to kuch nahi).
+                if (voiceView && lastHeard.isNotBlank()) {
+                    Text(
+                        lastHeard,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                // Baat view (v2.15): chat nahi dikhega — sirf orb + mic
+                // + aakhri suna transcript (B6), taaki baat-cheet lage.
                 if (!voiceView) {
                 // P1 edge glow: chat-area ke kinaron par animated
                 // border — sirf jab toggle ON ho aur Flora bol/sun

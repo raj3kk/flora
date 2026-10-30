@@ -137,6 +137,11 @@ class BackgroundMicService : Service() {
         engine.onSpeechStart = {
             if (active) {
                 bgSpeaking = true
+                // B1 (fix-cycle): bolte waqt listener roko — Flora ki
+                // apni awaaz input na bane (self-trigger loop ka guard).
+                // onSpeechDone ka maujooda startListening() dobara
+                // naya recognizer banakar shuru karega.
+                listener?.stop()
                 NotchState.setState(IslandState.SPEAKING)
                 syncNotchShow()
             }
