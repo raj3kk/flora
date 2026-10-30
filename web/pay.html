@@ -35,14 +35,21 @@ document.getElementById('btn').addEventListener('click', async () => {
   if (!session) { st.textContent = "Pehle login karo."; return; }
   const utr = document.getElementById('utr').value.trim();
   if (!utr) { st.textContent = "UTR zaroori hai."; return; }
+  // S1-23 (Cycle 123 FIX, format leg — user-confirmed 2026-10-30):
+  // UTR rule EXACTLY 12 digits, numeric only. Format check duplicate
+  // check se PEHLE hai taaki galat format kabhi insert/duplicate query
+  // tak na pahunche; sahi format wale UTR par duplicate leg waise hi
+  // chalega. Server path (admin-approve) me format check nahi hai —
+  // wahan naya validation invent nahi kiya gaya, admin review hi
+  // backstop hai (report me note).
+  if (!/^\d{12}$/.test(utr)) { st.textContent = "UTR 12 ank ka number hona chahiye — apne payment receipt se 12 ank ka UTR dobara daalo."; return; }
   const note = document.getElementById('note').value;
   // S1-23 (Cycle 122 FIX, duplicate leg): isi UTR par apna koi
   // pending/approved submission pehle se ho to dobara insert mat
   // karo — imaandaar message ke saath roko. Rejected purana
   // submission dobara submit ho sakta hai (nayi koshish). Format
-  // leg is pass me nahi hai — repo contract me UTR format ka
-  // koi niyam nahi mila, isliye format invent nahi kiya gaya
-  // (parent se 12-digit niyam confirm hone par lagega).
+  // leg (Cycle 123 FIX): upar 12-digit numeric check pehle hi
+  // lag chuka hai (user-confirmed 2026-10-30).
   const { data: prior } = await client.from("payment_submissions")
     .select("id,status").eq("user_id", session.user.id).eq("utr", utr)
     .order("created_at", { ascending: false }).limit(1);
