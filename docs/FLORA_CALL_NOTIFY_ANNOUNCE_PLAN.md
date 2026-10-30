@@ -4,7 +4,7 @@
 "Boss, [caller] calling you" (caller naam padh kar); (2) notification aaye to
 Flora use samajh kar bole, SIRF important/kaam ki notifications; (3) research
 → plan → production-ready WITH audit cycle → implement WITH audit cycle.
-**Status:** SPEC ONLY abhi — implement pre-audit PASS ke baad batches me hoga.
+**Status:** Code landed — call/notification announce batches implemented hain (AnnounceService, CallAnnouncementReceiver, FloraNotificationListener manifest me wired); phone verification Phase 10 me hogi.
 Phone verification Phase 10 me hogi; gates code+CI+tip-content ke hain,
 phone-verified ka daava kabhi nahi.
 

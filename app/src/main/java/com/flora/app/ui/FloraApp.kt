@@ -246,6 +246,12 @@ fun FloraApp(
     // B6 (fix-cycle): Baat view me orb ke neeche dikhne wali aakhri
     // suni hui line — sirf committed FINAL transcripts se set hoti hai.
     var lastHeard by remember { mutableStateOf("") }
+    // R4-10 (fix-cycle): STT error ki chhoti line — sirf foreground
+    // interrupt listener ke onError se set hoti hai (wahi ek
+    // foreground STT onError hai jo FloraApp me banta hai; Deepgram
+    // stream ka onError BargeInController me daba hua hai, isliye
+    // us raaste ki error yahan nahi dikhegi). Agle FINAL par clear.
+    var sttError by remember { mutableStateOf("") }
     // Avatar style (v2.22, S2): orb ka rang, prefs se.
     var avatarStyle by remember { mutableStateOf("gulabi") }
     val sendChatHolder = remember { arrayOfNulls<((String) -> Unit)>(1) }
@@ -511,6 +517,7 @@ fun FloraApp(
                     com.flora.app.voice.NotchState.interrupted = false
                     // B6 (fix-cycle): committed FINAL hi line me dikhega.
                     lastHeard = clean
+                    sttError = ""
                     sendChatHolder[0]?.invoke(clean)
                 } else {
                     com.flora.app.voice.NotchState.interrupted = false
@@ -529,6 +536,9 @@ fun FloraApp(
             },
             onError = {
                 interruptListener = null
+                // R4-10: STT error ka chhota signal — restart logic
+                // wahi (neeche), sirf line add hui hai.
+                sttError = "Sun nahi paya — dobara bolo."
                 if (continuousOn) {
                     try {
                         onContinuousStart()
@@ -1310,6 +1320,7 @@ fun FloraApp(
                                             if (!isEchoLike(transcript)) {
                                                 // B6 (fix-cycle): committed FINAL hi line me dikhega.
                                                 lastHeard = transcript
+                                                sttError = ""
                                                 sendChatHolder[0]?.invoke(transcript)
                                             }
                                         }
@@ -2023,6 +2034,14 @@ fun FloraApp(
                         style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                         maxLines = 2,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                // R4-10: STT error ki chhoti line (blank ho to kuch nahi).
+                if (voiceView && sttError.isNotBlank()) {
+                    Text(
+                        sttError,
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
@@ -4430,7 +4449,7 @@ fun FloraApp(
                             ).format(java.util.Date())
                             val used = prefs.talkSecondsUsed(today)
                             if (licence?.plan != "pro" && used >= 600) {
-                                val msg = "Aaj ka free talk time (10 minute) khatam ho gaya hai. Kal phir milega, ya Pro (₹199/month) lijiye."
+                                val msg = com.flora.app.data.LicenceGate.FREE_LIMIT_MESSAGE
                                 messages = messages + ChatMsg("Flora: $msg", false)
                                 voice.speak(msg)
                                 busy = false
@@ -5192,7 +5211,7 @@ fun FloraApp(
                         ).format(java.util.Date())
                         val used = prefs.talkSecondsUsed(today)
                         if (licence?.plan != "pro" && used >= 600) {
-                            val msg = "Aaj ka free talk time (10 minute) khatam ho gaya hai. Kal phir milega, ya Pro (₹199/month) lijiye."
+                            val msg = com.flora.app.data.LicenceGate.FREE_LIMIT_MESSAGE
                             messages = messages + ChatMsg("Flora: $msg", false)
                             voice.speak(msg)
                             busy = false
@@ -7250,8 +7269,17 @@ private fun SettingsScreen(
             Button(onClick = {
                 runGuardedSettings {
                 scope.launch {
-                    prefs.setLastUtr(utr.trim())
-                    note = "UTR save ho gaya (local note). Admin verify karke hi licence active karega — server verification alag step hai."
+                    // R4-2 (fix-cycle): app-side 12-digit UTR UX check —
+                    // galat (non-empty, non-12-digit) UTR save hi nahi
+                    // hoga, warning note dikhega; khaali/valid pehle
+                    // jaisa save hoga. Server/admin backstop wahi hai.
+                    val u = utr.trim()
+                    if (u.isNotEmpty() && !u.matches(Regex("^\\d{12}$"))) {
+                        note = "UTR 12 digit ka number hona chahiye — galat UTR save nahi hua, sahi number daal kar dobara save kijiye."
+                    } else {
+                        prefs.setLastUtr(u)
+                        note = "UTR save ho gaya (local note). Admin verify karke hi licence active karega — server verification alag step hai."
+                    }
                 }
                 }
             }) { Text("UTR save karo") }
