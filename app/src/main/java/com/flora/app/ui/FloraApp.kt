@@ -227,6 +227,10 @@ fun FloraApp(
     // fun baad me declare hota hai, isliye effect holder se call
     // karta hai — hook order ke liye effect yahan, call holder se).
     var continuousOn by remember { mutableStateOf(false) }
+    // Parity batch 2026-10-31, M10: typing mode ON = chat ka
+    // Mic button chhupa (sirf likh kar baat). Settings se badalta
+    // hai; shuruati haalat prefs se LaunchedEffect me aati hai.
+    var typingMode by remember { mutableStateOf(false) }
     // N1–N5 notch batch: island wave ke liye Compose state
     // (NotchState volatile hai — 120ms poll se yahan aata hai,
     // koi fake animation nahi, sirf asli amplitude dikhta hai).
@@ -1262,6 +1266,9 @@ fun FloraApp(
         faceLockOn = prefs.faceLock()
         // Continuous mic toggle ki shuruati haalat prefs se.
         try { continuousOn = prefs.continuousMic() } catch (e: Exception) { }
+        // M10 modes ki shuruati haalat prefs se.
+        try { typingMode = prefs.typingMode() } catch (e: Exception) { }
+        try { voice.mediaMode = prefs.mediaMode() } catch (e: Exception) { }
         // Barge-in hooks (v2.22, chunk 7): MainActivity ke hooks
         // ko OVERWRITE nahi karna — chain karo (pehle unka kaam,
         // phir barge-in). TTS shuru hote hi arm, khatam hote hi
@@ -5456,8 +5463,12 @@ fun FloraApp(
                         },
                         enabled = !busy
                     ) { Text(if (busy) "Soch rahi hun…" else "Bhejo") }
+                    // M10 typing mode: ON ho to chat ka Mic button
+                    // chhupa — user sirf likh kar baat karega.
+                    if (!typingMode) {
                     Spacer(modifier = Modifier.padding(4.dp))
                     Button(onClick = onMicRequest) { Text("Mic") }
+                    }
                     Spacer(modifier = Modifier.padding(4.dp))
                     }
                     // Continuous mic toggle (v2.14): ON = mute dabane
@@ -5555,7 +5566,9 @@ fun FloraApp(
                         } catch (e: Exception) { }
                         if (value) AutoModeNotifier.show(appContext) else AutoModeNotifier.cancel(appContext)
                     }
-                }, { screen = Screen.AUTO_LOG }, { screen = Screen.CATCHER }, licence)
+                }, { screen = Screen.AUTO_LOG }, { screen = Screen.CATCHER }, licence) { value ->
+                    typingMode = value
+                }
             } else if (screen == Screen.PERMISSIONS) {
                 PermissionsScreen(onShowWizard = { showGate = true })
             } else if (screen == Screen.LICENCE) {
@@ -6033,6 +6046,7 @@ private fun SettingsScreen(
     onShowAutoLog: () -> Unit,
     onShowCatcher: () -> Unit,
     licence: LicenceStatus? = null,
+    onTypingModeChange: ((Boolean) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -6057,6 +6071,9 @@ private fun SettingsScreen(
     var eventAnnounce by remember { mutableStateOf(false) }
     var notifyAnnounce by remember { mutableStateOf(false) }
     var notifyDndAnnounce by remember { mutableStateOf(false) }
+    // Parity batch 2026-10-31, M10: typing/media mode toggles.
+    var typingModeSetting by remember { mutableStateOf(false) }
+    var mediaModeSetting by remember { mutableStateOf(true) }
     var importantApps by remember { mutableStateOf(setOf<String>()) }
     var recentPkgs by remember { mutableStateOf(listOf<String>()) }
     var listenerEnabled by remember { mutableStateOf(false) }
@@ -6268,6 +6285,9 @@ private fun SettingsScreen(
         geminiKey = prefs.geminiApiKey()
         groqKey = prefs.groqApiKey()
         deepgramKey = prefs.deepgramApiKey()
+        // M10 modes ki shuruati haalat prefs se.
+        typingModeSetting = prefs.typingMode()
+        mediaModeSetting = prefs.mediaMode()
         geminiKey2 = prefs.geminiApiKey2()
         groqKey2 = prefs.groqApiKey2()
         tavilyKey = prefs.tavilyApiKey()
@@ -6946,6 +6966,30 @@ private fun SettingsScreen(
                 })
             }
             Text("Consent OFF ho to koi app khud nahi kholegi, kuch auto-post nahi hoga.")
+            Spacer(modifier = Modifier.height(12.dp))
+            // Parity batch 2026-10-31, M10: typing mode (chat ka
+            // Mic button chhupa, sirf likh kar baat) + media mode
+            // (jawab media stream par vs voice-call stream).
+            Row {
+                Text("Typing mode (chat me sirf likh kar baat, Mic button chhupa)")
+                Spacer(modifier = Modifier.padding(4.dp))
+                Switch(checked = typingModeSetting, onCheckedChange = { value ->
+                    typingModeSetting = value
+                    onTypingModeChange?.invoke(value)
+                    scope.launch { prefs.setTypingMode(value) }
+                })
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row {
+                Text("Media mode (jawab media stream par — OFF ho to earpiece ki taraf)")
+                Spacer(modifier = Modifier.padding(4.dp))
+                Switch(checked = mediaModeSetting, onCheckedChange = { value ->
+                    mediaModeSetting = value
+                    voice.mediaMode = value
+                    scope.launch { prefs.setMediaMode(value) }
+                })
+            }
+            Text("Media mode sirf system TTS par asar karta hai; neural engine apna routing use karta hai.")
             Spacer(modifier = Modifier.height(12.dp))
             Row {
                 Text("Call announce (aane wali call ka number bol kar batana)")

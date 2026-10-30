@@ -147,6 +147,11 @@ class FloraPreferences(private val context: Context) {
         val PERMISSIONS_GATE_DONE = booleanPreferencesKey("permissions_gate_done")
         val CONTINUOUS_MIC = booleanPreferencesKey("continuous_mic")
         val VOICE_VIEW = booleanPreferencesKey("voice_view")
+        // Parity batch 2026-10-31, M10: typing mode (default OFF —
+        // mic button chat me dikhta hai) + media mode (default ON —
+        // system TTS media stream par, jo maujooda default hai).
+        val TYPING_MODE = booleanPreferencesKey("typing_mode")
+        val MEDIA_MODE = booleanPreferencesKey("media_mode")
         // Cycle 1, APP-C1-009 (home sync state): Home screen se
         // server sync safal hua ya nahi — awaaz wale jawab isi
         // se "sync baaki hai" ka sach bolenge.
@@ -956,6 +961,30 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setVoiceView(value: Boolean) {
         context.floraDataStore.edit { it[Keys.VOICE_VIEW] = value }
+    }
+
+    /** Typing mode (parity batch 2026-10-31, M10): ON = chat me
+     * sirf likh kar baat — chat ka Mic button chhup jata hai.
+     * Continuous mic / voice view isse band nahi hote; ye sirf
+     * chat row ka Mic button hatata hai. Default OFF. */
+    suspend fun typingMode(): Boolean =
+        context.floraDataStore.data.map { it[Keys.TYPING_MODE] ?: false }.first()
+
+    suspend fun setTypingMode(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.TYPING_MODE] = value }
+    }
+
+    /** Media mode (parity batch 2026-10-31, M10): ON = Flora ke
+     * jawab system TTS ke media stream par (maujooda default
+     * vyavhaar — speaker par, media ke saath). OFF = voice-call
+     * stream (earpiece ki taraf, private). Sirf system TTS path
+     * par asar; neural engine apna routing use karta hai.
+     * Default ON (maujooda vyavhaar badalta nahi). */
+    suspend fun mediaMode(): Boolean =
+        context.floraDataStore.data.map { it[Keys.MEDIA_MODE] ?: true }.first()
+
+    suspend fun setMediaMode(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.MEDIA_MODE] = value }
     }
 
     /** Talk seconds used on [today] (yyyy-MM-dd). Rolls over automatically. */

@@ -1,7 +1,9 @@
 package com.flora.app.assistant
 
 import android.content.Context
+import android.media.AudioManager
 import android.media.MediaPlayer
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
@@ -27,6 +29,13 @@ class VoiceEngine(context: Context) {
     private val appContext: Context = context
     private var tts: TextToSpeech? = null
     private var ready = false
+
+    /** Media mode (parity batch 2026-10-31, M10): ON = system
+     * TTS default (media stream, speaker). OFF = voice-call
+     * stream (earpiece ki taraf, private). FloraApp prefs se
+     * set karta hai. Sirf system TTS path par asar; neural
+     * engine apna routing use karta hai. Default ON. */
+    var mediaMode: Boolean = true
 
     /**
      * Phase 1 (server-shift) Item B — cloud TTS lane (optional,
@@ -392,7 +401,12 @@ class VoiceEngine(context: Context) {
             return
         }
         applyPersona()
-        tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "flora-reply")
+        // M10 media mode: ON = system default (media stream);
+        // OFF = voice-call stream (earpiece, private).
+        val params = if (mediaMode) null else Bundle().apply {
+            putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_VOICE_CALL)
+        }
+        tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, params, "flora-reply")
     }
 
     fun stop() {
