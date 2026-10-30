@@ -373,9 +373,10 @@ karta hai. Baaki deferred/out hai (§6 ke saath padho).
   USE_FULL_SCREEN_INTENT + IncomingCallActivity (FSI) + overlay
   fallback + receiver FSI post + MISSED_ANNOUNCE toggle + missed state
   machine + voice callback-dial + missed-on-ask (attempt; fit na ho to
-  deferred with reason). Is push me implemented (planner skills
-  DEFERRED — §11 me reason); CI run + re-audit gate push ke baad
-  declare hoga. Har batch: CI green wait karke agla batch.
+  deferred with reason). Commit da897bcd + fix 265ec828
+  (overlay shadowing trap — §11 addendum), CI 41020768416
+  SUCCESS, re-audit gate PASS (tip-content verified). Har batch:
+  CI green wait karke agla batch.
 - Phone-test me §5 ke saath judenge: locked screen par FSI activity,
   unlocked par heads-up, FSI denied par overlay fallback, FSI + overlay
   dono denied par sirf voice; missed call ke baad summary; driving mode
@@ -489,3 +490,27 @@ karta hai. Baaki deferred/out hai (§6 ke saath padho).
   auto-dial nahi); call khatam hote hi UI/notification/
   overlay ka gayab hona; Vivo kill par kuch na hona (expected)
   aur auto-start ON ke baad wapas chalna.
+
+## §11 ADDENDUM — BATCH 4 FIX + GATE PASS
+
+- **CI fail → fix (honest record):** Batch 4 ka pehla CI run
+  41020258020 build step par fail hua — AnnounceService.kt
+  overlay code me Kotlin shadowing trap: local `val text`
+  (TextView) ne nested `apply` blocks ke andar receiver ki
+  `text` property ko shadow kar diya, isliye `text = ...`
+  assignments par "Val cannot be reassigned" + "String vs
+  TextView" errors aaye (3 jagah). Fix commit 265ec828:
+  local ka naam `messageView` + teeno jagah explicit
+  `setText(...)` — diff sirf 5+/5- (AnnounceService.kt hi).
+  Lesson (Batch 2 ke Telephony package trap jaisa): `apply`
+  block ke andar property assignment se pehle check karo ki
+  koi outer local us naam ko shadow to nahi kar raha.
+- **Re-audit gate PASS (tip 265ec828, CI 41020768416 SUCCESS):**
+  Batch 4 files 7 (manifest, receiver, activity, overlay,
+  prefs, Settings UI, spec) + fix diff 5/5 — sab tip-content
+  verified (FSI attrs + ACTION_DIAL-only + no answer button,
+  state machine + FSI + missed key, setText fix, FSI perm +
+  activity entry, missed toggle + FSI grant row).
+- **Iske baad ka daava:** code + CI + gate PASS — phone-verified
+  NAHI. Production-ready ka daava sirf Phase 10 phone tests
+  (§5 + §9 + §10 + §11 phone-test lists) ke baad.
