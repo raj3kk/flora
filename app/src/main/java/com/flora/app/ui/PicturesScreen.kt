@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -38,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -57,6 +59,10 @@ data class FloraPhoto(val uri: Uri, val name: String, val dateAdded: Long)
 @Composable
 fun PicturesScreen() {
     val context = LocalContext.current
+    // Watcher-tick fix 2026-10-31: loadPhotos suspend hai — onClick
+    // (non-suspend) se seedha call compile break tha (CI #322/#323/
+    // #324 fail, PicturesScreen.kt:140). Scope se launch karo.
+    val scope = rememberCoroutineScope()
     val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         Manifest.permission.READ_MEDIA_IMAGES
     } else {
@@ -137,7 +143,7 @@ fun PicturesScreen() {
                     Text("Gallery permission do")
                 }
             } else {
-                Button(onClick = { loadPhotos() }) { Text("Refresh karo") }
+                Button(onClick = { scope.launch { loadPhotos() } }) { Text("Refresh karo") }
             }
             if (note.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
