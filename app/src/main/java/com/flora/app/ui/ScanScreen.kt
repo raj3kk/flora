@@ -8,6 +8,8 @@ import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,12 +29,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.flora.app.assistant.VoiceEngine
+import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.devanagari.DevanagariTextRecognizerOptions
@@ -48,11 +54,21 @@ import java.util.Locale
  * bol degi — yehi wo "Maya dekhti thi" wala hissa tha jo v1.0
  * tak miss tha. Live camera se sawaal-jawaab (video samajhna)
  * abhi bhi agla step hai, is screen me uska daava nahi hai.
+ *
+ * Parity cycle 2026-10-31 (M1, Maya qr_scan route): QR / barcode
+ * live scan bhi — ML Kit Barcode Scanning SIRF phone par chalti
+ * hai, koi server call nahi, koi auto-open nahi. QR milte hi value
+ * screen par ruk jaati hai (dobara scan tabhi jab user kahe);
+ * URL ho to "Browser me kholo" sirf tab dikhta hai jab caller ne
+ * onOpenUrl diya ho (FloraApp call site abhi default par hai —
+ * wiring follow-up hai, is push me FloraApp chhua nahi gaya).
  */
+@OptIn(ExperimentalGetImage::class)
 @Composable
-fun ScanScreen(voice: VoiceEngine) {
+fun ScanScreen(voice: VoiceEngine, onOpenUrl: (String) -> Unit = {}) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val clipboard = LocalClipboardManager.current
     var granted by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -64,6 +80,9 @@ fun ScanScreen(voice: VoiceEngine) {
     var note by remember { mutableStateOf("") }
     var savedUri by remember { mutableStateOf<android.net.Uri?>(null) }
     var readText by remember { mutableStateOf("") }
+    var qrMode by remember { mutableStateOf(false) }
+    var qrValue by remember { mutableStateOf("") }
+    var qrFrozen by remember { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -79,6 +98,15 @@ fun ScanScreen(voice: VoiceEngine) {
                 Text("Camera permission do")
             }
         } else {
+            Button(onClick = {
+                qrMode = !qrMode
+                bound = false
+                capture = null
+                qrValue = ""
+                qrFrozen = false
+                note = if (qrMode) "QR mode: camera ko QR / barcode par rakho." else "Photo mode par wapas."
+            }) { Text(if (qrMode) "Photo mode par wapas jao" else "QR / Barcode scan karo") }
+            Spacer(modifier = Modifier.height(8.dp))
             AndroidView(
                 factory = { ctx -> PreviewView(ctx) },
                 update = { view ->
@@ -89,15 +117,50 @@ fun ScanScreen(voice: VoiceEngine) {
                                 val provider = providerFuture.get()
                                 val preview = Preview.Builder().build()
                                 preview.setSurfaceProvider(view.surfaceProvider)
-                                val imageCapture = ImageCapture.Builder().build()
-                                capture = imageCapture
                                 provider.unbindAll()
-                                provider.bindToLifecycle(
-                                    lifecycleOwner,
-                                    CameraSelector.DEFAULT_BACK_CAMERA,
-                                    preview,
-                                    imageCapture
-                                )
+                                if (qrMode) {
+                                    val analysis = ImageAnalysis.Builder()
+                                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                        .build()
+                                    val scanner = BarcodeScanning.getClient()
+                                    analysis.setAnalyzer(ContextCompat.getMainExecutor(context)) { proxy ->
+                                        val media = proxy.image
+                                        if (media == null || qrFrozen) {
+                                            proxy.close()
+                                            return@setAnalyzer
+                                        }
+                                        val image = InputImage.fromMediaImage(
+                                            media,
+                                            proxy.imageInfo.rotationDegrees
+                                        )
+                                        scanner.process(image)
+                                            .addOnSuccessListener { barcodes ->
+                                                val first = barcodes.firstOrNull()?.rawValue
+                                                if (!first.isNullOrBlank() && !qrFrozen) {
+                                                    qrValue = first
+                                                    qrFrozen = true
+                                                    note = "QR / barcode mil gaya."
+                                                    voice.speak("QR mil gaya.")
+                                                }
+                                            }
+                                            .addOnCompleteListener { proxy.close() }
+                                    }
+                                    provider.bindToLifecycle(
+                                        lifecycleOwner,
+                                        CameraSelector.DEFAULT_BACK_CAMERA,
+                                        preview,
+                                        analysis
+                                    )
+                                } else {
+                                    val imageCapture = ImageCapture.Builder().build()
+                                    capture = imageCapture
+                                    provider.bindToLifecycle(
+                                        lifecycleOwner,
+                                        CameraSelector.DEFAULT_BACK_CAMERA,
+                                        preview,
+                                        imageCapture
+                                    )
+                                }
                                 bound = true
                             } catch (e: Exception) {
                                 // Camera bind failed: preview stays blank, no crash.
@@ -107,6 +170,32 @@ fun ScanScreen(voice: VoiceEngine) {
                 },
                 modifier = Modifier.weight(1f).fillMaxWidth()
             )
+            if (qrMode) {
+                Spacer(modifier = Modifier.height(8.dp))
+                if (qrValue.isNotEmpty()) {
+                    Text(qrValue)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = {
+                        clipboard.setText(AnnotatedString(qrValue))
+                        note = "Copy ho gaya."
+                    }) { Text("Copy karo") }
+                    val isUrl = qrValue.startsWith("http://") || qrValue.startsWith("https://")
+                    if (isUrl) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(onClick = { onOpenUrl(qrValue) }) { Text("Browser me kholo") }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(onClick = {
+                        qrValue = ""
+                        qrFrozen = false
+                        note = "Dobara scan karo — camera ko QR / barcode par rakho."
+                    }) { Text("Dobara scan karo") }
+                } else {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Camera ko QR / barcode par rakho — milte hi yahan ruk jayega.")
+                }
+            }
+            if (!qrMode) {
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = {
                 val imageCapture = capture
@@ -188,6 +277,7 @@ fun ScanScreen(voice: VoiceEngine) {
                     }
                 }) { Text("Is photo me kya likha hai, padh kar batao") }
             }
+            } // !qrMode: photo + OCR buttons sirf photo mode me
             if (readText.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(readText)

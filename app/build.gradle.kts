@@ -78,6 +78,9 @@ dependencies {
     implementation("com.google.mlkit:face-detection:16.1.7")
     implementation("com.google.mlkit:text-recognition:16.0.0")
     implementation("com.google.mlkit:text-recognition-devanagari:16.0.0")
+    // Parity cycle 2026-10-31 (M1, Maya qr_scan): QR/barcode live scan,
+    // on-device ML Kit — koi naya permission nahi (camera pehle se hai).
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     // B2 Builder core — sirf ye ek dep: project metadata models ke liye.
     // Room (B4), WorkManager, Hilt, Retrofit, Timber, AppSearch,
