@@ -134,6 +134,20 @@ object ToolRegistry {
             licenceKey = null,
             executesVia = "BuilderTokens / FloraPreferences builder slots (B3 storage, kabhi log nahi)",
         ),
+        ToolDescriptor(
+            name = "device_info",
+            kind = "device-local",
+            permission = "Koi permission nahi — system info read hi (time/battery/device/storage/RAM/network/Wi-Fi state)",
+            licenceKey = null,
+            executesVia = "FloraApp chat branch -> DeviceActions (NoAccess Batch A)",
+        ),
+        ToolDescriptor(
+            name = "device_intents",
+            kind = "device-local",
+            permission = "Intent se system app khulta hai — user khud confirm karta hai (alarm/timer/dial/settings)",
+            licenceKey = null,
+            executesVia = "FloraApp chat branch -> DeviceActions (NoAccess Batch A)",
+        ),
     )
 
     fun byName(name: String): ToolDescriptor? = all().firstOrNull { it.name == name }

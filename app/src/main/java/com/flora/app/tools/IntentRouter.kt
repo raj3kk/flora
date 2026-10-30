@@ -26,6 +26,8 @@ object IntentRouter {
         data class BrainChat(val query: String) : Route()
         /** B4 planner route — sirf explicit plan phrases (BrainChat hijack nahi). */
         data class Plan(val query: String) : Route()
+        /** NoAccess functions — device phrase match (Batch A). */
+        data class Device(val action: DeviceActions.DeviceRequest) : Route()
     }
 
     private val LIVE_WORDS = listOf(
@@ -62,6 +64,11 @@ object IntentRouter {
     fun route(raw: String): Route {
         val lower = raw.trim().lowercase()
         if (lower.isEmpty()) return Route.BrainChat(raw)
+        // NoAccess functions (Batch A): device phrases SABSE PEHLE —
+        // warna "wifi settings kholo" / "dialer kholo" OpenApp me
+        // galat gir jayenge (naam match nahi hoga, phir brain).
+        val device = DeviceActions.match(lower)
+        if (device != null) return Route.Device(device)
         // App kholna: exact-phrase se aage — "<naam> kholo" / "open <naam>".
         if (lower.endsWith(" kholo")) {
             val name = lower.removeSuffix(" kholo").trim()

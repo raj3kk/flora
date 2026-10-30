@@ -5147,6 +5147,32 @@ fun FloraApp(
                         // fail ho to brain-proxy imaandaar prefix
                         // ke saath (lane-fail -> brain-proxy).
                         val route = com.flora.app.tools.IntentRouter.route(question)
+                        // NoAccess functions (Batch A): device phrase — Research /
+                        // Plan / OpenApp se PEHLE. Utterance hi intention +
+                        // confirmation hai; execute → verify (DeviceActions me)
+                        // → report (chat + TTS) + Auto Log. Kabhi silent nahi.
+                        if (route is com.flora.app.tools.IntentRouter.Route.Device) {
+                            val res = try {
+                                com.flora.app.tools.DeviceActions.execute(appContext, route.action)
+                            } catch (e: Exception) {
+                                com.flora.app.tools.SdResult.Failure("Device action me dikkat aayi.")
+                            }
+                            val actionName = route.action::class.simpleName ?: "Device"
+                            when (res) {
+                                is com.flora.app.tools.SdResult.Ok -> {
+                                    messages = messages + ChatMsg("Flora: ${res.value}", false)
+                                    voice.speak(res.value)
+                                    try { autoLogStore.add("Device: $actionName -> ho gaya") } catch (e: Exception) { }
+                                }
+                                is com.flora.app.tools.SdResult.Failure -> {
+                                    messages = messages + ChatMsg("Flora: ${res.reason}", false)
+                                    voice.speak(res.reason)
+                                    try { autoLogStore.add("Device: $actionName -> fail") } catch (e: Exception) { }
+                                }
+                            }
+                            busy = false
+                            return@launch
+                        }
                         if (route is com.flora.app.tools.IntentRouter.Route.Research) {
                             val lane = try { searchTools.search(question) } catch (e: Exception) { "" }
                             if (lane.isNotBlank() && !com.flora.app.tools.IntentRouter.isLaneFailure(lane)) {
