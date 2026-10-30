@@ -16,14 +16,22 @@ import kotlinx.serialization.json.Json
  *    andar wale gate se ALAG explicit planner hook hai.
  * 2. M12 memory lookup — plan + replan waqt MANDATORY, par har
  *    step se pehle poori search nahi (AI-call bachana hai).
- * 3. Server brain-proxy client (PlannerBrainProxyClient) pehle.
- * 4. Proxy Unavailable/Error par hi BrainClient.ask direct-lane
- *    fallback — result source DIRECT_LANE likha jayega, proxy
- *    kabhi nahi kaha jayega. Proxy FreeLimit par fallback NAHI
- *    (server cap ko bypass karke direct lane par chupchaap
- *    jaana imaandaari ke khilaaf hoga) — wo genuine block hai.
+ * 3. DIRECT lane pehle (BrainClient.ask, user ki apni keys) —
+ *    direction 2026-10-31 ~01:05 IST: brain APP ME hai (Maya
+ *    jaisa), server brain-proxy sirf FALLBACK hai, kabhi
+ *    primary nahi. Direct se valid plan mile to proxy call
+ *    hoti hi nahi.
+ * 4. Direct se valid plan na mile (no keys → BasicTalk, lanes
+ *    fail → warm text, ya invalid JSON) to hi proxy fallback —
+ *    result source PROXY likha jayega, direct kabhi proxy
+ *    nahi kaha jayega. Proxy FreeLimit par Blocked (server
+ *    cap ka genuine block, bypass nahi) — aur direct lane
+ *    khud bhi LicenceGate.check se cap-gated hai (ask ke
+ *    andar + ye hook), isliye free cap kisi lane se bypass
+ *    nahi hota.
  * 5. Strict kotlinx.serialization parse + PlanValidator — reject
- *    par ek replan attempt, phir genuine block (F06/F09).
+ *    par ek replan attempt (lane order wahi: direct pehle,
+ *    proxy fallback), phir genuine block (F06/F09).
  *
  * BrainClient.ask sirf free-text reply deta hai — uske upar
  * strict parsing + validation hai, koi askPlan() nahi hai.
@@ -67,35 +75,36 @@ class PlannerBrain(
         val memory = memoryContext()
         val prompt = buildPrompt(goal, memory, failureNote)
         var calls = 0
-        var raw: String? = null
-        var source = BrainSource.PROXY
-        when (val proxy = proxyClient.askPlan(prompt, deviceId)) {
+        var lastProxyReason: String? = null
+        // Attempt 1: DIRECT primary (user keys). Proxy sirf fallback.
+        val directRaw = runDirect(prompt)
+        calls += 1
+        val first = parsePlan(directRaw)
+        if (first != null) return Generation.Ok(first, BrainSource.DIRECT_LANE, calls)
+        // Direct se valid plan nahi mila (no keys → BasicTalk, lanes
+        // fail → warm text, ya invalid JSON) → proxy fallback.
+        val proxyRaw = when (val proxy = proxyClient.askPlan(prompt, deviceId)) {
             is PlannerBrainProxyClient.ProxyResult.Reply -> {
                 calls += 1
-                raw = proxy.text
-                source = BrainSource.PROXY
+                proxy.text
             }
             is PlannerBrainProxyClient.ProxyResult.FreeLimit -> {
                 return Generation.Blocked(proxy.message)
             }
             is PlannerBrainProxyClient.ProxyResult.Unavailable -> {
-                val direct = runDirect(prompt)
-                calls += 1
-                if (direct == null) return Generation.Failed(proxy.reason)
-                raw = direct
-                source = BrainSource.DIRECT_LANE
+                lastProxyReason = proxy.reason
+                null
             }
             is PlannerBrainProxyClient.ProxyResult.Error -> {
-                val direct = runDirect(prompt)
-                calls += 1
-                if (direct == null) return Generation.Failed(proxy.reason)
-                raw = direct
-                source = BrainSource.DIRECT_LANE
+                lastProxyReason = proxy.reason
+                null
             }
         }
-        val first = parsePlan(raw)
-        if (first != null) return Generation.Ok(first, source, calls)
-        // Ek replan attempt — reject ki wajah ke saath dobara prompt.
+        if (proxyRaw != null) {
+            val fromProxy = parsePlan(proxyRaw)
+            if (fromProxy != null) return Generation.Ok(fromProxy, BrainSource.PROXY, calls)
+        }
+        // Ek replan attempt — lane order wahi: direct pehle, proxy fallback.
         val retryPrompt = buildPrompt(
             goal, memory,
             "Pichhla plan reject hua: sirf valid JSON do, schema ke bahar kuch nahi. " +
@@ -103,26 +112,34 @@ class PlannerBrain(
                 "side-effect step me sideEffectPreview zaroori hai; " +
                 "password/secret/token key kabhi mat do.",
         )
-        val retryRaw = when (val proxy = proxyClient.askPlan(retryPrompt, deviceId)) {
+        val retryDirect = runDirect(retryPrompt)
+        calls += 1
+        val retryFirst = parsePlan(retryDirect)
+        if (retryFirst != null) return Generation.Ok(retryFirst, BrainSource.DIRECT_LANE, calls)
+        val retryProxyRaw = when (val proxy = proxyClient.askPlan(retryPrompt, deviceId)) {
             is PlannerBrainProxyClient.ProxyResult.Reply -> {
                 calls += 1
-                source = BrainSource.PROXY
                 proxy.text
             }
             is PlannerBrainProxyClient.ProxyResult.FreeLimit -> {
                 return Generation.Blocked(proxy.message)
             }
-            else -> {
-                val direct = runDirect(retryPrompt)
-                calls += 1
-                source = BrainSource.DIRECT_LANE
-                direct
+            is PlannerBrainProxyClient.ProxyResult.Unavailable -> {
+                lastProxyReason = proxy.reason
+                null
             }
-        } ?: return Generation.Failed("plan ka jawab nahi mila")
-        val second = parsePlan(retryRaw)
-        if (second != null) return Generation.Ok(second, source, calls)
+            is PlannerBrainProxyClient.ProxyResult.Error -> {
+                lastProxyReason = proxy.reason
+                null
+            }
+        }
+        if (retryProxyRaw != null) {
+            val retrySecond = parsePlan(retryProxyRaw)
+            if (retrySecond != null) return Generation.Ok(retrySecond, BrainSource.PROXY, calls)
+        }
         return Generation.Failed(
-            "plan ka JSON samajh nahi aaya (2 koshish) — goal dobara saaf shabdon me bolo."
+            lastProxyReason
+                ?: "plan ka JSON samajh nahi aaya (2 koshish) — goal dobara saaf shabdon me bolo."
         )
     }
 

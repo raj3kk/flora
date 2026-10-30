@@ -53,6 +53,15 @@ data class VoicePlan(
  * Runner — FloraApp composable se Host lambdas ke zariye chalta hai
  * (state/dialog wahi rehte hain). Har step par verify, fail par ek
  * deterministic fallback, phir imaandaar report + Auto Log.
+ *
+ * Pacing rule (parity cycle 2026-10-31, user report "step by step
+ * wait nahi karti"): agla step tabhi jab pichhla step VERIFY ho —
+ * blind delay nahi, verification hai. APP_OPEN par foreground
+ * poll (3s tak) — khula par foreground me na aaye to agla step
+ * nahi chalega. IN_APP_SEARCH par results-settle poll (3s tak,
+ * soft — timeout par TAP step khud verify karega, isliye yahan
+ * fail nahi). TAP par foreground + click + dobara foreground
+ * check. Har verified step Auto Log me darj hota hai.
  */
 object VoicePlanRunner {
 
@@ -72,11 +81,8 @@ object VoicePlanRunner {
             return msg
         }
         host.addMessage("Plan chala raha hun: " + plan.steps.joinToString(" → ") { it.title })
-        var previousWasOpen = false
         var usedFallback = false
         for (step in plan.steps) {
-            if (previousWasOpen) delay(1000)
-            previousWasOpen = false
             val ok = runStep(step, host)
             if (!ok) {
                 val fb = step.fallback
@@ -99,7 +105,7 @@ object VoicePlanRunner {
                 CatcherEvents.record("PLANNER", "${plan.goal} -> ${step.title}")
                 return msg
             }
-            if (step.executor == VoicePlanExecutor.APP_OPEN) previousWasOpen = true
+            try { host.log("VoicePlan step VERIFIED: ${step.title}") } catch (e: Exception) { }
         }
         val done = "Ho gaya: " + plan.steps.joinToString(", ") { it.title } + "." +
             if (usedFallback) " (search web se khola gaya)" else ""
@@ -123,6 +129,18 @@ object VoicePlanRunner {
                 val verified = result == VerifiedAppLauncher.OpenResult.Opened ||
                     result == VerifiedAppLauncher.OpenResult.AlreadyOpen
                 if (verified) {
+                    // Pacing: khulna kaafi nahi — foreground me aane
+                    // tak poll karo (cold start par app der se aata
+                    // hai; bina iske agla step adhoori screen par
+                    // chalta tha — "app khol kar kaam nahi kar pati"
+                    // wali shikayat ki jad). Foreground na aaye to
+                    // agla step nahi, imaandaar fail.
+                    val service = FloraAutomationService.instance
+                    if (service != null && !service.waitForForeground(pkg, 3000)) {
+                        host.addMessage("$label khula par foreground me nahi aaya — agla step nahi chala raha.")
+                        host.speak("$label khula par foreground me nahi aaya.")
+                        return false
+                    }
                     ForegroundAppContext.noteOpened(pkg, label)
                     true
                 } else if (result == VerifiedAppLauncher.OpenResult.NoVerifier) {
@@ -141,7 +159,24 @@ object VoicePlanRunner {
             VoicePlanExecutor.IN_APP_SEARCH -> {
                 val query = step.input["query"] ?: return false
                 val service = FloraAutomationService.instance ?: return false
-                InAppSearch.searchInApp(service, query) == InAppSearchOutcome.Done
+                if (InAppSearch.searchInApp(service, query) != InAppSearchOutcome.Done) return false
+                // Pacing: Done = submit button click hua, results
+                // dikhna abhi baaki ho sakta hai. UI ke sthir hone
+                // tak poll karo (snapshot do baar ek jaisa = settle,
+                // max ~3s). Timeout par bhi aage badho — TAP step
+                // khud verify karega; slow network par yahan fail
+                // karna galat hota.
+                var last: List<String>? = null
+                var settled = false
+                val deadline = System.currentTimeMillis() + 3000
+                while (System.currentTimeMillis() < deadline && !settled) {
+                    delay(300)
+                    val now = try { service.visibleTexts(25) } catch (e: Exception) { emptyList() }
+                    if (now.isNotEmpty() && now == last) settled = true
+                    last = now
+                }
+                try { host.log("VoicePlan search settle: settled=$settled") } catch (e: Exception) { }
+                true
             }
             VoicePlanExecutor.TAP_FIRST_RESULT -> {
                 val pkg = step.input["package"] ?: return false
