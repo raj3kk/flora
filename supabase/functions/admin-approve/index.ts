@@ -239,7 +239,11 @@ Deno.serve(async (req) => {
   // Website-path me stacking se overwrite hoga (neeche).
   let expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   if (!userRow?.device_id) {
-    const { data: existing } = await svc.from("licences").select("id").eq("user_id", payment.user_id).is("device_id", null).order("activated_at", { ascending: false }).limit(1).maybeSingle();
+    // S1-1 (Cycle 122 FIX): reuse SIRF active NULL row ka — status
+    // filter ke bina revoked/superseded NULL row wapas active ho
+    // jaati thi (revival). Ab revoked/superseded row mile to reuse
+    // nahi hoga, insert path nayi row banayega.
+    const { data: existing } = await svc.from("licences").select("id").eq("user_id", payment.user_id).is("device_id", null).eq("status", "active").order("activated_at", { ascending: false }).limit(1).maybeSingle();
     // Prior actives: stacking base + supersede list (ek hi query).
     const { data: priors } = await svc.from("licences").select("id,expires_at").eq("user_id", payment.user_id).eq("status", "active");
     // Renewal stacking (default rule, user correct kar sakta hai):
@@ -290,17 +294,44 @@ Deno.serve(async (req) => {
     });
     return new Response(JSON.stringify({ ok: true, licence_activated: true, website_path: true, expires_at: expires }), { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
   }
-  // App-path (device_id maujood): pehle wala flow.
+  // App-path (device_id maujood).
+  // S1-2 (Cycle 122 FIX — website-path parity): pehle app-path me
+  // na stacking thi, na supersede — do active rows reh jaati thin
+  // aur 15-day lock kabhi trigger nahi hota tha. Ab website-path
+  // jaisa hi: expiry = max(ab, pehli active expiry) + 30 din, phir
+  // upsert, phir baaki active rows supersede (fail par revertClaim
+  // — S1-3 ka app-path leg isi se band hota hai).
+  const { data: appPriors } = await svc.from("licences").select("id,expires_at").eq("user_id", payment.user_id).eq("status", "active");
+  {
+    let baseMs = Date.now();
+    for (const p of (appPriors || [])) {
+      if (p.expires_at) baseMs = Math.max(baseMs, new Date(p.expires_at).getTime());
+    }
+    expires = new Date(baseMs + 30 * 24 * 60 * 60 * 1000).toISOString();
+  }
   const { error: licErr } = await svc.from("licences").upsert({
     user_id: payment.user_id, device_id: userRow.device_id,
     plan_id: "pro", status: "active", activated_at: now, expires_at: expires,
   }, { onConflict: "user_id,device_id" });
   if (licErr) { console.error(licErr); await revertClaim("app_path_licence_failed"); return new Response(JSON.stringify({ error: "licence failed — payment reverted to pending" }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }); }
+  const { data: appRow } = await svc.from("licences").select("id").eq("user_id", payment.user_id).eq("device_id", userRow.device_id).order("activated_at", { ascending: false }).limit(1).maybeSingle();
+  let appSupersededCount = 0;
+  // Surviving row ki id na mile to supersede mat karo — galat row
+  // supersede hone se behtar hai ki do active rows ka purana risk
+  // ek approval tak barkaraar rahe (audit me dikhega).
+  if (appRow) {
+    for (const p of (appPriors || [])) {
+      if (p.id === appRow.id) continue;
+      const r = await svc.from("licences").update({ status: "superseded", superseded_by: appRow.id }).eq("id", p.id);
+      if (r.error) { console.error(r.error); await revertClaim("app_path_supersede_failed"); return new Response(JSON.stringify({ error: "licence supersede failed — payment reverted to pending" }), { status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } }); }
+      appSupersededCount++;
+    }
+  }
   // S2-9: payment claim upar ho chuka hai — dobara update nahi.
   await svc.from("admin_audit").insert({
     admin_user_id: adminId, action: "payment_approved",
     target_user_id: payment.user_id, before_json: payment,
-    after_json: { status: "approved", plan_id: "pro", expires_at: expires },
+    after_json: { status: "approved", plan_id: "pro", expires_at: expires, superseded_count: appSupersededCount },
   });
   return new Response(JSON.stringify({ ok: true, licence_activated: true, expires_at: expires }), { headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
 });

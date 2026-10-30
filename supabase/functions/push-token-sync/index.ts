@@ -69,5 +69,13 @@ Deno.serve(async (req) => {
     { onConflict: "user_id,device_id" },
   );
   if (tokErr) return json({ ok: false, detail: tokErr.message }, 500);
+  // S1-9 (Cycle 122 FIX): linked sync par purane device ke token
+  // residue hatao — 1 user = 1 device model me purana token push
+  // bhejta rehta to galat device par notification jaata. Sirf
+  // linked path par (caller-match ke baad); unlinked path par
+  // delete kabhi nahi (wahan owner server-resolved hai, caller
+  // verified nahi). Delete best-effort hai — fail ho to bhi
+  // upsert safal hi rahega.
+  await svc.from("push_tokens").delete().eq("user_id", targetUserId).neq("device_id", device_id);
   return json({ ok: true });
 });

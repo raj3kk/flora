@@ -195,9 +195,14 @@ Deno.serve(async (req) => {
   }
 
   // --- v1 path (user_id + device_id), status handling + features ke saath ---
-  const { data, error } = await supabase.from("licences")
-    .select("*").eq("user_id", user_id).eq("device_id", device_id).maybeSingle();
+  // S1-18 (Cycle 122 FIX): duplicate bound rows par maybeSingle 500
+  // deta tha (har verify fail). Ab limit(2) + latest activated_at
+  // wali row — naye duplicates licences_user_device_uidx (deploy
+  // session me live) rokta hai, purane hon to service rukegi nahi.
+  const { data: boundRows, error } = await supabase.from("licences")
+    .select("*").eq("user_id", user_id).eq("device_id", device_id).order("activated_at", { ascending: false }).limit(2);
   if (error) return json({ error: error.message }, 500);
+  const data = (boundRows || [])[0] || null;
   if (data) {
     const res = await decideRow(data);
     if (res instanceof Response) return res;

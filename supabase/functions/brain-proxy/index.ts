@@ -118,10 +118,18 @@ serve(async (req) => {
   }
 
   // v4 combined cap: global + prompt ≤ 4000 (global pehle, prompt truncate).
+  // S1-7 (Cycle 122 FIX): pehle global 4000 par prompt 0 chars tak
+  // chupchaap kat jaata tha — model ko user ka sawal mile bina hi
+  // jawab dena padta tha. Ab: prompt poora kat jaye to imaandaar
+  // 400; aanshik kate to response me prompt_truncated flag.
   if (globalText.length > 4000) globalText = globalText.slice(0, 4000);
   let effPrompt = prompt;
   if (globalText.length + effPrompt.length > 4000) {
     effPrompt = effPrompt.slice(0, Math.max(0, 4000 - globalText.length));
+  }
+  const promptTruncated = effPrompt.length < prompt.length;
+  if (!effPrompt.length) {
+    return json({ error: "prompt truncated to empty by global instructions — global instructions chhota karo ya prompt dobara bhejo" }, 400);
   }
   const globalSuffix = globalText ? "\n\n" + globalText : "";
 
@@ -144,7 +152,7 @@ serve(async (req) => {
         if (r.ok) {
           const j = await r.json();
           const reply = j.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          if (reply.trim()) return json({ reply, lane: "gemini" });
+          if (reply.trim()) return json({ reply, lane: "gemini", ...(promptTruncated ? { prompt_truncated: true } : {}) });
         }
       } catch (_e) { /* next model, then Groq */ }
     }
@@ -167,7 +175,7 @@ serve(async (req) => {
       if (r.ok) {
         const j = await r.json();
         const reply = j.choices?.[0]?.message?.content || "";
-        if (reply.trim()) return json({ reply, lane: "groq" });
+        if (reply.trim()) return json({ reply, lane: "groq", ...(promptTruncated ? { prompt_truncated: true } : {}) });
       }
     } catch (_e) { /* honest error below */ }
   }
