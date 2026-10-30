@@ -44,6 +44,9 @@ class ContinuousListener(
     private val onError: () -> Unit,
     private val onSpeechStarted: () -> Unit = {},
     private val onPartial: (String) -> Unit = {},
+    // B3 (fix-cycle): alternatives ka optional callback — default khali,
+    // isliye maujooda 3 call sites bina badle compile honge.
+    private val onAlternatives: (List<String>) -> Unit = {},
 ) {
     private val appContext = context.applicationContext
     private var recognizer: SpeechRecognizer? = null
@@ -145,9 +148,21 @@ class ContinuousListener(
                 override fun onResults(results: Bundle?) {
                     listening = false
                     unmuteBeeps()
-                    val text = results
+                    // B3 (fix-cycle): pehle sirf firstOrNull liya jata tha —
+                    // ab confidence se behtar candidate chuno (SttPick).
+                    // Scores na milen to pickBestResult pehla result deta hai
+                    // (maujooda behavior, fail-closed).
+                    val list = results
                         ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        ?.firstOrNull()
+                        ?: emptyList()
+                    val scores = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)
+                    val text = pickBestResult(list, scores)
+                    if (list.size > 1) {
+                        try {
+                            onAlternatives(list)
+                        } catch (e: Exception) {
+                        }
+                    }
                     if (!text.isNullOrBlank()) onResult(text)
                 }
 
@@ -163,7 +178,9 @@ class ContinuousListener(
                     RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
                 )
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                // B3 (fix-cycle): 1 → 5 — recognizer se alternatives maango
+                // taaki confidence se behtar candidate chuna ja sake.
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             }
             recognizer = rec
             listening = true
