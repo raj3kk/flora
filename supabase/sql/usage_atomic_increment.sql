@@ -36,6 +36,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS usage_user_day_uidx
 
 -- Step 3: atomic increment RPC (service-role se call hota hai,
 -- isliye alag RLS policy ki zaroorat nahi).
+-- NOTE (deploy session #2 fix): live usage.day column DATE type
+-- ka hai, jabki function 'YYYY-MM-DD' text bhejta hai — isliye
+-- yahan p_day::date cast hai; RPC signature (p_day text) wahi
+-- rakha hai taaki usage-count function ka call na badle.
 CREATE OR REPLACE FUNCTION public.increment_usage(
   p_user_id uuid, p_day text, p_secs integer, p_tools integer
 )
@@ -43,7 +47,7 @@ RETURNS integer
 LANGUAGE sql
 AS $$
   INSERT INTO public.usage (user_id, day, talk_seconds, tool_calls)
-  VALUES (p_user_id, p_day, p_secs, p_tools)
+  VALUES (p_user_id, p_day::date, p_secs, p_tools)
   ON CONFLICT (user_id, day)
   DO UPDATE SET talk_seconds = public.usage.talk_seconds + EXCLUDED.talk_seconds,
                 tool_calls = public.usage.tool_calls + EXCLUDED.tool_calls
