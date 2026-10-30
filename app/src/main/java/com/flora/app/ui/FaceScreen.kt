@@ -176,6 +176,22 @@ fun FaceScreen() {
     Column(modifier = Modifier.fillMaxSize()) {
         Text("Face-match enrolment (v2.3, photo se)")
         Text("Photo sirf is phone par use hogi — save, send ya server par nahi jayegi. Face-match akela PIN unlock nahi karega.")
+        // Parity batch 2026-10-31, M3: face-attempts log section —
+        // counting + lockout pehle se PinVault me hai; ye screen
+        // sirf unhe dikhata hai (koi naya tracking nahi, koi
+        // photo/embedding yahan save nahi hoti).
+        val pinVault = remember { com.flora.app.security.PinVault(context) }
+        var guardRefresh by remember { mutableStateOf(0) }
+        if (guardRefresh >= 0) {
+            val failed = pinVault.failedCount()
+            val locked = pinVault.isLockedOut()
+            Text(
+                "PIN guard: $failed galat tries" +
+                    if (locked) " — lockout me hai (${pinVault.lockoutRemainingSeconds()} sec baaki)" else " — lockout nahi hai."
+            )
+            Text("Sahi PIN par counter reset ho jata hai; lockout hamesha time-based hai, permanent brick kabhi nahi.")
+        }
+        Button(onClick = { guardRefresh++ }) { Text("Guard status refresh karo") }
         if (!faceMatcher.isReady()) {
             Text("Face model nahi mila — enrolment kaam nahi karega.")
         }

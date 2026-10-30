@@ -28,6 +28,11 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Parity batch 2026-10-31, M4: Pictures screen ke liye
+         gallery read (API 33+ par images-only; usse neeche
+         legacy storage read). Sirf Pictures/Flora padha jata hai. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <!-- Batch 4: full-screen intent (lock screen par call UI). Android
          14+ par user grant deta hai (canUseFullScreenIntent); 14 se
          neeche declare karna hi kaafi hai. -->

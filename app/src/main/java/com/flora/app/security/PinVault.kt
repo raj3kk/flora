@@ -60,6 +60,14 @@ class PinVault(private val context: Context) {
         return until > System.currentTimeMillis()
     }
 
+    /** Parity batch 2026-10-31, M3: lagatar galat tries ki
+     *  ginti (face-attempts log screen isi ko padhta hai).
+     *  0 = koi galat try nahi ya sahi PIN par reset. */
+    @Synchronized
+    fun failedCount(): Int {
+        return guardPrefs().getInt("failed_count", 0)
+    }
+
     /** Lockout me bacha hua waqt (seconds, upar ki taraf); lockout na ho to 0. */
     @Synchronized
     fun lockoutRemainingSeconds(): Long {
