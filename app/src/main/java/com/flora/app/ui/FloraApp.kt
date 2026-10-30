@@ -1579,10 +1579,11 @@ fun FloraApp(
                             onClick = { screen = Screen.WHITEBOARD; menuOpen = false },
                         )
                         DropdownMenuItem(
-                            text = { Text("Builder") },
-                            // B2 ungated (coordinator ruling): builder
-                            // local-only hai, isliye kisi invented key
-                            // se gate nahi — entitlement B5 (F2) me.
+                            text = { Text(if (com.flora.app.core.PlanFeatures.isAllowed("builder")) "Builder" else "Builder (Pro)") },
+                            // Planner routing Batch 3: menu par gate ka
+                            // ishara — B5-08 screen gate ka pratibimb
+                            // (B2 ungated ruling superseded hai). Ye
+                            // sirf label hai, gate hatana nahi (F2).
                             onClick = { screen = Screen.BUILDER; menuOpen = false },
                         )
                         DropdownMenuItem(
@@ -4712,6 +4713,16 @@ fun FloraApp(
                             voice.speak("Link khol raha hun.")
                             return
                         }
+                    }
+                    // Planner routing Batch 3: bare "builder"
+                    // (bina "kholo" ke) bhi Builder screen khole —
+                    // pehle ye Brain par girta tha. Map wali
+                    // "builder kholo" entry alag se maujood hai.
+                    if (lower == "builder") {
+                        input = ""
+                        screen = Screen.BUILDER
+                        voice.speak("Khol raha hun.")
+                        return
                     }
                     // Generic screen map (v2.22, Phase 5, route
                     // parity): Flora ki apni screens "<naam>

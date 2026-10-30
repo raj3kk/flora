@@ -133,6 +133,7 @@ Kram (har step Auto Log me):
   3. Menu item par gate ka ishara: `PlanFeatures.isAllowed("builder")` pure sync read hai (cached volatile list, `core/PlanFeatures.kt:33`) — menu khulte waqt padha ja sakta hai; allowed na ho to item "Builder (Pro)" dikhega, taaki menu aur screen ka bartaav ek jaisa lage (audit suggestion #4). Menu har baar khulne par dobara compose hota hai, isliye cached value hi kaafi hai.
   4. Final report + parent message me user ko seedha raasta + gate ki wajah likhna: Menu ▾ → Builder, ya bolo "builder kholo"; gate line dikhe to F2 server pending ki wajah se hai.
   5. Koi naya builder feature nahi; Settings row / Home shortcut (jo audit me missing mile) Batch 3 me nahi — wo design pass ka area hai.
+- **Batch 3 implemented:** (a) voice bare "builder" → `Screen.BUILDER` (sendChat me generic map se pehle exact check; "builder kholo" map entry alag se maujood hai); (b) menu item ab `PlanFeatures.isAllowed("builder")` dekh kar "Builder" ya "Builder (Pro)" dikhata hai (sync cached-list read, menu khulne par compose hota hai) + stale B2-ungated comment sudhara gaya; (c) gate message me koi change nahi (pehle se do-line imaandaar message hai); (d) entitlement change NAHI (F2 server pending). Naya unit test nahi (sendChat branch + menu label CI build se cover; phone check Phase 10 me: gated phone par menu me "Builder (Pro)" + screen par gate message; fail-open phone par seedha Builder screen).
 
 ## 6. Workflow audit + automation surfaces list (audit child report se, 2026-10-30)
 
