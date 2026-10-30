@@ -72,7 +72,7 @@ th,td{border-bottom:1px solid #f3f4f6;padding:8px 6px;text-align:left;vertical-a
 <a href="account.html">Mera account</a>
 <a href="admin.html">Admin</a>
 <a href="download.html">App download</a>
-<details style="position:relative;display:inline-block"><summary style="color:#ea580c;font-weight:600;cursor:pointer;list-style:none">Sab pages ▾</summary><div style="position:absolute;top:100%;left:0;background:#fff;border:1px solid #fed7aa;border-radius:12px;padding:8px 0;min-width:190px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:50"><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="index.html">Home</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="pricing.html">Pricing</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="pay.html">Pay / UTR</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="account.html">Mera account</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="download.html">App download</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="signup.html">Signup</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="login.html">Login</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="admin.html">Admin</a></div></details></nav>
+<details style="position:relative;display:inline-block"><summary style="color:#ea580c;font-weight:600;cursor:pointer;list-style:none">Sab pages ▾</summary><div style="position:absolute;top:100%;left:0;background:#fff;border:1px solid #fed7aa;border-radius:12px;padding:8px 0;min-width:190px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:50"><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="index.html">Home</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="pricing.html">Pricing</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="pay.html">Pay / UTR</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="account.html">Mera account</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="download.html">App download</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="signup.html">Signup</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="login.html">Login</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="admin.html">Admin</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="privacy.html">Privacy</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="terms.html">Terms</a><a style="display:block;padding:8px 16px;color:#1f2937;text-decoration:none" href="reset-password.html">Reset password</a></div></details></nav>
 <header>
 <h1>Flora Admin</h1>
 <p class="note" id="who-line">Login ke baad yahan tumhara email aur admin status dikhega.</p>
@@ -303,6 +303,12 @@ let overviewData = null;
 let payFilter = "all";
 
 function shortId(id) { return (id || "").slice(0, 8) + "…"; }
+// S8-1/S14-1/S26-1/S27-1 (Cycle 122 FIX): HTML-escape helper —
+// payer/admin-controlled strings (UTR, note, reject_reason, email)
+// innerHTML me seedhe judte the (stored HTML injection). Ab har
+// aisi jagah esc() se guzregi; code-constant badges/labels waisi
+// hi rahengi (wo user data nahi hain).
+function esc(s) { return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 function setAction(msg) { document.getElementById('action-status').textContent = msg || ""; }
 function fmtErr(d, res) {
   if (d && typeof d.error === "string") return d.error;
@@ -353,12 +359,12 @@ async function loadPayments() {
     rows.forEach(row => {
       const div = document.createElement('div');
       div.className = "item";
-      div.innerHTML = "<strong>₹" + (row.amount_paisa / 100) + "</strong> | UTR " + row.utr +
-        " | " + (row.note || "") + " | status " + row.status +
-        "<div class='meta'>user " + (row.user_email || shortId(row.user_id)) +
+      div.innerHTML = "<strong>₹" + (row.amount_paisa / 100) + "</strong> | UTR " + esc(row.utr) +
+        " | " + esc(row.note || "") + " | status " + row.status +
+        "<div class='meta'>user " + esc(row.user_email || shortId(row.user_id)) +
         " | " + row.created_at +
         (row.reviewed_by ? " | reviewed " + shortId(row.reviewed_by) + " (" + (row.reviewed_at || "") + ")" : "") +
-        (row.reject_reason ? " | reason: " + row.reject_reason : "") + "</div>";
+        (row.reject_reason ? " | reason: " + esc(row.reject_reason) : "") + "</div>";
       if (row.status === "pending") {
         const ok = document.createElement('button');
         ok.textContent = "Approve";
@@ -411,7 +417,7 @@ function renderUsers() {
     const lics = licsByUser[u.id] || [];
     const push = (adminData.push || {})[u.id];
     const tot = (adminData.usage_totals || {})[u.id];
-    div.innerHTML = "<strong>" + ((adminData.emails || {})[u.id] || ("user " + shortId(u.id))) + "</strong>" +
+    div.innerHTML = "<strong>" + esc((adminData.emails || {})[u.id] || ("user " + shortId(u.id))) + "</strong>" +
       (u.is_admin ? " <span class='badge green'>ADMIN</span>" : "") +
       "<div class='meta'>device " + (u.device_id ? shortId(u.device_id) : "?") +
       (lics.length ? " | " + lics.map(l => "<span class='badge " + (l.status === "active" ? "green" : (l.status === "revoked" ? "red" : (l.status === "expired" ? "orange" : "grey"))) + "'>" + l.plan_id + "/" + l.status + "</span>" +
@@ -433,11 +439,11 @@ function renderAppTable() {
   users.forEach(u => {
     const push = (adminData.push || {})[u.id];
     const seen = (overviewData && overviewData.heartbeats && overviewData.heartbeats[u.id]) ? overviewData.heartbeats[u.id] : "—";
-    html += "<tr><td>" + ((adminData.emails || {})[u.id] || shortId(u.id)) + "</td>" +
+    html += "<tr><td>" + esc((adminData.emails || {})[u.id] || shortId(u.id)) + "</td>" +
       "<td>" + (u.device_id ? shortId(u.device_id) : "?") + "</td>" +
       "<td>" + (push ? "haan" : "nahi") + "</td>" +
       "<td>" + (push && push.updated_at ? push.updated_at : "—") + "</td>" +
-      "<td>" + seen + "</td></tr>";
+      "<td>" + esc(seen) + "</td></tr>";
   });
   html += "</table>";
   el.innerHTML = html;
@@ -455,7 +461,7 @@ function renderUsage() {
   if (!rows.length) { el.textContent = "Koi usage nahi hai."; return; }
   let html = "<table><tr><th>User</th><th>Talk sec</th><th>Tools</th><th>Days</th></tr>";
   rows.forEach(([uid, t]) => {
-    html += "<tr><td>" + ((adminData.emails || {})[uid] || shortId(uid)) + "</td>" +
+    html += "<tr><td>" + esc((adminData.emails || {})[uid] || shortId(uid)) + "</td>" +
       "<td>" + t.talk_seconds + "</td><td>" + t.tool_calls + "</td><td>" + t.days + "</td></tr>";
   });
   html += "</table>";
@@ -527,11 +533,11 @@ document.getElementById('push-send-btn').addEventListener('click', async () => {
         }
       }
       st.textContent = "Ho gaya: " + ok + " bheje, " + fail + " fail, " + skipped + " bina token skip.";
-      resEl.innerHTML = lines.map(l => "<div class='item'>" + l + "</div>").join("");
+      resEl.innerHTML = lines.map(l => "<div class='item'>" + esc(l) + "</div>").join("");
     } else {
       const data = await callFn("send-push", { user_id: target, template });
       st.textContent = "Push bhej diya gaya.";
-      resEl.innerHTML = "<div class='item'>" + JSON.stringify(data).slice(0, 300) + "</div>";
+      resEl.innerHTML = "<div class='item'>" + esc(JSON.stringify(data).slice(0, 300)) + "</div>";
     }
   } catch (e) {
     st.textContent = "Push fail: " + e.message;
@@ -609,25 +615,28 @@ document.getElementById('upi-save-btn').addEventListener('click', async () => {
 });
 
 async function loadAudit() {
-  const { data, error } = await client
-    .from("admin_audit")
-    .select("id,admin_user_id,action,target_user_id,created_at")
-    .order("created_at", { ascending: false }).limit(50);
+  // S1-22 (Cycle 122 FIX): pehle admin_audit par seedha client
+  // query thi (RLS no-policy me fail hoti thi — item ke mutabiq
+  // admin-overview.recent_audit hi kaam ka raasta hai). Ab audit
+  // admin-overview function se aata hai (service-role, admin
+  // check ke saath); render textContent se hi hota hai (safe).
   const el = document.getElementById('audit-list');
-  if (error) {
-    el.textContent = "Load fail: " + error.message +
+  try {
+    const d = await callFn("admin-overview", {});
+    const data = d.recent_audit || [];
+    if (!data.length) { el.textContent = "Koi audit entry nahi hai."; return; }
+    el.innerHTML = "";
+    data.forEach(row => {
+      const div = document.createElement('div');
+      div.className = "item";
+      div.textContent = row.created_at + " | " + row.action +
+        " | admin " + shortId(row.admin_user_id) + " | user " + shortId(row.target_user_id);
+      el.appendChild(div);
+    });
+  } catch (e) {
+    el.textContent = "Load fail: " + e.message +
       " (Non-admin ho to yehi dikhega — upar wala banner padho.)";
-    return;
   }
-  if (!data.length) { el.textContent = "Koi audit entry nahi hai."; return; }
-  el.innerHTML = "";
-  data.forEach(row => {
-    const div = document.createElement('div');
-    div.className = "item";
-    div.textContent = row.created_at + " | " + row.action +
-      " | admin " + shortId(row.admin_user_id) + " | user " + shortId(row.target_user_id);
-    el.appendChild(div);
-  });
 }
 
 const FLAG_LABELS = { talk: "Baat-cheet (chat)", calls: "Calls", sms: "SMS", whatsapp: "WhatsApp", browser: "Browser", macros: "Macros", image_gen: "Image generation", screen_vision: "Screen vision", camera: "Camera", overlay_mic: "Overlay mic", wakeword: "Wakeword", home: "Home sync", routines: "Routines", form_fill: "Form fill" };
@@ -671,11 +680,11 @@ async function loadOverview() {
     });
     warnEl.textContent = (d.warnings && d.warnings.length) ? ("Warning — ye sections load nahi hue: " + d.warnings.join(", ")) : "";
     payEl.innerHTML = (d.recent_payments || []).length ? (d.recent_payments || []).map(p =>
-      "<div class='item'>₹" + (p.amount_paisa / 100) + " | " + p.status + " | " + (p.user_email || shortId(p.user_id)) + " | UTR " + p.utr + " | " + p.created_at + "</div>").join("") : "Koi payment nahi hai.";
+      "<div class='item'>₹" + (p.amount_paisa / 100) + " | " + p.status + " | " + esc(p.user_email || shortId(p.user_id)) + " | UTR " + esc(p.utr) + " | " + p.created_at + "</div>").join("") : "Koi payment nahi hai.";
     audEl.innerHTML = (d.recent_audit || []).length ? (d.recent_audit || []).map(a =>
       "<div class='item'>" + a.created_at + " | " + a.action + " | admin " + shortId(a.admin_user_id) + " | user " + shortId(a.target_user_id) + "</div>").join("") : "Koi audit entry nahi hai.";
     const pushHtml = (d.push_recent || []).length ? (d.push_recent || []).map(p =>
-      "<div class='item'>" + p.template + " | " + (p.ok ? "OK" : "FAIL") + " | " + (p.user_email || shortId(p.user_id)) + " | " + p.sent_at + "</div>").join("") : "Koi push history nahi hai.";
+      "<div class='item'>" + p.template + " | " + (p.ok ? "OK" : "FAIL") + " | " + esc(p.user_email || shortId(p.user_id)) + " | " + p.sent_at + "</div>").join("") : "Koi push history nahi hai.";
     pushEl.innerHTML = pushHtml;
     histEl.innerHTML = pushHtml;
     if (adminData) renderAppTable();
@@ -837,7 +846,7 @@ function renderLicences() {
     const div = document.createElement('div');
     div.className = "item";
     const title = document.createElement('div');
-    title.innerHTML = "<strong>" + (r.user_email || ("user " + shortId(r.user_id))) + "</strong> " +
+    title.innerHTML = "<strong>" + esc(r.user_email || ("user " + shortId(r.user_id))) + "</strong> " +
       licBadge(r.status) + " " + r.plan_id +
       (r.expires_at ? " (exp " + r.expires_at + ")" : " (no expiry)");
     div.appendChild(title);

@@ -92,6 +92,11 @@ function statusBadge(status) {
   return "<span class='badge orange'>pending</span>";
 }
 
+// S14-1/S27-1 (Cycle 122 FIX): HTML-escape helper — apne UTR/
+// note/reject_reason aur licence revoke reason innerHTML me
+// seedhe judte the. Ab esc() se guzrenge.
+function esc(s) { return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+
 async function loadPayments() {
   const st = document.getElementById('status');
   const el = document.getElementById('payments');
@@ -107,8 +112,12 @@ async function loadPayments() {
   document.getElementById('who').textContent = "Login hai: " + session.user.email;
   document.getElementById('step-signup').textContent = "ho gaya";
   document.getElementById('step-signup').className = "badge green";
-  document.getElementById('step-confirm').textContent = "ho gaya";
-  document.getElementById('step-confirm').className = "badge green";
+  // S1-24 (Cycle 122 FIX): pehle step-confirm hamesha "ho gaya"
+  // dikhta tha (email_confirmed_at check hi nahi tha). Ab asli
+  // confirmation state se: confirm na hua ho to "baaki hai".
+  const emailConfirmed = !!session.user.email_confirmed_at;
+  document.getElementById('step-confirm').textContent = emailConfirmed ? "ho gaya" : "baaki hai";
+  document.getElementById('step-confirm').className = emailConfirmed ? "badge green" : "badge orange";
   loadLicence();
   st.textContent = "Payments load ho rahi hain...";
   const { data, error } = await client
@@ -135,10 +144,10 @@ async function loadPayments() {
   data.forEach(row => {
     const div = document.createElement('div');
     div.className = "item";
-    div.innerHTML = "<strong>₹" + (row.amount_paisa / 100) + "</strong> | UTR " + row.utr +
+    div.innerHTML = "<strong>₹" + (row.amount_paisa / 100) + "</strong> | UTR " + esc(row.utr) +
       " " + statusBadge(row.status) +
-      "<div class='meta'>" + (row.note || "") + " | " + row.created_at + "</div>" +
-      (row.status === "rejected" && row.reject_reason ? "<div class='meta'>Reject ki wajah: " + row.reject_reason + "</div>" : "");
+      "<div class='meta'>" + esc(row.note || "") + " | " + row.created_at + "</div>" +
+      (row.status === "rejected" && row.reject_reason ? "<div class='meta'>Reject ki wajah: " + esc(row.reject_reason) + "</div>" : "");
     el.appendChild(div);
   });
 }
@@ -174,7 +183,7 @@ async function loadLicence() {
     line = "Pro licence active hai.";
   } else if (d.status === "revoked") {
     badge = "<span class='badge red'>Revoked</span>";
-    line = "Licence revoke ho gayi hai." + (d.reason ? " Wajah: " + d.reason : "");
+    line = "Licence revoke ho gayi hai." + (d.reason ? " Wajah: " + esc(d.reason) : "");
   } else if (d.status === "expired") {
     badge = "<span class='badge red'>Expired</span>";
     line = "Licence ki expiry ho gayi hai.";
@@ -186,7 +195,7 @@ async function loadLicence() {
     line = "Licence kisi aur device par lagi hai." +
       (d.device_change_available_at ? " Transfer " + String(d.device_change_available_at).split("T")[0] + " ke baad hoga." : "");
   } else if (d.status && d.status !== "free" && d.status !== "active") {
-    line = "Status: " + d.status;
+    line = "Status: " + esc(d.status);
   }
   el.innerHTML = badge;
   det.innerHTML = "<p>" + line + "</p>" +

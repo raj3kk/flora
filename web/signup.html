@@ -11,6 +11,7 @@
 <h1>Flora account banao</h1>
 <label>Email <input id="email" type="email"></label>
 <label>Password <input id="password" type="password"></label>
+<label><input id="terms" type="checkbox"> <a href="terms.html">Terms</a> aur <a href="privacy.html">Privacy</a> padh liye hain, maan liye hain</label>
 <button id="btn" type="button">Signup</button>
 <p id="status" class="note"></p>
 <label>Confirmation email dobara bhejo — Email <input id="resend-email" type="email"></label>
@@ -44,7 +45,12 @@ document.getElementById('btn').addEventListener('click', async () => {
   const password = document.getElementById('password').value;
   const st = document.getElementById('status');
   if (!email || !password) { st.textContent = "Email aur password dono daalo."; return; }
-  const { data, error } = await client.auth.signUp({ email, password });
+  // S1-28 (Cycle 122 FIX): pehle terms/privacy acceptance ka
+  // checkbox/record kuch nahi tha. Ab checkbox zaroori hai aur
+  // acceptance user_metadata me record hoti hai (terms_accepted +
+  // terms_accepted_at) — admin Auth user dekh kar verify kar sakta hai.
+  if (!document.getElementById('terms').checked) { st.textContent = "Aage badhne se pehle Terms aur Privacy maan lo (checkbox tick karo)."; return; }
+  const { data, error } = await client.auth.signUp({ email, password, options: { data: { terms_accepted: true, terms_accepted_at: new Date().toISOString() } } });
   if (error) { st.textContent = "Signup fail: " + hindiAuthError(error.message); return; }
   if (data.session) {
     st.innerHTML = 'Account ban gaya aur login bhi ho gaya. <a href="account.html">Account page kholo</a>.';
