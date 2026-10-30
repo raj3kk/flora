@@ -180,15 +180,15 @@ class AnnounceService : Service() {
             } else {
                 "Boss, unknown number calling you"
             }
-            val text = TextView(this).apply {
-                text = message
+            val messageView = TextView(this).apply {
+                setText(message)
                 setTextColor(0xFFFFFFFF.toInt())
                 textSize = 20f
             }
-            layout.addView(text)
+            layout.addView(messageView)
             if (number.isNotBlank()) {
                 val dialButton = Button(this).apply {
-                    text = "Wapas call karo"
+                    setText("Wapas call karo")
                     setOnClickListener {
                         try {
                             val dial = Intent(
@@ -205,7 +205,7 @@ class AnnounceService : Service() {
                 layout.addView(dialButton)
             }
             val dismissButton = Button(this).apply {
-                text = "Dismiss"
+                setText("Dismiss")
                 setOnClickListener { hideCallOverlayView() }
             }
             layout.addView(dismissButton)
