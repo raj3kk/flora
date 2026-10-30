@@ -100,7 +100,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS, APPEARANCE, COMM, FAV_SONGS, VAULT, TEACH_ONCE, CATCHER }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS, APPEARANCE, COMM, FAV_SONGS, VAULT, TEACH_ONCE, CATCHER, REMINDERS }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -109,6 +109,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.LICENCE -> "Plan"
     Screen.AUTO_LOG -> "Auto Log"
     Screen.CATCHER -> "Problem report"
+    Screen.REMINDERS -> "Reminders"
     Screen.SETTINGS -> "Settings"
     Screen.MEMORIES -> "Yaadein"
     Screen.SCAN -> "Scan"
@@ -1765,6 +1766,10 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Routines") },
                             onClick = { screen = Screen.ROUTINES; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Reminders") },
+                            onClick = { screen = Screen.REMINDERS; menuOpen = false },
                         )
                         DropdownMenuItem(
                             // Cycle 3, F6: menu label bhi imaandaar —
@@ -5686,6 +5691,10 @@ fun FloraApp(
                 LockScreen(pinVault, onUnlock = { screen = Screen.CHAT }, onBack = { screen = Screen.CHAT })
             } else if (screen == Screen.PC_LINK) {
                 PcLinkScreen(prefs)
+            } else if (screen == Screen.REMINDERS) {
+                // Parity batch 2026-10-31, M2: reminders — sirf
+                // notification, koi routine/action kabhi nahi.
+                RemindersScreen()
             } else {
                 ToolsScreen(searchTools)
             }

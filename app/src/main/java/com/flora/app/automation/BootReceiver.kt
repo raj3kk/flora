@@ -62,6 +62,12 @@ class BootReceiver : BroadcastReceiver() {
                     JobScheduler.rescheduleAll(context.applicationContext)
                 } catch (e: Exception) {
                 }
+                // Parity batch 2026-10-31, M2: reminders ke alarms
+                // bhi dobara lagte hain (routine jobs jaisa hi).
+                try {
+                    ReminderScheduler.rescheduleAll(context.applicationContext)
+                } catch (e: Exception) {
+                }
                 // B4/F16: reboot ke baad plan resume hook — sirf
                 // WorkManager reschedule (mic/wake restart upar wahi
                 // hai). Plan reschedule yahan nahi, worker me hai.
