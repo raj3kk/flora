@@ -70,6 +70,8 @@ class FloraPreferences(private val context: Context) {
         val NOTIFY_ANNOUNCE = booleanPreferencesKey("notify_announce")
         val NOTIFY_IMPORTANT_APPS = stringSetPreferencesKey("notify_important_apps")
         val NOTIFY_DND_ANNOUNCE = booleanPreferencesKey("notify_dnd_announce")
+        // Batch 4: missed-call summary toggle — default OFF.
+        val MISSED_ANNOUNCE = booleanPreferencesKey("missed_announce")
         // Lane A — A1 (R-A1-4): battery no-repeat state — aakhri warned
         // level/state key ("low"/"critical"/"charging"/"full"/"normal").
         // EVENT_ANNOUNCE pattern par DataStore key (reboot-persistent).
@@ -848,6 +850,14 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setNotifyDndAnnounce(value: Boolean) {
         context.floraDataStore.edit { it[Keys.NOTIFY_DND_ANNOUNCE] = value }
+    }
+
+    /** Missed-call summary toggle. Default OFF. */
+    suspend fun missedAnnounce(): Boolean =
+        context.floraDataStore.data.map { it[Keys.MISSED_ANNOUNCE] ?: false }.first()
+
+    suspend fun setMissedAnnounce(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.MISSED_ANNOUNCE] = value }
     }
 
     /** Lane A — A1: battery no-repeat key (khali = kabhi warn nahi hua). */

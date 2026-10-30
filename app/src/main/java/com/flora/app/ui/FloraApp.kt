@@ -5844,6 +5844,7 @@ private fun SettingsScreen(
     var adminVpa by remember { mutableStateOf("") }
     var utr by remember { mutableStateOf("") }
     var callAnnounce by remember { mutableStateOf(false) }
+    var missedAnnounce by remember { mutableStateOf(false) }
     var eventAnnounce by remember { mutableStateOf(false) }
     var notifyAnnounce by remember { mutableStateOf(false) }
     var notifyDndAnnounce by remember { mutableStateOf(false) }
@@ -6063,6 +6064,7 @@ private fun SettingsScreen(
         adminVpa = prefs.adminUpiVpa()
         utr = prefs.lastUtr()
         callAnnounce = prefs.callAnnounce()
+        missedAnnounce = prefs.missedAnnounce()
         eventAnnounce = prefs.eventAnnounce()
         notifyAnnounce = prefs.notifyAnnounce()
         notifyDndAnnounce = prefs.notifyDndAnnounce()
@@ -6652,6 +6654,27 @@ private fun SettingsScreen(
                 })
             }
             Text("Default OFF. Caller ka naam (contacts se) 'Boss, X calling you' format me bolta hai; unknown number par digits nahi bole jayenge. Bol-kar-receive/reject isme nahi hai (dialer role alag raasta hai). Phone State + Call Log dono permissions chahiye — na hon to announce nahi chalega.")
+            Row {
+                Text("Missed call summary (bina uthaye call ka summary bolna)")
+                Spacer(modifier = Modifier.padding(4.dp))
+                Switch(checked = missedAnnounce, onCheckedChange = { value ->
+                    missedAnnounce = value
+                    scope.launch { prefs.setMissedAnnounce(value) }
+                })
+            }
+            Text("Default OFF. ON ho to call khatam hone par (bina uthaye) bolega 'Boss, X ki missed call hai'. Uthayi hui call par kuch nahi bolega.")
+            Row {
+                Text("Full-screen call UI (lock screen par Flora UI)")
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = {
+                    try {
+                        context.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT))
+                    } catch (e: Exception) {
+                        note = "Is phone par full-screen intent setting nahi hai (Android 14 se neeche is grant ki zaroorat nahi)."
+                    }
+                }) { Text("Settings kholo") }
+            }
+            Text("Android 14+ par lock screen par Flora ka call UI kholne ke liye ye grant chahiye. Grant na ho to sirf awaaz + notification milegi, UI nahi. Overlay fallback ke liye overlay permission chahiye (Permissions screen).")
             Spacer(modifier = Modifier.height(12.dp))
             Row {
                 Text("Event announce (charger lagna/nikalna, battery low)")

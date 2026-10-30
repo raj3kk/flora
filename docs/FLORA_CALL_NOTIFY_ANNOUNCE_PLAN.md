@@ -367,13 +367,15 @@ karta hai. Baaki deferred/out hai (§6 ke saath padho).
 - Batch 1 — Call announce upgrade (commit ec583832, CI 41015668729 SUCCESS, re-audit gate PASS).
 - Batch 2 — Notification announce (+ driving DND-override rule). Commit 45023aff + fix d0af98ff (android.provider.Telephony package fix — Sms class android.provider me hai, android.telephony me nahi; isi galti se CI me Unresolved reference aaya tha), CI 41017483287 SUCCESS, re-audit gate PASS (fix diff sirf 1 line, tip-content verified).
 - Batch 3 — Reliability + visibility (AnnounceService id 2008, stop,
-  boot restore, Vivo guidance). Is push me implemented; CI run +
-  re-audit gate push ke baad declare hoga.
+  boot restore, Vivo guidance). Commit 6686fff7, CI 41018848962
+  SUCCESS, re-audit gate PASS (6 files, tip-content verified).
 - **Batch 4 — Maya-parity self-activation + missed-call:** manifest
   USE_FULL_SCREEN_INTENT + IncomingCallActivity (FSI) + overlay
   fallback + receiver FSI post + MISSED_ANNOUNCE toggle + missed state
   machine + voice callback-dial + missed-on-ask (attempt; fit na ho to
-  deferred with reason). Har batch: CI green wait karke agla batch.
+  deferred with reason). Is push me implemented (planner skills
+  DEFERRED — §11 me reason); CI run + re-audit gate push ke baad
+  declare hoga. Har batch: CI green wait karke agla batch.
 - Phone-test me §5 ke saath judenge: locked screen par FSI activity,
   unlocked par heads-up, FSI denied par overlay fallback, FSI + overlay
   dono denied par sirf voice; missed call ke baad summary; driving mode
@@ -421,3 +423,69 @@ karta hai. Baaki deferred/out hai (§6 ke saath padho).
   service kill (Settings > Apps > Force stop nahi, system kill)
   → announce ruka jab tak boot/toggle na ho; Vivo auto-start OFF
   par announce rukna (expected, user step se wapas).
+
+## §11. BATCH 4 — IMPLEMENTED (Maya-parity self-activation + missed-call)
+
+- **Maya-parity behaviour (user order):** ringing par Flora KHUD
+  saamne aati hai — user ko app kholna ya tap karna nahi padta.
+  Raasta (sanctioned, koi hidden trick nahi): HIGH-importance
+  CATEGORY_CALL notification (id 2009, channel
+  `flora_incoming_call`) + `setFullScreenIntent` jab grant ho.
+  Android 14+ par FSI grant user Settings se deta hai
+  (`canUseFullScreenIntent` check; Settings me "Settings kholo"
+  button → ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT); 14 se
+  neeche declare karna hi kaafi hai. Lock/off/AOD par FSI
+  activity LAUNCH hoti hai; unlocked par heads-up dikhta hai.
+  Background se `startActivity` ka raasta istemal NAHI hua
+  (Android 10+ par silently drop hota hai) — FSI notification
+  hi sanctioned raasta hai.
+- **IncomingCallActivity** (`calls/` — CallActivity se ALAG,
+  CallHolder reuse NAHI): showWhenLocked + turnScreenOn
+  (manifest attrs + code, CallActivity mirror). UI: bada text
+  "Boss, {name} calling you" / unknown variant (digits kabhi
+  display nahi) + [Wapas call karo] (sirf ACTION_DIAL, number
+  bhara hua, user khud call dabayega — auto-dial kabhi nahi)
+  + [Dismiss]. Answer/reject buttons NAHI (dialer role ke bina
+  answer possible nahi). Number sirf dial ke liye extra me —
+  kabhi display/log/server par nahi. Call khatam hote hi
+  receiver IncomingCallHolder.onCallEnded se ise band karta hai.
+- **Receiver state machine** (CallAnnouncementReceiver): RINGING
+  → announce + UI post; OFFHOOK → answered=true + UI clear
+  (notification cancel + overlay hide + holder finish); IDLE →
+  UI clear, phir agar ring tha aur answered nahi aur
+  MISSED_ANNOUNCE ON ho to "Boss, {name} ki missed call hai"
+  / unknown variant + masked Auto Log. Uthayi call par missed
+  kabhi nahi. 30s RINGING dedup barkaraar.
+- **Overlay fallback** (AnnounceService overlay view — naya
+  service NAHI): FSI na mile ya notification post na ho to
+  overlay koshish (TYPE_APPLICATION_OVERLAY, charm pattern,
+  SYSTEM_ALERT_WINDOW pehle se declared). Overlay me wahi
+  message + [Wapas call karo] (ACTION_DIAL) + [Dismiss]; call
+  khatam hote hi hide. Best-effort: Android 12+ background se
+  FGS start block kar sakta hai — tab heads-up + awaaz hi
+  rahegi (spec me chhupaya nahi gaya).
+- **MISSED_ANNOUNCE toggle** (default OFF): prefs key +
+  Settings row (call toggle ke neeche) + FSI grant row.
+  POST_NOTIFICATIONS na ho to notification nahi — sirf awaaz
+  + overlay koshish. Vivo kill par receiver fire hi nahi hoga
+  (Batch 3 guidance hi bachaav — Flora OEM kill bypass ka
+  daava kabhi nahi karti).
+- **DEFERRED with reason — voice callback-dial + missed-on-ask
+  planner skills:** ToolRegistry descriptor-only hai (asli
+  execution PlannerTools.execute / FloraApp flows se hai); nayi
+  voice intent ("call wapas karo", "missed call batao") ke liye
+  intent routing + naya tool execution path chahiye — ye naya
+  planner surface hai, is batch me force-wiring mana hai (spec
+  §7). User-facing capability phir bhi maujood hai: UI buttons
+  se ACTION_DIAL khulta hai. Planner skills ke liye alag
+  spec + pre-audit chahiye (future batch, user order par).
+- **Phone-test (Batch 4, §5 me judenge):** locked screen par
+  FSI activity khulna; unlocked par heads-up; FSI denied par
+  overlay (ya heads-up + awaaz agar FGS start block ho);
+  POST_NOTIFICATIONS denied par sirf awaaz + overlay koshish;
+  FSI + overlay dono denied par sirf awaaz; missed call ke
+  baad summary (toggle ON/OFF dono); uthayi call par koi
+  missed nahi; Dismiss + Wapas call karo (dialer khulna,
+  auto-dial nahi); call khatam hote hi UI/notification/
+  overlay ka gayab hona; Vivo kill par kuch na hona (expected)
+  aur auto-start ON ke baad wapas chalna.

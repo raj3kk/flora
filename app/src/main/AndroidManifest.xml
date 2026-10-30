@@ -24,6 +24,10 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Batch 4: full-screen intent (lock screen par call UI). Android
+         14+ par user grant deta hai (canUseFullScreenIntent); 14 se
+         neeche declare karna hi kaafi hai. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
@@ -92,6 +96,13 @@
         </service>
         <activity
             android:name=".calls.CallActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
+        <!-- Batch 4: Maya-parity self-activation UI — announce ka UI,
+             call control ka nahi (answer/reject isme nahi). -->
+        <activity
+            android:name=".calls.IncomingCallActivity"
             android:exported="false"
             android:showWhenLocked="true"
             android:turnScreenOn="true" />
