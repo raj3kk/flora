@@ -155,6 +155,13 @@ object ToolRegistry {
             licenceKey = null,
             executesVia = "FloraApp chat branch -> DeviceActions (NoAccess Batch B)",
         ),
+        ToolDescriptor(
+            name = "device_volume",
+            kind = "device-local",
+            permission = "MODIFY_AUDIO_SETTINGS normal + DND special grant sirf silent ke liye (bypass kabhi nahi)",
+            licenceKey = null,
+            executesVia = "FloraApp chat branch -> DeviceActions (NoAccess Batch C)",
+        ),
     )
 
     fun byName(name: String): ToolDescriptor? = all().firstOrNull { it.name == name }

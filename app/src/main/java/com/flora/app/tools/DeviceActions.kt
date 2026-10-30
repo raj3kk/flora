@@ -2,11 +2,13 @@ package com.flora.app.tools
 
 import android.Manifest
 import android.app.ActivityManager
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
+import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -54,6 +56,14 @@ object DeviceActions {
         object TorchOn : DeviceRequest()
         object TorchOff : DeviceRequest()
         object TorchStatus : DeviceRequest()
+        data class VolumeRead(val stream: Int) : DeviceRequest()
+        data class VolumeSet(val percent: Int, val stream: Int) : DeviceRequest()
+        object VolumeUp : DeviceRequest()
+        object VolumeDown : DeviceRequest()
+        object RingerRead : DeviceRequest()
+        object RingerNormal : DeviceRequest()
+        object RingerVibrate : DeviceRequest()
+        object Silent : DeviceRequest()
     }
 
     /** Torch ka aakhri Flora-action (process-local). CameraManager me
@@ -104,6 +114,41 @@ object DeviceActions {
             t.contains("flashlight off")
         ) {
             return DeviceRequest.TorchOff
+        }
+        // Volume + ringer (Batch C) — up/down/set/read order binding hai:
+        // "volume badhao" me digits nahi hote, isliye up/down SET se pehle.
+        if (t.contains("silent karo") || t.contains("silent kar do") ||
+            t.contains("phone silent")
+        ) {
+            return DeviceRequest.Silent
+        }
+        if (t.contains("vibrate karo") || t.contains("vibration karo")) {
+            return DeviceRequest.RingerVibrate
+        }
+        if (t.contains("ringer normal") || t.contains("normal mode karo")) {
+            return DeviceRequest.RingerNormal
+        }
+        if (t.contains("ringer mode") || t.contains("ringer kya") ||
+            t.contains("sound mode kya")
+        ) {
+            return DeviceRequest.RingerRead
+        }
+        if (t.contains("volume badhao") || t.contains("volume up") ||
+            t.contains("awaz badhao")
+        ) {
+            return DeviceRequest.VolumeUp
+        }
+        if (t.contains("volume kam karo") || t.contains("volume ghatao") ||
+            t.contains("volume down") || t.contains("awaz kam karo")
+        ) {
+            return DeviceRequest.VolumeDown
+        }
+        if (t.contains("volume")) {
+            val digits = Regex("""(\d{1,3})""").find(t)?.groupValues?.get(1)?.toIntOrNull()
+            if (digits != null) {
+                return DeviceRequest.VolumeSet(digits.coerceIn(0, 100), volumeStream(t))
+            }
+            return DeviceRequest.VolumeRead(volumeStream(t))
         }
         // Info phrases.
         if (t.contains("time batao") || t.contains("time kya hai") ||
@@ -205,6 +250,14 @@ object DeviceActions {
                 is DeviceRequest.TorchOn -> setTorch(context, true)
                 is DeviceRequest.TorchOff -> setTorch(context, false)
                 is DeviceRequest.TorchStatus -> torchStatus()
+                is DeviceRequest.VolumeRead -> volumeRead(context, req.stream)
+                is DeviceRequest.VolumeSet -> volumeSet(context, req.stream, req.percent)
+                is DeviceRequest.VolumeUp -> volumeAdjust(context, AudioManager.ADJUST_RAISE)
+                is DeviceRequest.VolumeDown -> volumeAdjust(context, AudioManager.ADJUST_LOWER)
+                is DeviceRequest.RingerRead -> ringerRead(context)
+                is DeviceRequest.RingerNormal -> ringerSet(context, AudioManager.RINGER_MODE_NORMAL)
+                is DeviceRequest.RingerVibrate -> ringerSet(context, AudioManager.RINGER_MODE_VIBRATE)
+                is DeviceRequest.Silent -> silentAction(context)
                 is DeviceRequest.WifiSettings -> intentReply(
                     context,
                     Intent(Settings.ACTION_WIFI_SETTINGS),
@@ -405,6 +458,115 @@ object DeviceActions {
         return SdResult.Ok(
             "Torch ${if (state) "ON" else "OFF"} hai " +
                 "(aakhri baar Flora ne hi ${if (state) "jalaya" else "band kiya"} tha).",
+        )
+    }
+
+    /** Batch C — volume/ringer. MODIFY_AUDIO_SETTINGS normal permission
+     * Batch A me manifest me jud chuka hai; DND sirf grant-gated hai. */
+    private fun audioManager(context: Context): AudioManager? {
+        return context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    }
+
+    private fun volumeStream(t: String): Int {
+        return when {
+            t.contains("alarm") -> AudioManager.STREAM_ALARM
+            t.contains("ring") -> AudioManager.STREAM_RING
+            else -> AudioManager.STREAM_MUSIC
+        }
+    }
+
+    private fun streamName(stream: Int): String {
+        return when (stream) {
+            AudioManager.STREAM_ALARM -> "Alarm"
+            AudioManager.STREAM_RING -> "Ring"
+            else -> "Media"
+        }
+    }
+
+    private fun volumePercent(am: AudioManager, stream: Int): Int {
+        val max = am.getStreamMaxVolume(stream)
+        if (max <= 0) return -1
+        return am.getStreamVolume(stream) * 100 / max
+    }
+
+    private fun volumeRead(context: Context, stream: Int): SdResult<String> {
+        val am = audioManager(context)
+            ?: return SdResult.Failure("Volume padh nahi paya — dobara koshish karo.")
+        val pct = volumePercent(am, stream)
+        if (pct < 0) return SdResult.Failure("Volume padh nahi paya — dobara koshish karo.")
+        return SdResult.Ok("${streamName(stream)} volume $pct% hai.")
+    }
+
+    private fun volumeSet(context: Context, stream: Int, percent: Int): SdResult<String> {
+        val am = audioManager(context)
+            ?: return SdResult.Failure("Volume set nahi ho paya — dobara koshish karo.")
+        return try {
+            val max = am.getStreamMaxVolume(stream)
+            if (max <= 0) return SdResult.Failure("Volume set nahi ho paya — dobara koshish karo.")
+            am.setStreamVolume(stream, percent * max / 100, AudioManager.FLAG_SHOW_UI)
+            val pct = volumePercent(am, stream)
+            SdResult.Ok("${streamName(stream)} volume $pct% kar diya hai.")
+        } catch (e: SecurityException) {
+            SdResult.Failure("Volume set nahi ho paya — system ne rok diya.")
+        } catch (e: Exception) {
+            SdResult.Failure("Volume set nahi ho paya — dobara koshish karo.")
+        }
+    }
+
+    private fun volumeAdjust(context: Context, direction: Int): SdResult<String> {
+        val am = audioManager(context)
+            ?: return SdResult.Failure("Volume badal nahi paya — dobara koshish karo.")
+        return try {
+            am.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
+            val pct = volumePercent(am, AudioManager.STREAM_MUSIC)
+            SdResult.Ok("Media volume $pct% ho gaya hai.")
+        } catch (e: Exception) {
+            SdResult.Failure("Volume badal nahi paya — dobara koshish karo.")
+        }
+    }
+
+    private fun ringerModeName(mode: Int): String {
+        return when (mode) {
+            AudioManager.RINGER_MODE_SILENT -> "Silent"
+            AudioManager.RINGER_MODE_VIBRATE -> "Vibrate"
+            else -> "Normal"
+        }
+    }
+
+    private fun ringerRead(context: Context): SdResult<String> {
+        val am = audioManager(context)
+            ?: return SdResult.Failure("Ringer mode padh nahi paya — dobara koshish karo.")
+        return SdResult.Ok("Ringer mode: ${ringerModeName(am.ringerMode)} hai.")
+    }
+
+    private fun ringerSet(context: Context, mode: Int): SdResult<String> {
+        val am = audioManager(context)
+            ?: return SdResult.Failure("Ringer mode badal nahi paya — dobara koshish karo.")
+        return try {
+            am.setRingerMode(mode)
+            SdResult.Ok("Ringer mode: ${ringerModeName(am.ringerMode)} kar diya hai.")
+        } catch (e: SecurityException) {
+            SdResult.Failure("Ringer mode badal nahi paya — system ne rok diya.")
+        } catch (e: Exception) {
+            SdResult.Failure("Ringer mode badal nahi paya — dobara koshish karo.")
+        }
+    }
+
+    /** Silent grant-gated: policy access mile to silent, warna bypass
+     * kabhi nahi — settings page kholo (page khulna hi is step ka Ok
+     * hai), user khud allow karega, phir dobara bole. */
+    private fun silentAction(context: Context): SdResult<String> {
+        audioManager(context)
+            ?: return SdResult.Failure("Silent nahi kar paya — dobara koshish karo.")
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        if (nm != null && nm.isNotificationPolicyAccessGranted) {
+            return ringerSet(context, AudioManager.RINGER_MODE_SILENT)
+        }
+        return intentReply(
+            context,
+            Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS),
+            "Silent ke liye Do Not Disturb access chahiye — settings page khol " +
+                "raha hun, wahan Flora ko allow karo, phir dobara 'silent karo' bolo.",
         )
     }
 }

@@ -75,6 +75,31 @@ class DeviceMatchTest {
     }
 
     @Test
+    fun volumeMatches() {
+        assertTrue(DeviceActions.match("volume badhao") is DeviceActions.DeviceRequest.VolumeUp)
+        assertTrue(DeviceActions.match("volume kam karo") is DeviceActions.DeviceRequest.VolumeDown)
+        val set = DeviceActions.match("volume 50 karo")
+        assertTrue(set is DeviceActions.DeviceRequest.VolumeSet)
+        assertEquals(50, (set as DeviceActions.DeviceRequest.VolumeSet).percent)
+        val alarmSet = DeviceActions.match("alarm volume 30")
+        assertTrue(alarmSet is DeviceActions.DeviceRequest.VolumeSet)
+        assertEquals(30, (alarmSet as DeviceActions.DeviceRequest.VolumeSet).percent)
+        val ringRead = DeviceActions.match("ring volume kitna")
+        assertTrue(ringRead is DeviceActions.DeviceRequest.VolumeRead)
+        assertTrue(DeviceActions.match("volume kitna") is DeviceActions.DeviceRequest.VolumeRead)
+        val clamped = DeviceActions.match("volume 150")
+        assertEquals(100, (clamped as DeviceActions.DeviceRequest.VolumeSet).percent)
+    }
+
+    @Test
+    fun ringerAndSilentMatch() {
+        assertTrue(DeviceActions.match("silent karo") is DeviceActions.DeviceRequest.Silent)
+        assertTrue(DeviceActions.match("vibrate karo") is DeviceActions.DeviceRequest.RingerVibrate)
+        assertTrue(DeviceActions.match("ringer normal") is DeviceActions.DeviceRequest.RingerNormal)
+        assertTrue(DeviceActions.match("ringer mode kya hai") is DeviceActions.DeviceRequest.RingerRead)
+    }
+
+    @Test
     fun noHijackOfOtherRoutes() {
         assertNull(DeviceActions.match("whatsapp kholo"))
         assertNull(DeviceActions.match("aaj ka mausam kaisa hai"))
