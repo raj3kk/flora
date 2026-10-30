@@ -103,10 +103,10 @@ Deno.serve(async (req) => {
     const { error } = await svc.from("usage").update({
       talk_seconds: row.talk_seconds + secs, tool_calls: row.tool_calls + tools,
     }).eq("id", row.id);
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "store failed" }, 500); }
     return json({ counted: true, day, talk_seconds: row.talk_seconds + secs });
   }
   const { error } = await svc.from("usage").insert({ user_id: targetUserId, day, talk_seconds: secs, tool_calls: tools });
-  if (error) return json({ error: error.message }, 500);
+  if (error) { console.error(error); return json({ error: "store failed" }, 500); }
   return json({ counted: true, day, talk_seconds: secs });
 });

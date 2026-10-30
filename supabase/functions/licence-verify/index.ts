@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
       const key = licence_key.trim();
       const { data: keyRow, error: keyError } = await supabase.from("licences")
         .select("*").eq("licence_key", key).maybeSingle();
-      if (keyError) return json({ error: keyError.message }, 500);
+      if (keyError) { console.error(keyError); return json({ error: "store failed" }, 500); }
       if (!keyRow || keyRow.user_id !== user_id) {
         return json({ valid: false, status: "invalid_key" });
       }
@@ -140,7 +140,7 @@ Deno.serve(async (req) => {
     }
     const { data: rows, error: rowsError } = await supabase.from("licences")
       .select("*").eq("user_id", user_id).order("activated_at", { ascending: false });
-    if (rowsError) return json({ error: rowsError.message }, 500);
+    if (rowsError) { console.error(rowsError); return json({ error: "store failed" }, 500); }
     const list = rows || [];
     const pro = list.find((r) => r.plan_id === "pro" && r.status === "active" && !isExpired(r));
     if (pro) return json(await statusOnly(pro));
@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
       if (row.device_id === null) {
         const { error: claimError } = await supabase.from("licences")
           .update({ device_id, activated_at: now.toISOString() }).eq("id", row.id);
-        if (claimError) return json({ error: claimError.message }, 500);
+        if (claimError) { console.error(claimError); return json({ error: "store failed" }, 500); }
         return { valid: true, plan: "free", status: "free", device_claimed: true, features: await featuresFor("free"), expires_at: row.expires_at || null, bound_device_short: short(device_id) };
       }
       return { valid: true, plan: "free", status: "free", features: await featuresFor("free"), expires_at: row.expires_at || null, bound_device_short: short(row.device_id) };
@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
     if (row.device_id === null) {
       const { error: claimError } = await supabase.from("licences")
         .update({ device_id, activated_at: now.toISOString() }).eq("id", row.id);
-      if (claimError) return json({ error: claimError.message }, 500);
+      if (claimError) { console.error(claimError); return json({ error: "store failed" }, 500); }
       return { valid: true, plan: "pro", status: "active", device_claimed: true, features: await featuresFor("pro"), expires_at: row.expires_at || null, bound_device_short: short(device_id) };
     }
     if (row.device_id === device_id) {
@@ -191,7 +191,7 @@ Deno.serve(async (req) => {
     }
     const { error: moveError } = await supabase.from("licences")
       .update({ device_id, activated_at: now.toISOString() }).eq("id", row.id);
-    if (moveError) return json({ error: moveError.message }, 500);
+    if (moveError) { console.error(moveError); return json({ error: "store failed" }, 500); }
     return { valid: true, plan: "pro", status: "active", device_changed: true, features: await featuresFor("pro"), expires_at: row.expires_at || null, bound_device_short: short(device_id) };
   }
 
@@ -200,7 +200,7 @@ Deno.serve(async (req) => {
     const key = licence_key.trim();
     const { data: keyRow, error: keyError } = await supabase.from("licences")
       .select("*").eq("licence_key", key).maybeSingle();
-    if (keyError) return json({ error: keyError.message }, 500);
+    if (keyError) { console.error(keyError); return json({ error: "store failed" }, 500); }
     // Na mile ya kisi aur user ki ho — ek jaisa jawab (oracle nahi).
     if (!keyRow || keyRow.user_id !== user_id) {
       return json({ valid: false, status: "invalid_key" });
@@ -218,7 +218,7 @@ Deno.serve(async (req) => {
   // session me live) rokta hai, purane hon to service rukegi nahi.
   const { data: boundRows, error } = await supabase.from("licences")
     .select("*").eq("user_id", user_id).eq("device_id", device_id).order("activated_at", { ascending: false }).limit(2);
-  if (error) return json({ error: error.message }, 500);
+  if (error) { console.error(error); return json({ error: "store failed" }, 500); }
   const data = (boundRows || [])[0] || null;
   if (data) {
     const res = await decideRow(data);
@@ -231,7 +231,7 @@ Deno.serve(async (req) => {
   // decideRow wahi claim/lock/transfer faisla deta hai.
   const { data: others, error: othersError } = await supabase.from("licences")
     .select("*").eq("user_id", user_id).order("activated_at", { ascending: false });
-  if (othersError) return json({ error: othersError.message }, 500);
+  if (othersError) { console.error(othersError); return json({ error: "store failed" }, 500); }
   const pro = (others || []).find((r) =>
     r.plan_id === "pro" && r.status === "active" &&
     (!r.expires_at || new Date(r.expires_at) >= now));

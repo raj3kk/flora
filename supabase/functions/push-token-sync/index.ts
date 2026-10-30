@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
     const { error: userErr } = await svc.from("users").upsert(
       { id: targetUserId, device_id }, { onConflict: "id" },
     );
-    if (userErr) return json({ ok: false, detail: userErr.message }, 500);
+    if (userErr) { console.error(userErr); return json({ ok: false, detail: "store failed" }, 500); }
   } else {
     // Unlinked path: body user_id kabhi trust nahi hota, users
     // row claim NAHI hoti. Sirf registered device ka token.
@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
     { user_id: targetUserId, device_id, fcm_token, platform: "android" },
     { onConflict: "user_id,device_id" },
   );
-  if (tokErr) return json({ ok: false, detail: tokErr.message }, 500);
+  if (tokErr) { console.error(tokErr); return json({ ok: false, detail: "store failed" }, 500); }
   // S1-9 (Cycle 122 FIX): linked sync par purane device ke token
   // residue hatao — 1 user = 1 device model me purana token push
   // bhejta rehta to galat device par notification jaata. Sirf

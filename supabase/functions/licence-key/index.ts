@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
   if (action === "list") {
     const { data: rows, error } = await svc.from("licences").select("*")
       .eq("user_id", jwtUserId).order("activated_at", { ascending: false }).limit(50);
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "store failed" }, 500); }
     const out = (rows || []).map((r) => ({
       id: r.id, plan_id: r.plan_id, status: r.status,
       expires_at: r.expires_at, activated_at: r.activated_at,

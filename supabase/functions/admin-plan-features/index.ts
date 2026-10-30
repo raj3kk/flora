@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
       { plan, features: clean, updated_at: new Date().toISOString() },
       { onConflict: "plan" },
     );
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "store failed" }, 500); }
     try {
       await svc.from("admin_audit").insert({
         admin_user_id: adminId, action: "plan_features_set",

@@ -124,9 +124,10 @@ async function loadPayments() {
     .from("payment_submissions")
     .select("amount_paisa,utr,note,status,created_at,reject_reason")
     .eq("user_id", session.user.id)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(200);
   if (error) {
-    st.textContent = "Load fail: " + error.message;
+    st.textContent = "Load fail — dobara karo.";
     return;
   }
   if (!data.length) {
@@ -139,7 +140,9 @@ async function loadPayments() {
   const anyApproved = data.some(r => r.status === "approved");
   document.getElementById('step-pay').textContent = anyApproved ? "approved" : "submit hua, approve baaki";
   document.getElementById('step-pay').className = anyApproved ? "badge green" : "badge orange";
-  st.textContent = "Tumhari UTR submissions:";
+  st.textContent = data.length === 200
+    ? "Tumhari UTR submissions (taaza 200 dikh rahi hain — purani dekhni hon to admin se poochho):"
+    : "Tumhari UTR submissions:";
   el.innerHTML = "";
   data.forEach(row => {
     const div = document.createElement('div');

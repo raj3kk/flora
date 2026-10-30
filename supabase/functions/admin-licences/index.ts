@@ -133,9 +133,9 @@ Deno.serve(async (req) => {
       }).select("id").single();
       if (!error) { newRow = { ...data, licence_key: key }; break; }
       if (error.code === "23505") { lastErr = error; continue; }
-      return json({ error: error.message }, 500);
+      { console.error(error); return json({ error: "store failed" }, 500); }
     }
-    if (!newRow) return json({ error: "key generation failed: " + (lastErr?.message || "collision") }, 500);
+    if (!newRow) { console.error(lastErr); return json({ error: "key generation failed" }, 500); }
     // Nayi row pehle bani, tabhi purani supersede (order zaroori:
     // supersede pehle karte aur insert fail hota to user ke paas
     // kuch nahi bachta). Supersede fail ho to bhi nayi licence
@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
       q = q.eq("user_id", search.trim());
     }
     const { data: rows, error } = await q;
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "store failed" }, 500); }
     // Emails best-effort (admin-payments pattern).
     const emails = {};
     try {
@@ -234,7 +234,7 @@ Deno.serve(async (req) => {
     const { error } = await svc.from("licences").update({
       status: "revoked", revoked_reason: reason, revoked_by: adminId, revoked_at: now,
     }).eq("id", licence_id);
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "store failed" }, 500); }
     await audit("licence_revoked", row.user_id, { licence_id, reason });
     return json({ ok: true });
   }
@@ -246,7 +246,7 @@ Deno.serve(async (req) => {
     if (!row) return json({ error: "licence not found" }, 404);
     if (row.status !== "active") return json({ error: "only active licence can be rebound" }, 400);
     const { error } = await svc.from("licences").update({ device_id: null }).eq("id", licence_id);
-    if (error) return json({ error: error.message }, 500);
+    if (error) { console.error(error); return json({ error: "store failed" }, 500); }
     await audit("licence_rebound", row.user_id, { licence_id });
     return json({ ok: true });
   }
