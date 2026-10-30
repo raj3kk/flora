@@ -94,7 +94,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -111,6 +111,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.FACE -> "Face"
     Screen.DOCS -> "Docs"
     Screen.CONNECT -> "Connect"
+    Screen.SD_CONNECTORS -> "SD-1 Connectors"
     Screen.PRIVACY -> "Privacy"
     Screen.TERMS -> "Terms"
     Screen.AUTO -> "Auto"
@@ -1633,6 +1634,10 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Connect") },
                             onClick = { screen = Screen.CONNECT; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("SD-1 Connectors") },
+                            onClick = { screen = Screen.SD_CONNECTORS; menuOpen = false },
                         )
                         DropdownMenuItem(
                             text = { Text("Auto") },
@@ -5311,6 +5316,8 @@ fun FloraApp(
                 AvatarScreen(prefs) { avatarStyle = it }
             } else if (screen == Screen.CONNECT) {
                 ConnectScreen(voice, prefs)
+            } else if (screen == Screen.SD_CONNECTORS) {
+                SdConnectorsScreen(autoLogStore) { screen = Screen.CHAT }
             } else if (screen == Screen.PRIVACY) {
                 PrivacyScreen()
             } else if (screen == Screen.TERMS) {

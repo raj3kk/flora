@@ -104,6 +104,14 @@ class FloraPreferences(private val context: Context) {
         val CALL_TALK = booleanPreferencesKey("call_talk")
         val HOME_BOX_CODE = stringPreferencesKey("home_box_code")
         val PC_PAIR_CODE = stringPreferencesKey("pc_pair_code")
+        // SD-P1 Batch 2 (SD-1): user ke apne connector tokens —
+        // Deepgram pattern par KeyStore-encrypted secret slots.
+        // Chat id / team id secret nahi hain, plain strings hain.
+        val SD1_TELEGRAM_TOKEN = stringPreferencesKey("sd1_telegram_token")
+        val SD1_TODOIST_TOKEN = stringPreferencesKey("sd1_todoist_token")
+        val SD1_LINEAR_TOKEN = stringPreferencesKey("sd1_linear_token")
+        val SD1_TELEGRAM_CHAT_ID = stringPreferencesKey("sd1_telegram_chat_id")
+        val SD1_LINEAR_TEAM_ID = stringPreferencesKey("sd1_linear_team_id")
         val AVATAR = stringPreferencesKey("avatar")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
@@ -369,6 +377,60 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setDeepgramApiKey(value: String) {
         writeSecret(Keys.DEEPGRAM_API_KEY, value)
+    }
+
+    /** SD-P1 Batch 2 (SD-1) connector secrets — Deepgram pattern
+     *  par KeyStore-encrypted; khaali = not connected. Setters
+     *  Boolean dete hain taaki UI save-fail imaandaari se bata
+     *  sake; clear par key DataStore se mita di jati hai. */
+    suspend fun sdTelegramToken(): String =
+        readSecret(Keys.SD1_TELEGRAM_TOKEN)
+
+    suspend fun setSdTelegramToken(value: String): Boolean =
+        writeSecret(Keys.SD1_TELEGRAM_TOKEN, value)
+
+    suspend fun clearSdTelegramToken() {
+        context.floraDataStore.edit { it.remove(Keys.SD1_TELEGRAM_TOKEN) }
+    }
+
+    suspend fun sdTodoistToken(): String =
+        readSecret(Keys.SD1_TODOIST_TOKEN)
+
+    suspend fun setSdTodoistToken(value: String): Boolean =
+        writeSecret(Keys.SD1_TODOIST_TOKEN, value)
+
+    suspend fun clearSdTodoistToken() {
+        context.floraDataStore.edit { it.remove(Keys.SD1_TODOIST_TOKEN) }
+    }
+
+    suspend fun sdLinearToken(): String =
+        readSecret(Keys.SD1_LINEAR_TOKEN)
+
+    suspend fun setSdLinearToken(value: String): Boolean =
+        writeSecret(Keys.SD1_LINEAR_TOKEN, value)
+
+    suspend fun clearSdLinearToken() {
+        context.floraDataStore.edit { it.remove(Keys.SD1_LINEAR_TOKEN) }
+    }
+
+    suspend fun sdTelegramChatId(): String =
+        context.floraDataStore.data.map { it[Keys.SD1_TELEGRAM_CHAT_ID] ?: "" }.first()
+
+    suspend fun setSdTelegramChatId(value: String) {
+        context.floraDataStore.edit {
+            if (value.isBlank()) it.remove(Keys.SD1_TELEGRAM_CHAT_ID)
+            else it[Keys.SD1_TELEGRAM_CHAT_ID] = value.trim()
+        }
+    }
+
+    suspend fun sdLinearTeamId(): String =
+        context.floraDataStore.data.map { it[Keys.SD1_LINEAR_TEAM_ID] ?: "" }.first()
+
+    suspend fun setSdLinearTeamId(value: String) {
+        context.floraDataStore.edit {
+            if (value.isBlank()) it.remove(Keys.SD1_LINEAR_TEAM_ID)
+            else it[Keys.SD1_LINEAR_TEAM_ID] = value.trim()
+        }
     }
 
     /** Voice-match threshold — 0.50 STARTING GUESS hai, lock nahi
