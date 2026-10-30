@@ -104,8 +104,8 @@ private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DO
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.CHAT -> "Chat"
-    Screen.PERMISSIONS -> "Permissions"
-    Screen.LICENCE -> "Licence"
+    Screen.PERMISSIONS -> "Anumati"
+    Screen.LICENCE -> "Plan"
     Screen.AUTO_LOG -> "Auto Log"
     Screen.SETTINGS -> "Settings"
     Screen.MEMORIES -> "Yaadein"
@@ -116,14 +116,14 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.FACE -> "Face"
     Screen.DOCS -> "Docs"
     Screen.CONNECT -> "Connect"
-    Screen.SD_CONNECTORS -> "SD-1 Connectors"
-    Screen.TASK_LIST -> "Task list"
-    Screen.SD8_SETTINGS -> "SD-8 Settings"
+    Screen.SD_CONNECTORS -> "Apps jodo"
+    Screen.TASK_LIST -> "Kaam"
+    Screen.SD8_SETTINGS -> "Extra Settings"
     Screen.APPEARANCE -> "Appearance"
     Screen.COMM -> "Communication"
     Screen.FAV_SONGS -> "Favourite gaane"
     Screen.VAULT -> "Vault"
-    Screen.TEACH_ONCE -> "Teach once"
+    Screen.TEACH_ONCE -> "Ek baar sikhao"
     Screen.PRIVACY -> "Privacy"
     Screen.TERMS -> "Terms"
     Screen.AUTO -> "Auto"
@@ -141,7 +141,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     // Cycle 3, F6: "Lock" naam jhootha daava tha (Back se
     // skip ho jata hai) — ab imaandaar naam "PIN gate".
     Screen.LOCK -> "PIN gate"
-    Screen.PC_LINK -> "PC Link"
+    Screen.PC_LINK -> "PC jodo"
     Screen.BUILDER -> "Builder"
     Screen.PLANNER -> "Planner"
     Screen.DOCTOR -> "Doctor"
@@ -1645,7 +1645,7 @@ fun FloraApp(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("PC Link") },
+                            text = { Text("PC jodo") },
                             onClick = { screen = Screen.PC_LINK; menuOpen = false },
                         )
                         DropdownMenuItem(
@@ -1683,7 +1683,7 @@ fun FloraApp(
                             onClick = { },
                         )
                         DropdownMenuItem(
-                            text = { Text("Permissions") },
+                            text = { Text("Anumati") },
                             onClick = { screen = Screen.PERMISSIONS; menuOpen = false },
                         )
                         // Lane A — A1 (R-A1-7): One-Tap Fix ka menu link —
@@ -1694,7 +1694,7 @@ fun FloraApp(
                             onClick = { screen = Screen.PERMISSIONS; menuOpen = false },
                         )
                         DropdownMenuItem(
-                            text = { Text("Licence / Pro") },
+                            text = { Text("Plan / Pro") },
                             onClick = { screen = Screen.LICENCE; menuOpen = false },
                         )
                         DropdownMenuItem(
@@ -1710,15 +1710,15 @@ fun FloraApp(
                             onClick = { screen = Screen.CONNECT; menuOpen = false },
                         )
                         DropdownMenuItem(
-                            text = { Text("SD-1 Connectors") },
+                            text = { Text("Apps jodo") },
                             onClick = { screen = Screen.SD_CONNECTORS; menuOpen = false },
                         )
                         DropdownMenuItem(
-                            text = { Text("Task list") },
+                            text = { Text("Kaam") },
                             onClick = { screen = Screen.TASK_LIST; menuOpen = false },
                         )
                         DropdownMenuItem(
-                            text = { Text("SD-8 Settings") },
+                            text = { Text("Extra Settings") },
                             onClick = { screen = Screen.SD8_SETTINGS; menuOpen = false },
                         )
                         DropdownMenuItem(
@@ -1738,7 +1738,7 @@ fun FloraApp(
                             onClick = { screen = Screen.VAULT; menuOpen = false },
                         )
                         DropdownMenuItem(
-                            text = { Text("Teach once") },
+                            text = { Text("Ek baar sikhao") },
                             onClick = { screen = Screen.TEACH_ONCE; menuOpen = false },
                         )
                         DropdownMenuItem(
@@ -1767,6 +1767,11 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Terms") },
                             onClick = { screen = Screen.TERMS; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            enabled = false,
+                            text = { Text("— Sab options khatm —") },
+                            onClick = { },
                         )
                     }
                 },
