@@ -68,5 +68,33 @@ fun AvatarScreen(prefs: FloraPreferences, onPick: (String) -> Unit) {
                 }
             }
         }
+        // Parity batch 2026-10-31, M12 (vibes, cosmetic): mood
+        // naam se wahi avatar rang chuno — naya art nahi, sirf
+        // mood label ke saath wahi rang. Koi behaviour nahi badalta.
+        Spacer(modifier = Modifier.height(12.dp))
+        Text("Vibes — mood ke hisab se rang chuno")
+        val vibes = listOf(
+            "Shant" to "neela",
+            "Urja" to "sunehra",
+            "Focus" to "hara",
+            "Pyaar" to "gulabi",
+            "Royal" to "baingani",
+        )
+        for ((vibe, id) in vibes) {
+            Row(modifier = Modifier.padding(bottom = 8.dp)) {
+                Column {
+                    Text(vibe + if (current == id) " ✓ (chuna hua)" else "")
+                    Button(onClick = {
+                        scope.launch {
+                            try {
+                                prefs.setAvatar(id)
+                                current = id
+                                onPick(id)
+                            } catch (e: Exception) { }
+                        }
+                    }) { Text(if (current == id) "Chuna hua" else "Ye vibe chuno") }
+                }
+            }
+        }
     }
 }
