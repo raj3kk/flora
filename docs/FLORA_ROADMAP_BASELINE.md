@@ -7,8 +7,9 @@
 ## 1. Live tip (check ke waqt)
 
 - Repo: `raj3kk/flora` (PRIVATE, branch sirf `main`)
-- Tip SHA: `356956e619bfea2c8678b9e6092d335680013dac`
-- Tip commit: "Fix CI #322/#323/#324: PicturesScreen Refresh onClick suspend call — scope.launch me lao" (2026-10-30T20:02:13Z)
+- Baseline check ke waqt tip SHA: `356956e619bfea2c8678b9e6092d335680013dac`
+- Tip commit (check ke waqt): "Fix CI #322/#323/#324: PicturesScreen Refresh onClick suspend call — scope.launch me lao" (2026-10-30T20:02:13Z)
+- Baseline push ke waqt tip aage badh chuka tha: `0461a005` (fix-cycle register update, docs-only, koi code change nahi) — push helper ne live tip se hi push kiya, isliye is baseline commit ka parent wahi hai. Is cycle ke push: baseline+send-push+README = `c2aad219`; Free-matrix alignment (Phase 5) uske baad alag commit me hai.
 - Tip tree: 464 entries, functions tip par **22** (local me 23 — farq sirf `send-push` hai, §3 dekho)
 - Tip web: 14 files (13 pages + `models/manifest.json` + `updates/version.json` + `vercel.json`)
 - Tip docs: 101 files; tip SQL: 6 canonical files (wahi 6 jo local me hain)

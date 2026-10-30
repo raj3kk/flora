@@ -42,7 +42,8 @@
 //     nahi) valid:true + plan 'free' hai — ye error nahi hai.
 //     Pro sirf valid=true + status='active' + plan='pro' par.
 //   - features[] plan_features table se (na mile / table na ho to
-//     defaults: free=[talk], pro=14 flags — fail-open).
+//     defaults: free=15 flags, pro=15 flags — fail-open, canonical
+//     Free rule ke hisaab se (saare tools + 600s cap alag se).
 //   - bound_device_short: bound device ka pehla hissa (poora
 //     device_id kabhi response me nahi aata).
 //   - licence_key kabhi kisi response me nahi aata (list/create/
@@ -52,11 +53,22 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const FIFTEEN_DAYS_MS = 15 * 24 * 60 * 60 * 1000;
-const FREE_FEATURES = ["talk"];
+// CANONICAL FREE RULE (Roadmap Phase 5, standing product rule):
+// Free = saare tools + 600 talk sec/day cap (cap alag se lagta hai).
+// Isliye fallback bhi poori 15-flag list hai — pehle free fallback
+// sirf ["talk"] tha aur pro fallback me "builder" missing tha, jo
+// DB seed (15 flags) aur website ("saare tools") se takrata tha.
+// Live plan_features row milne par wahi list milti hai; fallback
+// sirf row/table na mile par lagta hai.
+const FREE_FEATURES = [
+  "talk", "calls", "sms", "whatsapp", "browser", "macros",
+  "image_gen", "screen_vision", "camera", "overlay_mic", "wakeword",
+  "home", "routines", "form_fill", "builder",
+];
 const PRO_FEATURES = [
   "talk", "calls", "sms", "whatsapp", "browser", "macros",
   "image_gen", "screen_vision", "camera", "overlay_mic", "wakeword",
-  "home", "routines", "form_fill",
+  "home", "routines", "form_fill", "builder",
 ];
 
 // S2-1 (Cycle 122 FIX): CORS block — website (account.html) se

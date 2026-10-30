@@ -7,7 +7,8 @@
 // hisaab se), isliye plans ka single source yehi table hai
 // (plans table ko koi code read nahi karta — audit A7).
 //   get: { plans: { free: [...], pro: [...] } } — row na ho to
-//     defaults (free=[talk,builder], pro=15 flags); table na ho to bhi
+//     defaults (free=15 flags, pro=15 flags — canonical Free rule:
+//     saare tools + 600s cap alag se); table na ho to bhi
 //     defaults (fail-open, panel editor khaali nahi dikhega).
 //   set { plan, features }: plan free/pro; features array, har
 //     entry 15 contract keys me honi chahiye (allowlist); dedupe;
@@ -41,7 +42,9 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const DEFAULTS = {
-  free: ["talk", "builder"],
+  // Canonical Free rule: free bhi poori 15-flag list (saare tools);
+  // limiter 600 talk sec/day alag se lagta hai, feature list se nahi.
+  free: FLAG_KEYS.slice(),
   pro: FLAG_KEYS.slice(),
 };
 

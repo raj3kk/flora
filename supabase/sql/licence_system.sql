@@ -110,6 +110,15 @@ alter table public.plan_features enable row level security;
 -- 15 contract flags (flag-keys, panel PLAN_FLAG_LABELS se match):
 -- talk, calls, sms, whatsapp, browser, macros, image_gen,
 -- screen_vision, camera, overlay_mic, wakeword, home, routines, form_fill, builder.
+-- CANONICAL FREE RULE (Roadmap Phase 5, standing product rule):
+-- Free = saare tools + 600 talk sec/day cap (cap brain-proxy/usage se
+-- lagta hai, feature list se nahi). Isliye free seed bhi poori 15-flag
+-- list hai — pehle wali ["talk","builder"] seed rule se alag thi aur
+-- website/pricing ("saare tools") se takrati thi. LIVE DB NOTE:
+-- ye INSERT ON CONFLICT DO NOTHING hai, isliye pehle se seeded live
+-- free row is file se overwrite NAHI hogi — live row ko panel Save
+-- ya dashboard UPDATE se isi poori list par lana hoga (parent-browser
+-- step, is file se nahi hoga).
 -- B5 (2026-10-29): "builder" plan-features key hai — ye feature-flags ka
 -- toggle NAHI hai (flags me builder ki koi key nahi; effective = plan AND
 -- flag, missing key fail-open = true, isliye builder effectively plan-only
@@ -126,6 +135,6 @@ alter table public.plan_features enable row level security;
 -- par dobara chalane se builder NAHI judega — live DB ko panel Save
 -- on Free AND Pro chahiye (allowlist deploy ke BAAD) ya alag UPDATE step.
 insert into public.plan_features (plan, features) values
-  ('free', '["talk","builder"]'::jsonb),
+  ('free', '["talk","calls","sms","whatsapp","browser","macros","image_gen","screen_vision","camera","overlay_mic","wakeword","home","routines","form_fill","builder"]'::jsonb),
   ('pro', '["talk","calls","sms","whatsapp","browser","macros","image_gen","screen_vision","camera","overlay_mic","wakeword","home","routines","form_fill","builder"]'::jsonb)
 on conflict (plan) do nothing;
