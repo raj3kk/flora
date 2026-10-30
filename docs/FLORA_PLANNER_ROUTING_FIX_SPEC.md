@@ -141,12 +141,17 @@ Kram (har step Auto Log me):
 - "builder" / "builder kholo" → BuilderScreen khule (Menu ▾ → Builder wala raasta bhi batana).
 - Phone evidence chahiye: Accessibility ON? Auto Mode ON? (donon haan/na — value kabhi nahi).
 
-## 9. Pre-audit (implement se PEHLE — is spec ke baad, isi file me append hoga)
+## 9. Pre-audit (implement se PEHLE — result 2026-10-30, tip 4e4c5a91 se verify)
 
-- [ ] Parser patterns vs maujooda branches: koi duplicate/override nahi (hook sirf recognized pattern par, warna null).
-- [ ] `planConfirm` state declaration order (use se pehle) + `voiceAppConfirm` se naam-collision nahi.
-- [ ] `VoicePlan*` naam-collision nahi (PlannerModels/PlanDraft se alag).
-- [ ] Koi PlannerEngine/PlanTool/Room change nahi (builder plans untouched).
-- [ ] Naya service helper sirf YouTube chain me istemal (general surface nahi).
-- [ ] Koi naya permission/manifest change nahi (CAMERA/A11y pehle se maujood).
-- [ ] Unit tests ka naam + jagah tay (VoicePlanParserTest).
+- [PASS] Parser patterns vs maujooda branches: hook sirf recognized pattern par plan lautaata hai, warna null → maujooda branches/Brain raasta untouched. Koi duplicate branch nahi banegi (purani compound/gaana branches Batch 2 tak fallback ke roop me rahengi, phir verify-after-open par laayi jayengi).
+- [PASS] `VoicePlan*` / `planConfirm` naam-collision nahi (local tree grep 0 hits).
+- [PASS] `planConfirm` state `voiceAppConfirm` (tip ~line 293, remember-state region) ke turant baad declare hogi — sendChat hook aur dialog use se pehle (declaration-order trap se safe).
+- [PASS] Hook placement (refined): `sendChat` me KeyInputGuard + Face Lock gate + teaching-routine capture block + pending-contact clarification block — **in sab ke BAAD**, pehli fresh-command branch se PEHLE. Wajah: teaching/clarification jawab fresh command nahi hain; hook unhe intercept nahi karega. Exact line edit waqt fresh tip se confirm hogi.
+- [PASS] Koi PlannerEngine/PlanTool/Room change nahi (builder plans untouched) — VoicePlan alag lightweight layer hai.
+- [PASS] `InAppSearch.searchInApp` verified: password-node guard → type → submit (Search/Go/Khoj click) → Done/TypedOnly/NoSearchBox.
+- [PASS] `openWebsiteVerified` verified: `OpenResult` lautaata hai; service null ho to `FiredUnverified` — runner non-Opened ko fail path me lega (spec §2.3).
+- [PASS] Naya service helper (`clickFirstVideoResult`) sirf YouTube chain me istemal hoga (general surface nahi).
+- [PASS] Koi naya permission/manifest change nahi (Accessibility service + intents pehle se maujood).
+- [PASS] Unit tests: `app/src/test/java/com/flora/app/automation/VoicePlanParserTest.kt` (automation test dir edit waqt confirm hogi; maujooda precedent: `tools/BuilderGuardTest.kt`).
+- [PASS] CI chain clean: run 41021786026 (tip 4e4c5a91) SUCCESS — is spec push se pehle koi in-progress run nahi.
+- **Pre-audit verdict: PASS — Batch 1 implement kar sakte hain.** §6 (workflow audit) + §4.2 (doosra flow) audit child report aane ke baad bhare jayenge; Batch 1 un par nirbhar nahi hai.
