@@ -291,6 +291,10 @@ fun FloraApp(
     var voiceCallConfirm by remember { mutableStateOf<String?>(null) }
     var voiceSmsConfirm by remember { mutableStateOf<Pair<String, String>?>(null) }
     var voiceAppConfirm by remember { mutableStateOf<com.flora.app.automation.LaunchableApp?>(null) }
+    // Planner-first routing, Batch 1: poore plan ka ek-baari confirm
+    // (Samajh-Pehle, Confirm-Ek-Baar-Shuru-Me rule). Auto Mode ON
+    // par ye state kabhi set nahi hoti — plan seedha execute hota hai.
+    var planConfirm by remember { mutableStateOf<com.flora.app.automation.VoicePlan?>(null) }
     // Phase 6: macro run state — pending = chal raha/ruka macro + agla step index.
     // macroNeedsConfirm true ho to sensitive step par dialog dikhega; Haan par wahi
     // step se resume, Ruko par macro ruk jayegi. Kabhi silent resume nahi.
@@ -2215,6 +2219,24 @@ fun FloraApp(
                     }
                 }
 
+                // Planner-first routing, Batch 1: VoicePlan execute
+                // (Host lambdas yahi ek jagah — hook + dialog dono ise
+                // bulate hain; confirm gate hook/dialog me rehta hai).
+                fun executeVoicePlan(plan: com.flora.app.automation.VoicePlan) {
+                    runGuardedVoice { scope.launch {
+                        com.flora.app.automation.VoicePlanRunner.execute(
+                            plan,
+                            com.flora.app.automation.VoicePlanRunner.Host(
+                                context = appContext,
+                                addMessage = { msg -> messages = messages + ChatMsg("Flora: $msg", false) },
+                                speak = { msg -> voice.speak(msg) },
+                                log = { entry -> autoLogStore.add(entry) },
+                            ),
+                        )
+                    }
+                    }
+                }
+
                 // Clarification ke baad kaam chalana (v2.22): confirm
                 // ya auto flow — call/sms branches jaisa hi.
                 fun runContactAction(number: String, action: String, text: String) {
@@ -2489,6 +2511,32 @@ fun FloraApp(
                         }
                     }
                     val lower = question.lowercase()
+                    // Planner-first routing, Batch 1: pehchana gaya
+                    // compound/media pattern → poora plan (goal, steps,
+                    // success check) banakar confirm-once execute.
+                    // Na pehchana gaya to null → maujooda branches waisi hi.
+                    val voicePlan = com.flora.app.automation.VoicePlanParser.parse(
+                        question,
+                        resolveApp = { name ->
+                            com.flora.app.automation.VerifiedAppLauncher.findByName(appContext, name)
+                                .map { it.label to it.packageName }
+                        },
+                        foregroundApp = com.flora.app.automation.ForegroundAppContext.lastOpenedPkg?.let { pkg ->
+                            pkg to (com.flora.app.automation.ForegroundAppContext.lastOpenedLabel ?: pkg)
+                        },
+                    )
+                    if (voicePlan != null) {
+                        input = ""
+                        val planText = voicePlan.steps.joinToString(" → ") { it.title }
+                        messages = messages + ChatMsg("Flora: Plan: $planText", false)
+                        voice.speak("Plan bana liya hai.")
+                        if (autoMode) {
+                            executeVoicePlan(voicePlan)
+                        } else {
+                            planConfirm = voicePlan
+                        }
+                        return
+                    }
                     // Long memory (Phase 2B): pehle kya bola tha / aage kya
                     // karna hai / yaad rakhna / agla kaam karo — persisted
                     // store se jawab, brain ke andaze par nahi. Ye branches
@@ -5762,6 +5810,22 @@ fun FloraApp(
                     },
                     dismissButton = {
                         TextButton(onClick = { voiceAppConfirm = null }) { Text("Ruko") }
+                    }
+                )
+            }
+            planConfirm?.let { plan ->
+                AlertDialog(
+                    onDismissRequest = { planConfirm = null },
+                    title = { Text("Plan chalau?") },
+                    text = { Text(plan.steps.joinToString("\n") { "• " + it.title }) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            planConfirm = null
+                            executeVoicePlan(plan)
+                        }) { Text("Haan, chalao") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { planConfirm = null }) { Text("Ruko") }
                     }
                 )
             }

@@ -101,27 +101,67 @@ Kram (har step Auto Log me):
    - **Boundary saaf:** ye sirf YouTube first-result chain hai; poora tap/type/swipe surface SD-P4 me hi banega.
 4. **Purani "gaana bajao" branch ka behaviour:** is chain ke aane ke baad wo branch sirf tab chalegi jab parser plan na bana paaye (fallback) — uska "khol raha hun" bina-verify bolna tab bhi galat hai, isliye Batch 2 me us branch ko bhi verify-after-open par laaya jayega (result check ke baad hi message).
 
-### 4.2 Doosra common flow (workflow-audit report se final hoga — PENDING-AUDIT)
+### 4.2 Doosra common flow (audit se chuna gaya — routine nahi, kyunki routine runner me compound/in-app support hi nahi hai, W8)
 
-- Audit child (workflow + surfaces) ki report se sabse zyada istemal hone wala doosra flow chuna jayega (routine-run ya generic compound app-open+in-app-action me se).
-- Us flow ka test case bhi Batch 2 me aayega (steps + success check per step + fallback), taaki fix sirf YouTube tak seemit na rahe.
-- Jab tak audit report na aaye, Batch 2 ka doosra flow SPEC-PENDING rahega — guess par nahi banega.
+**Test command:** "WhatsApp kholo aur Priyadarshi search karo" (foreground chat/voice se; background se nahi, kyunki W5 ke hisab se background me compound nahi chalta).
+
+| Step | Kya hona chahiye | Success check | Fail par fallback |
+|---|---|---|---|
+| 1. Parse | Compound split: appName=WhatsApp, rest=Priyadarshi search karo | Dono hisse non-empty, appName galat app na ho | Separator na mile to brain par mat girao — "kaun si app, kya search karna hai" ek baar upfront poochho |
+| 2. App match | `findByName` se ek hi match | Exactly 1 match | 0 → "app nahi mili" + sujhaav; 1+ → ek baar upfront choice (beech me dobara nahi) |
+| 3. Verified open | `openVerified` | `Opened`/`AlreadyOpen`, 3500ms ke andar | `NoVerifier` → Permissions/Auto screen + "Accessibility ON karo"; `NotVisible` → ek retry (cold-start), phir "nahi khul paya" (kabhi "khol diya" nahi); `NoLaunchIntent` → Play Store raasta |
+| 4. Context carry | `noteOpened(pkg, label)` | Agle step me `matchesForeground` true | Note na hua to research-search par na gire — explicit "is app me" raasta ya step roko |
+| 5. UI ready wait | App ka search UI taiyaar ho | `visibleTexts` me "Search" (ya app ka search label) dikhe, fixed delay par bharosa nahi | Timeout par ek scroll + dobara check, phir "search box nahi mila" report |
+| 6. In-app search | `searchInApp` | Outcome `Done` ho (sirf `TypedOnly` nahi) | `NoSearchBox` → visibleTexts dikhao (label alag ho sakta hai); `TypedOnly` → Search/Go/Enter dobara, phir "likh diya hai, enter dabao" imaandaar message |
+| 7. Result verify + report | Query ka result screen par dikhe | `visibleTexts` me query ya result-item dikhe | Na dikhe to "search kar diya" ka daava mat karo — "search box tak pahuncha, result verify nahi hua" bolo; **result-tap chain is waqt bana hi nahi**, isliye scope search-tak hi hai |
+| 8. Report + log | Har step ka AutoLog | Open/search ki alag-alag entry | Koi step log ke bina "ho gaya" na bole |
+
+**Batch 1 me is flow ka status:** parser + runner pehle se steps 1–4 + 6 (submit tak) cover karte hain; step 5 (visibleTexts UI-ready wait) aur step 7 (result-visibility nuance) Batch 2 me aayenge. Routine ke roop me yehi flow **is waqt fail hona hi chahiye** (W8) — use is test ka hissa mat banao jab tak routine runner me compound + in-app support na aa jaye.
 
 ## 5. Batch 3 — Builder-entry wiring (user report: debug APK me builder tha hi nahi)
 
-**Finding (tip + APK dex se verified, 2026-10-30):**
-- Builder code **APK me maujood tha** (da42439b ke `classes6.dex` me 166 BuilderScreen references; tip me `ui/BuilderScreen.kt` ungated — B2-11 ruling: koi invented key gate nahi).
+**Finding (tip + APK dex + audit se verified, 2026-10-30):**
+- Builder code **APK me maujood tha** (da42439b ke `classes6.dex` me 166 BuilderScreen references; tip me `ui/BuilderScreen.kt`).
 - Entry **maujood** hai: TopAppBar me "Menu ▾" button (~FloraApp.kt:1507) → DropdownMenu me "Builder" item (~1560) → `Screen.BUILDER` → `BuilderScreen` call site (~5427); voice se "builder kholo" → generic screen map (~4698) → `Screen.BUILDER`.
-- Isliye problem **code missing nahi, discoverability** hai: lambi dropdown me 7th item + voice raasta user ko pata nahi tha.
-- **Batch 3 wiring (sirf entry, koi naya builder feature nahi):**
-  1. Voice exact "builder" (bina "kholo" ke) → `Screen.BUILDER` (generic map se pehle ek chhota exact check).
-  2. Final report + parent message me user ko seedha raasta likhna: Menu ▾ → Builder, ya bolo "builder kholo".
-  3. Koi naya screen/button design nahi — dropdown reorder jaisa cosmetic churn nahi (7th item scroll ke bina bhi dikhta hai; asli gap jaankari ka tha, jagah ka nahi).
+- **Asli kaaran (audit ne pakda — sirf discoverability nahi):** Menu item ungated hai (B2-11 ruling), **par screen gated hai**: `ui/BuilderScreen.kt:303-323` par `PlanFeatures.isAllowed("builder")` check hai. Licence-verify se mili list non-empty ho aur usme `"builder"` key na ho, to screen sirf ye message dikha kar return kar deti hai: "Builder abhi is plan me nahi hai." Usi block ka comment: server hissa (F2: seed 14→15, allowlist 14→15, panel editor) **pending** hai. Fail-open sirf tab jab list kabhi mili hi nahi ya khali hai (`core/PlanFeatures.kt:33`).
+- Matlab: Menu me Builder dikhna + andar sirf gate line milna = user ki nazar me "builder hai hi nahi". Ye entitlement ka mamla hai, code missing ka nahi.
+- **Batch 3 wiring (sirf entry + imaandaar message, entitlement change NAHI):**
+  1. Gate message ko wajah + raasta ke saath saaf karo (kaun si key/plan chahiye, kahan se milega) — gate hatana NAHI hai (wo F2/server faisla hai, user-gated).
+  2. Voice exact "builder" (bina "kholo" ke) → `Screen.BUILDER` (generic map se pehle ek chhota exact check).
+  3. Menu item par gate ka ishara (jaise "Builder" ke saath Pro nishaan jab allowed na ho) — sirf tab jab `PlanFeatures` check menu se seedha ho sake, warna chhodo (over-engineering nahi).
+  4. Final report + parent message me user ko seedha raasta + gate ki wajah likhna: Menu ▾ → Builder, ya bolo "builder kholo"; gate line dikhe to F2 server pending ki wajah se hai.
+  5. Koi naya builder feature nahi; Settings row / Home shortcut (jo audit me missing mile) Batch 3 me nahi — wo design pass ka area hai.
 
-## 6. Workflow audit + automation surfaces list (PENDING-AUDIT — audit child ki report se bharega)
+## 6. Workflow audit + automation surfaces list (audit child report se, 2026-10-30)
 
-- Sections: (a) har surface par pipeline toote points (chat/voice/overlay/browser/app-open/automation/builder/settings) with file:line; (b) surfaces verdict table (code-complete / toota / bana hi nahi / grant chahiye); (c) UI se unreachable surfaces ki alag flag list.
-- Ye sections audit report aane ke baad isi spec me append honge, phir Batch 2/3 ke design se cross-check honge.
+**Ek line me samasya (audit):** Ek planner nahi, **teen alag router** hain jo jude nahi hain — (1) chat ke hardcoded branches, (2) fallback `IntentRouter`, (3) builder-only `PlannerEngine` — aur daily automation (app-open, search, tap, play) planner ke toolset me hai hi nahi.
+
+**Toote points (har ek file:line ke saath audit report me):**
+- **W1 Chat:** `sendChat` pehle saikdon hardcoded branches chalata hai; `IntentRouter.route` sirf fallback hai (`FloraApp.kt:5165`); `Route.Plan` sirf Planner screen kholta + goal prefill karta hai (`5210-5213`) — plan banata/execute nahi karta. Plan sirf explicit phrases par milta hai.
+- **W2 Compound:** sirf 2 separators, sirf vakya-start/suffix; doosra hissa fixed `delay(1000)` ke baad dobara `sendChat` se, bina UI-ready verify ke. Background se compound bilkul nahi aata (W5).
+- **W3 YouTube:** search page hi aakhri step; play chain bana hi nahi; gaana branch result check kiye bina "khol raha hun" bolti hai (`4275-4296`, routine wala `1055-1064` bhi).
+- **W4 App-open:** `openVerified` imaandaar hai (`VerifiedAppLauncher.kt:84-135`), par gaana/routine caller result ignore karte hain; timeout 3500ms (cold-start par `NotVisible` ka risk, koi retry nahi); `findByName` substring match (multi-match = rukawat).
+- **W5 Voice background:** command execute hi nahi hota — `handleHeard` sirf `pending` + app foreground + dobara confirmation (`BackgroundMicService.kt:347-360`, `MainActivity.kt:91-93`, `FloraApp.kt:1452-1455`); `isCommand` list me compound/`khol k`/`gana bajao`/planner/`builder`/`routine` kuch nahi (`274-299`) — jo list me nahi wo brain Q&A par girta hai; lock par queue nahi hota; echo guard gap bhi (pehle audit se).
+- **W6 Overlay/notch:** button + status pill hai, execution surface nahi; permission na ho to chupchaap return (koi guidance nahi).
+- **W7 Browser (B1):** dikhana/padhna/bharna hai, planner se chalana nahi (`ToolRegistry` me browser descriptor-only; `PlanTool` me browser tool hi nahi); form-fill seemit (WebView sirf BrowserScreen active ho tab; native label-guess + fixed submit list); login-wall/captcha par research-fallback (stop #3, design-sahi).
+- **W8 Routines:** mini-router hai — na `sendChat`, na MacroEngine, na planner (`FloraApp.kt:960-1220`); compound/in-app/macro-step nahi chalta; fail = "step chhod diya" + delay + drop, koi retry/verify nahi; flag OFF = queue saaf.
+- **W9 Builder execution:** `runOneStep` me `successCheck` kabhi evaluate nahi hota (sirf validate + dikhaya jata hai); `PlanTool` me daily automation ka tool nahi; learned shortcut sirf NOTE/MACRO par; background execution kamzor (service fail par bhi plan chalta hai).
+- **W10 Planner→automation pul:** 3 manual hops (MacroStore save → Routines screen par Chalao + confirm → PlannerScreen par runner-log confirm); AutoLog marker kho jaye to step hamesha BLOCKED.
+- **W11 Confirmation:** aaj ulta hai — macro sensitive-step par beech me `NeedsConfirm` dialog (`MacroEngine.kt:170-192`, `FloraApp.kt:712-717`); planner per-step confirm; sirf Routines ka confirm upfront-sahi hai (`RoutinesScreen.kt:208-237`). Fix = confirmation ka waqt badalna (upfront-once), sirf code nahi.
+- **W12 Settings:** automation switches 5 jagah bikhre (AutoMode, Accessibility, Builder tokens, Skills toggle, gates); gate fail par sirf "Ye feature abhi band hai" — kaun sa gate, kabhi nahi bataya; dono flag systems fail-open.
+
+**Surfaces verdict (condensed — poori table audit report me):**
+- Code-complete: website open (caller par nirbhar), `clickAnyText`, `typeIntoFocused` (seemit), `goBack/goHome`, BrowserScreen form-fill (sirf active ho tab), B1 browser dikhana/padhna, MacroEngine 8 steps (play/search/swipe/select nahi + beech-confirm), Macros UI, PlannerEngine builder tools, GoalOrchestrator (beech-confirm ke saath), DeviceActions NoAccess, App install, AutoScreen, background mic sunna/jawab.
+- Toota: app-open (cold-start/multi-match), in-app search (sirf Search/Khoj text, icon-only box nahi), `clickText` (pehla substring match, verify nahi), `setTextOnFirstEditable` (galat field ka risk), scroll/swipe (target/verify nahi), native form-fill (label guess), routines mini-router, planner-macro adapter (3-hop), notch tap.
+- Bana hi nahi: planner-driven browser, planner for daily automation (PlanTool me tool nahi), overlay execution, background execution, macro Swipe/Search/Play/LongPress/Coordinate steps, multi-file builder preview.
+- Grant-chahiye: app-open (Accessibility), call/SMS (permission + AutoMode/confirm), Shizuku/One-Tap (Shizuku app + grant), screenshot (API 30+).
+- Sirf code me, UI se reachable nahi: purana `AppLauncher.launch()` (dead/legacy — wapas mat jaana), `ToolRegistry` descriptors (execute nahi karte), `searchMemory/selfMap/aiBuildStatus` (chat/BuilderScreen se call site verify nahi hua).
+
+**Batch 4 (Batch 3 ke baad — is spec me darj, implement baad me):**
+- Background `isCommand` me compound/media/builder patterns jodo (execution raasta wahi pending → sendChat hook rahega, naya background execution model nahi).
+- Routine gaana/website steps me result-check (W3/W4 — "khol diya" sirf Opened par).
+- APP_OPEN cold-start retry (NotVisible par ek baar, W4).
+- Macro/planner beech-confirm ko upfront-once par lana (W11) — alag design faisla chahiye, isliye Batch 4 me sirf VoicePlan/routine surfaces par lagu hoga.
 
 ## 7. Safety / boundaries (sab batches par lagu)
 
@@ -140,6 +180,12 @@ Kram (har step Auto Log me):
 - Gaane ka naam na ho to: shuru me ek baar poochhe ("Kaun sa gaana?"), beech me nahi.
 - "builder" / "builder kholo" → BuilderScreen khule (Menu ▾ → Builder wala raasta bhi batana).
 - Phone evidence chahiye: Accessibility ON? Auto Mode ON? (donon haan/na — value kabhi nahi).
+
+## 8b. Batch 1 deviations (jaanboojh kar, record ke liye)
+
+- **Single app-open Batch 1 me migrate NAHI hua:** maujooda single-open branch pehle se confirm-once compliant hai (Auto Mode ON → seedha execute, OFF → ek `voiceAppConfirm` dialog) — toota hua nahi hai, isliye churn nahi kiya. Planner migration ka agla charan (follow-up) me aayega.
+- **Gaane ka naam na mile to runner question nahi poochhta:** parser null lautaata hai, maujooda gaana branch shuru me ek baar poochhti hai ("Kaun sa gaana bajau?") — ye bhi pre-execution hai, rule ka ullanghan nahi; doosra question path banane se bacha gaya.
+- **Batch 1 media plan search par khatam hota hai (play Batch 2 me):** TAP step bina `clickFirstVideoResult` ke jhootha hota, isliye Batch 1 me plan steps [open, search] hain aur final report imaandaari se search tak ka daava karta hai. Poora play Batch 2 me aayega.
 
 ## 9. Pre-audit (implement se PEHLE — result 2026-10-30, tip 4e4c5a91 se verify)
 
