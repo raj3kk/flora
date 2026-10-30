@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
+import android.os.PowerManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -64,6 +65,8 @@ object DeviceActions {
         object RingerNormal : DeviceRequest()
         object RingerVibrate : DeviceRequest()
         object Silent : DeviceRequest()
+        object ThermalInfo : DeviceRequest()
+        object ThermalStop : DeviceRequest()
     }
 
     /** Torch ka aakhri Flora-action (process-local). CameraManager me
@@ -157,6 +160,17 @@ object DeviceActions {
             t.contains("ring volume")
         ) {
             return DeviceRequest.VolumeRead(volumeStream(t))
+        }
+        // Thermal (Batch D) — stop phrase info se PEHLE ("thermal
+        // throttle band karo" me "thermal" bhi hai).
+        if (t.contains("thermal throttle band karo") || t.contains("throttle band karo")) {
+            return DeviceRequest.ThermalStop
+        }
+        if (t.contains("phone garam") || t.contains("phone heat") ||
+            t.contains("thermal") || t.contains("heat kitna") ||
+            t.contains("phone ka temperature")
+        ) {
+            return DeviceRequest.ThermalInfo
         }
         // Info phrases.
         if (t.contains("time batao") || t.contains("time kya hai") ||
@@ -266,6 +280,8 @@ object DeviceActions {
                 is DeviceRequest.RingerNormal -> ringerSet(context, AudioManager.RINGER_MODE_NORMAL)
                 is DeviceRequest.RingerVibrate -> ringerSet(context, AudioManager.RINGER_MODE_VIBRATE)
                 is DeviceRequest.Silent -> silentAction(context)
+                is DeviceRequest.ThermalInfo -> thermalInfo(context)
+                is DeviceRequest.ThermalStop -> thermalStop(context)
                 is DeviceRequest.WifiSettings -> intentReply(
                     context,
                     Intent(Settings.ACTION_WIFI_SETTINGS),
@@ -575,6 +591,83 @@ object DeviceActions {
             Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS),
             "Silent ke liye Do Not Disturb access chahiye — settings page khol " +
                 "raha hun, wahan Flora ko allow karo, phir dobara 'silent karo' bolo.",
+        )
+    }
+
+    /** Batch D — thermal detect + manage. Status enum OS ka hai (API
+     * 29+); battery temp sensor ka hai (tenths °C) — exact SoC temp
+     * ka daava kabhi nahi. MODERATE tak sirf salah; SEVERE+ par
+     * visible cooling mode (notification + Auto Log + stop). */
+    private fun thermalInfo(context: Context): SdResult<String> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return SdResult.Ok(
+                "Is Android version par thermal status nahi milta (thermal API " +
+                    "Android 10+ me hai). Battery % alag se poochh sakte ho.",
+            )
+        }
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            ?: return SdResult.Failure("Thermal status padh nahi paya — dobara koshish karo.")
+        val status = try {
+            pm.currentThermalStatus
+        } catch (e: Exception) {
+            -1
+        }
+        val state = BatteryStateReader.read(context)
+        val tempText = state.tempTenths?.let { t ->
+            val whole = t / 10
+            val frac = kotlin.math.abs(t % 10)
+            " Battery sensor ke mutabiq $whole.$frac°C hai."
+        } ?: ""
+        return when (status) {
+            PowerManager.THERMAL_STATUS_NONE ->
+                SdResult.Ok("Phone ka thermal status normal hai.$tempText")
+            PowerManager.THERMAL_STATUS_LIGHT ->
+                SdResult.Ok(
+                    "Phone halka garam hai.$tempText Bhaari kaam thoda kam rakhna behtar rahega.",
+                )
+            PowerManager.THERMAL_STATUS_MODERATE ->
+                SdResult.Ok(
+                    "Phone garam hai.$tempText Suggestion: bhaari apps band karo, charging " +
+                        "par game mat khelo, cover hatayo to thanda hone me madad milegi. " +
+                        "Cooling mode abhi ON nahi hua hai.",
+                )
+            PowerManager.THERMAL_STATUS_SEVERE,
+            PowerManager.THERMAL_STATUS_CRITICAL,
+            PowerManager.THERMAL_STATUS_EMERGENCY,
+            PowerManager.THERMAL_STATUS_SHUTDOWN -> {
+                val word = when (status) {
+                    PowerManager.THERMAL_STATUS_SEVERE -> "bahut garam"
+                    PowerManager.THERMAL_STATUS_CRITICAL -> "critical garam"
+                    PowerManager.THERMAL_STATUS_EMERGENCY -> "emergency par"
+                    else -> "shutdown ke kareeb"
+                }
+                if (ThermalThrottle.isThrottled()) {
+                    SdResult.Ok(
+                        "Phone $word hai.$tempText Cooling mode pehle se ON hai — viewing " +
+                            "pause hai, brightness kam hai. Thanda hote hi apne aap resume ho jayega.",
+                    )
+                } else {
+                    ThermalThrottle.engage(context, word)
+                    SdResult.Ok(
+                        "Phone $word hai.$tempText Cooling mode ON kar raha hun: live viewing " +
+                            "pause ho gayi hai, apni window ki brightness kam ho gayi hai. Thanda " +
+                            "hote hi apne aap resume ho jayega; band karne ke liye " +
+                            "'thermal throttle band karo' bolo.",
+                    )
+                }
+            }
+            else -> SdResult.Failure("Thermal status padh nahi paya — dobara koshish karo.")
+        }
+    }
+
+    private fun thermalStop(context: Context): SdResult<String> {
+        if (!ThermalThrottle.isThrottled()) {
+            return SdResult.Ok("Cooling mode ON hi nahi hai — kuch band karne ko nahi hai.")
+        }
+        ThermalThrottle.disengage(context, "user-stop")
+        return SdResult.Ok(
+            "Cooling mode band kar diya hai — viewing resume ho gayi hai, " +
+                "brightness wapas normal hai.",
         )
     }
 }

@@ -200,6 +200,18 @@ fun FloraApp(
     onContinuousStop: () -> Unit,
 ) {
     var screen by remember { mutableStateOf(Screen.CHAT) }
+    // NoAccess Batch D — thermal throttle: apni window ki brightness
+    // kam karo (sirf Flora ki window, system setting nahi); clear par
+    // default (-1f) wapas. Activity LocalContext se milti hai (import
+    // pehle se hai); effect sirf throttle state badalne par chalta hai.
+    val thermalActivity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+    val thermalThrottled by com.flora.app.tools.ThermalThrottle.throttledState
+    LaunchedEffect(thermalThrottled) {
+        val window = thermalActivity?.window ?: return@LaunchedEffect
+        val attrs = window.attributes
+        attrs.screenBrightness = if (thermalThrottled) 0.3f else -1f
+        window.attributes = attrs
+    }
     // Continuous mic (v2.14): toggle state + sendChat holder (local
     // fun baad me declare hota hai, isliye effect holder se call
     // karta hai — hook order ke liye effect yahan, call holder se).

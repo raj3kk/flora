@@ -162,6 +162,13 @@ object ToolRegistry {
             licenceKey = null,
             executesVia = "FloraApp chat branch -> DeviceActions (NoAccess Batch C)",
         ),
+        ToolDescriptor(
+            name = "device_thermal",
+            kind = "device-local",
+            permission = "Koi permission nahi — thermal status (API 29+) + battery sensor temp read hi; throttle sirf Flora ka apna workload",
+            licenceKey = null,
+            executesVia = "FloraApp chat branch -> DeviceActions + ThermalThrottle (NoAccess Batch D)",
+        ),
     )
 
     fun byName(name: String): ToolDescriptor? = all().firstOrNull { it.name == name }

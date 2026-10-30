@@ -165,6 +165,113 @@ shabd par nahi — ambiguous hai, brain par girne do).
 - FloraApp.kt poori file push hoti hai — edit se pehle live-tip match
   (collision protocol) har batch me dobara verify.
 
+## 7. Batch D — thermal detect + manage (user order 2026-10-30 ~11:33 IST)
+
+**Kram:** spec freeze ho chuka tha + Batch A push ho chuka tha, isliye
+thermal Batch D hai (Batch C ke baad, apni pre-audit ke saath). Pehle
+wale batches ka kram nahi toota hai. Ye section Batch D ke push me
+spec doc ke saath jayega.
+
+### D1. Detect (verify kiya gaya, guess par number nahi)
+
+- **Thermal status enum (OS hi source):** PowerManager
+  .getCurrentThermalStatus() (API 29+; minSdk 26 hone se API 26–28 par
+  imaandaar "is Android version par thermal status nahi milta" message).
+  Enum words: NONE normal, LIGHT halka garam, MODERATE garam, SEVERE
+  bahut garam, CRITICAL critical garam, EMERGENCY emergency, SHUTDOWN
+  shutdown ke kareeb.
+- **Battery temperature:** sticky ACTION_BATTERY_CHANGED se
+  EXTRA_TEMPERATURE (tenths °C, jaise 285 = 28.5°C). **Rule:** ye read
+  sirf `assistant/BatteryState.kt` me judgega (BatteryStateReader ka
+  ekmatra-reader rule) — BatteryState me `tempTenths: Int? = null`
+  field judta hai, baaki call sites default se chalte rahenge. Reply me
+  sirf "battery sensor ke mutabiq X°C" likha jayega — kabhi "phone ka
+  temperature X°C" ka jhootha SoC daava nahi. Sensor se na mile to
+  sirf status enum par bharosa, exact number kabhi invent nahi.
+- **Phrases:** phone garam / phone heat / phone garam ho raha / thermal /
+  heat kitna / phone ka temperature. Stop phrase ("thermal throttle
+  band karo" / "throttle band karo") info se PEHLE match hogi.
+
+### D2. Manage ladder (sirf Flora ka apna workload)
+
+| Status | Action |
+|---|---|
+| NONE / LIGHT | Info + halki salah (bhaari kaam thoda kam karo). Koi throttle nahi. |
+| MODERATE | Warning + suggestions (bhaari apps band karo, charging par game mat khelo, cover hatayo). Koi throttle nahi — suggestion hi hai. |
+| SEVERE / CRITICAL / EMERGENCY / SHUTDOWN | **Cooling mode ON (visible):** chat + TTS me batana, notification (own channel `flora_thermal`, id 2005 — 2004 PlannerEngine me used hai, pre-audit catch), Auto Log `[device:thermal]` event, viewing polling PAUSE, apni window brightness kam (neeche), session-scoped thermal listener ON. Band karne ke liye "thermal throttle band karo" bolo — stop hamesha milega. |
+
+- **Viewing pause (verified hook):** LiveScreenViewing ka loop
+  `while (isViewing) { pollTick(); delay() }` hai aur pollTick
+  pollGate.shouldRequest check karta hai. Batch D me ViewingPollGate
+  me `paused` flag + LiveScreenViewing me `setThermalPaused()` judta
+  hai — loop `if (!pollGate.paused) pollTick()` karega. Session zinda
+  rehti hai (indicator rehta hai), sirf screenshot requests rukte
+  hain — ye pause hai, stop nahi; viewing ki consent model nahi
+  toot-ti (dobara start ke liye naya user request nahi chahiye, wahi
+  session resume hoti hai).
+- **Apni window brightness (sirf apni window, system setting nahi):**
+  ThermalThrottle ka compose state FloraApp me LaunchedEffect se padha
+  jayega; Activity window attributes.screenBrightness kam hoga, clear
+  par -1f (default) wapas. Placement Batch D pre-audit me verify hoga.
+- **Auto-resume:** throttle session ke andar hi PowerManager
+  .addThermalStatusListener (API 29+, main executor) register hoga —
+  app start par koi background listener nahi (FloraApplication ka "no
+  background work on its own" rule barkaraar). Status MODERATE ya
+  neeche aate hi auto-resume: flag clear, notification cancel, viewing
+  resume, brightness restore, Auto Log. Listener disengage/stop par
+  unregister hoga.
+- **Notification permission note:** POST_NOTIFICATIONS na mile to
+  notify() chupchaap fail hota hai (crash nahi) — chat reply + Auto
+  Log tab bhi message pahunchate hain; notification sirf additional
+  channel hai, ekmatra channel nahi.
+
+### D3. NEVER (thermal me bhi)
+
+- Doosre apps kill karna — kabhi nahi (sirf suggestion).
+- System settings silent change — kabhi nahi (brightness sirf apni
+  window; system brightness setting chhui nahi jayegi).
+- Silent thermal action — har action visible + Auto Log + stop.
+- Exact temperature ka jhootha daava — sirf sensor/status enum.
+
+### D4. HELD (likhit wajah)
+
+- **Neural inference queue rokna — HELD:** koi queue maujood hi nahi
+  hai (KokoroModelManager me sirf download hai; synthesis per-call
+  hai). Per-call routing badalna voice behaviour badlega — alag
+  decision chahiye, guess par throttle nahi.
+- **User-initiated downloads/rendering gate — HELD:** throttle ke
+  dauraan user khud shuru kiya hua bhaari kaam Flora nahi rokegi
+  (user choice); throttle Flora ke auto/loop kaam par hai.
+- **Viewing stop + auto-restart — NAHI (design):** stop ka matlab
+  session khatam + dobara sirf naye user request par start hota hai —
+  auto-restart viewing ki consent model todta, isliye pause hi raasta
+  hai.
+
+### D5. Batch D files
+
+- `tools/ThermalThrottle.kt` (NAYA — state, notification, listener,
+  engage/disengage/stop).
+- `tools/DeviceActions.kt` (ThermalInfo + ThermalStop match/execute).
+- `assistant/BatteryState.kt` (tempTenths field + EXTRA_TEMPERATURE
+  read — ekmatra-reader rule barkaraar).
+- `viewing/ViewingSampler.kt` (pollGate.paused) + `viewing/
+  LiveScreenViewing.kt` (loop pause check + setThermalPaused).
+- `ui/FloraApp.kt` (brightness LaunchedEffect — placement pre-audit
+  me verify).
+- `planner/ToolRegistry.kt` (device_thermal descriptor, licenceKey
+  null).
+- `tools/DeviceMatchTest.kt` (thermal phrases + stop-first order).
+
+### D6. Phone-test steps (Phase 10)
+
+1. "Phone garam hai?" → sahi status word + battery temp (agar sensor
+   de) + Auto Log.
+2. SEVERE simulate nahi ho sakta lab me — test sirf MODERATE/LIGHT
+   par warning/suggestion + koi throttle nahi, ye verify hoga; SEVERE
+   ladder ka code-path review + Auto Log format se verify hoga.
+3. Throttle stop phrase → notification cancel + viewing resume +
+   brightness restore + Auto Log.
+
 ## 6. Phone-test steps (Phase 10 — is plan par abhi claim nahi)
 
 1. "Time batao" → sahi time/day jawab + Auto Log entry.

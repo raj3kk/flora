@@ -99,6 +99,10 @@ class ViewingSampler {
 class ViewingPollGate {
     private var lastRequestMs: Long = -1L
 
+    /** Thermal throttle (Batch D): true ho to polling loop request nahi
+     * bhejega — session zinda rehti hai, indicator rehta hai. */
+    var paused: Boolean = false
+
     fun shouldRequest(nowMs: Long, intervalMs: Long): Boolean {
         if (lastRequestMs < 0L) return true
         return nowMs - lastRequestMs >= intervalMs

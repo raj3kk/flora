@@ -122,6 +122,14 @@ class DeviceMatchTest {
     }
 
     @Test
+    fun thermalMatches() {
+        assertTrue(DeviceActions.match("phone garam hai") is DeviceActions.DeviceRequest.ThermalInfo)
+        assertTrue(DeviceActions.match("phone ka temperature") is DeviceActions.DeviceRequest.ThermalInfo)
+        assertTrue(DeviceActions.match("thermal throttle band karo") is DeviceActions.DeviceRequest.ThermalStop)
+        assertTrue(DeviceActions.match("throttle band karo") is DeviceActions.DeviceRequest.ThermalStop)
+    }
+
+    @Test
     fun noHijackOfOtherRoutes() {
         assertNull(DeviceActions.match("whatsapp kholo"))
         assertNull(DeviceActions.match("aaj ka mausam kaisa hai"))

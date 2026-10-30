@@ -263,7 +263,7 @@ object LiveScreenViewing {
         onLog("viewing-start purpose=" + sessionPurpose + " fps=" + fps)
         pollJob = viewingScope.launch {
             while (isViewing) {
-                pollTick()
+                if (!pollGate.paused) pollTick()
                 delay(intervalMs)
             }
         }
@@ -287,6 +287,15 @@ object LiveScreenViewing {
         requestInFlight = false
         appContext?.let { cancelNotification(it) }
         onLog("viewing-stop reason=" + reason)
+    }
+
+    /** Thermal throttle (Batch D): polling pause — session zinda rehti
+     * hai, indicator rehta hai, sirf screenshot requests rukte hain.
+     * Stop se alag hai (stop session khatam karta hai, dobara sirf
+     * naye user request par start hota hai). */
+    fun setThermalPaused(paused: Boolean) {
+        pollGate.paused = paused
+        onLog("viewing-" + if (paused) "pause thermal" else "resume thermal")
     }
 
     private fun hasNotificationPermission(context: Context): Boolean {

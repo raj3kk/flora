@@ -20,8 +20,12 @@ import com.flora.app.data.FloraPreferences
  *   battery <= 20%; CRITICAL = discharging + battery <= 10%;
  *   FULL = 100% (sticky read se). Charging ON par koi
  *   low/critical nag nahi.
+ * - Temperature bhi yahi padhi jati hai (EXTRA_TEMPERATURE, tenths
+ *   °C) — NoAccess Batch D thermal ke liye; ekmatra-reader rule
+ *   temperature par bhi lagu hai (doosri file me battery/temp
+ *   read mat jodo).
  */
-data class BatteryState(val percent: Int, val charging: Boolean)
+data class BatteryState(val percent: Int, val charging: Boolean, val tempTenths: Int? = null)
 
 /**
  * Shared NON-COMPOSABLE battery-note source (Lane A — A1 follow-up F3).
@@ -70,7 +74,9 @@ object BatteryStateReader {
             val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
             val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                 status == BatteryManager.BATTERY_STATUS_FULL
-            BatteryState(percent, charging)
+            val tempRaw = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
+            val tempTenths = if (tempRaw != Int.MIN_VALUE) tempRaw else null
+            BatteryState(percent, charging, tempTenths)
         } catch (e: Exception) {
             // Battery na padhi ja sake to fail-open: normal jawab, koi nag nahi.
             BatteryState(-1, false)
