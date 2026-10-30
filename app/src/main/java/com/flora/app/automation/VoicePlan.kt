@@ -15,12 +15,14 @@ import kotlinx.coroutines.delay
  * Ye PlannerEngine/PlanTool/Room plans se ALAG lightweight layer hai
  * (builder plans untouched). Executor sirf maujooda raaste hain:
  * VerifiedAppLauncher, InAppSearch, FloraAutomationService.
- * TAP_FIRST_RESULT Batch 2 me aayega (SD-5 general surface nahi).
+ * TAP_FIRST_RESULT sirf YouTube first-result chain ke liye hai
+ * (Batch 2; SD-5 general surface nahi).
  */
 enum class VoicePlanExecutor {
     APP_OPEN,
     SEARCH_URL,
     IN_APP_SEARCH,
+    TAP_FIRST_RESULT,
 }
 
 data class VoicePlanStep(
@@ -29,6 +31,9 @@ data class VoicePlanStep(
     val input: Map<String, String> = emptyMap(),
     val successCheck: String = "",
     val fallback: String = "",
+    // Fail par generic message ki jagah ye dikhega (jaise TAP fail par
+    // imaandaar "search khol diya, khud tap karo" line).
+    val failMessage: String = "",
 )
 
 data class VoicePlan(
@@ -67,6 +72,7 @@ object VoicePlanRunner {
         }
         host.addMessage("Plan chala raha hun: " + plan.steps.joinToString(" → ") { it.title })
         var previousWasOpen = false
+        var usedFallback = false
         for (step in plan.steps) {
             if (previousWasOpen) delay(1000)
             previousWasOpen = false
@@ -77,11 +83,14 @@ object VoicePlanRunner {
                     val url = fb.removePrefix("SEARCH_URL:")
                     val r = VerifiedAppLauncher.openWebsiteVerified(host.context, url)
                     if (r == VerifiedAppLauncher.OpenResult.Opened) {
+                        usedFallback = true
                         try { host.log("VoicePlan fallback: search URL khola (${plan.goal})") } catch (e: Exception) { }
                         continue
                     }
                 }
-                val msg = "Plan ruk gaya: '${step.title}' nahi ho paya. ${step.successCheck}"
+                val msg = step.failMessage.ifEmpty {
+                    "Plan ruk gaya: '${step.title}' nahi ho paya. ${step.successCheck}"
+                }
                 host.addMessage(msg)
                 host.speak(msg)
                 try { host.log("VoicePlan FAIL: ${plan.goal} -> ${step.title}") } catch (e: Exception) { }
@@ -89,7 +98,8 @@ object VoicePlanRunner {
             }
             if (step.executor == VoicePlanExecutor.APP_OPEN) previousWasOpen = true
         }
-        val done = "Ho gaya: " + plan.steps.joinToString(", ") { it.title } + "."
+        val done = "Ho gaya: " + plan.steps.joinToString(", ") { it.title } + "." +
+            if (usedFallback) " (search web se khola gaya)" else ""
         host.addMessage(done)
         host.speak(done)
         try { host.log("VoicePlan DONE: ${plan.goal}") } catch (e: Exception) { }
@@ -101,7 +111,12 @@ object VoicePlanRunner {
             VoicePlanExecutor.APP_OPEN -> {
                 val label = step.input["label"] ?: return false
                 val pkg = step.input["package"] ?: return false
-                val result = VerifiedAppLauncher.openVerified(host.context, LaunchableApp(label, pkg))
+                var result = VerifiedAppLauncher.openVerified(host.context, LaunchableApp(label, pkg))
+                // Cold-start retry (audit W4): badi app pehli baar der se
+                // khule to NotVisible milega — ek baar dobara koshish.
+                if (result == VerifiedAppLauncher.OpenResult.NotVisible) {
+                    result = VerifiedAppLauncher.openVerified(host.context, LaunchableApp(label, pkg))
+                }
                 val verified = result == VerifiedAppLauncher.OpenResult.Opened ||
                     result == VerifiedAppLauncher.OpenResult.AlreadyOpen
                 if (verified) {
@@ -124,6 +139,14 @@ object VoicePlanRunner {
                 val query = step.input["query"] ?: return false
                 val service = FloraAutomationService.instance ?: return false
                 InAppSearch.searchInApp(service, query) == InAppSearchOutcome.Done
+            }
+            VoicePlanExecutor.TAP_FIRST_RESULT -> {
+                val pkg = step.input["package"] ?: return false
+                val service = FloraAutomationService.instance ?: return false
+                if (!service.waitForForeground(pkg, 3000)) return false
+                if (!service.clickFirstVideoResult()) return false
+                delay(1500)
+                service.foregroundPackage() == pkg
             }
         }
     }

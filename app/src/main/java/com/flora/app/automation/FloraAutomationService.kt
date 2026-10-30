@@ -156,6 +156,65 @@ class FloraAutomationService : AccessibilityService() {
         return false
     }
 
+    /**
+     * Planner-first routing, Batch 2 — YouTube first-result chain ONLY
+     * (general tap surface nahi, wo SD-P4 domain hai).
+     *
+     * Search results page par pehla video result tap karta hai.
+     * Video ka title TextView khud clickable nahi hota — uska item
+     * container clickable hota hai — isliye sabse GEHRA clickable
+     * container chuna jata hai jiske neeche (2 level tak) title-jaisa
+     * text ho. Search-box/nav labels (Search/Khoj/Home/Shorts/...)
+     * aur editable fields ko chhoda jata hai. Koi candidate na mile
+     * to false (caller imaandaar report dega, jhootha "play ho gaya"
+     * kabhi nahi). Phone par asli YouTube UI se verify Phase 10 me
+     * hoga — ye heuristic hai, guarantee nahi.
+     */
+    fun clickFirstVideoResult(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val skip = setOf(
+            "search", "khoj", "home", "shorts", "subscriptions", "subscription",
+            "library", "you", "create", "notifications", "voice search",
+            "sign in", "filter", "cast", "all",
+        )
+        var visited = 0
+        fun own(node: AccessibilityNodeInfo): String =
+            ((node.text?.toString() ?: "") + " " +
+                (node.contentDescription?.toString() ?: "")).trim()
+        fun titleLike(node: AccessibilityNodeInfo): Boolean {
+            val t = own(node)
+            return t.length >= 3 && t.lowercase() !in skip && !node.isEditable
+        }
+        fun hasTitleBelow(node: AccessibilityNodeInfo, depth: Int): Boolean {
+            if (depth > 2) return false
+            for (i in 0 until node.childCount) {
+                val c = node.getChild(i) ?: continue
+                if (titleLike(c)) return true
+                if (hasTitleBelow(c, depth + 1)) return true
+            }
+            return false
+        }
+        var best: AccessibilityNodeInfo? = null
+        var bestDepth = -1
+        fun dfs(node: AccessibilityNodeInfo?, depth: Int) {
+            if (node == null || visited > 800) return
+            visited++
+            if (node.isClickable && !node.isEditable &&
+                own(node).lowercase() !in skip && hasTitleBelow(node, 0) &&
+                depth >= bestDepth
+            ) {
+                best = node
+                bestDepth = depth
+            }
+            for (i in 0 until node.childCount) {
+                dfs(node.getChild(i), depth + 1)
+            }
+        }
+        dfs(root, 0)
+        val target = best ?: return false
+        return target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+    }
+
     private fun findEditable(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         if (node == null) return null
         if (node.isEditable) return node

@@ -65,13 +65,12 @@ object VoicePlanParser {
             if (first.isNotEmpty() && rest.isNotEmpty()) {
                 val appName = when (sep) {
                     "khol k", "kholke" -> if (first in OWN_SCREEN_NAMES) null else first
-                    " kholo to " -> {
-                        if (!first.endsWith(" kholo")) null
-                        else {
-                            val n = first.removeSuffix(" kholo").trim()
-                            if (n in OWN_SCREEN_NAMES || n.isEmpty()) null else n
-                        }
-                    }
+                    // " kholo to " separator ke andar hi " kholo" hota hai,
+                    // isliye substringBefore se `first` seedha app naam hai
+                    // (jaise "youtube") — endsWith(" kholo") yahan kabhi
+                    // sach nahi hota (CI run 41024742806: compoundKholoToMedia
+                    // isi wajah se galat plan banata tha). "khol k" jaisa hi.
+                    " kholo to " -> if (first in OWN_SCREEN_NAMES || first.isEmpty()) null else first
                     else -> {
                         when {
                             first.startsWith("open ") || first.startsWith("kholo ") ->
@@ -194,6 +193,10 @@ object VoicePlanParser {
         val song = (after.ifEmpty { before }).trim()
         if (song.isEmpty()) return null
 
+        val ytMatches = if (forceApp == null) resolveApp("youtube") else emptyList()
+        val yt = ytMatches.firstOrNull {
+            it.first.equals("YouTube", ignoreCase = true)
+        } ?: ytMatches.firstOrNull()
         val steps = mutableListOf<VoicePlanStep>()
         if (forceApp != null) {
             steps += VoicePlanStep(
@@ -202,18 +205,13 @@ object VoicePlanParser {
                 input = mapOf("label" to forceApp.first, "package" to forceApp.second),
                 successCheck = "App verified khuli.",
             )
-        } else {
-            val yt = resolveApp("youtube").firstOrNull {
-                it.first.equals("YouTube", ignoreCase = true)
-            } ?: resolveApp("youtube").firstOrNull()
-            if (yt != null) {
-                steps += VoicePlanStep(
-                    title = "YouTube kholo",
-                    executor = VoicePlanExecutor.APP_OPEN,
-                    input = mapOf("label" to yt.first, "package" to yt.second),
-                    successCheck = "App verified khuli.",
-                )
-            }
+        } else if (yt != null) {
+            steps += VoicePlanStep(
+                title = "YouTube kholo",
+                executor = VoicePlanExecutor.APP_OPEN,
+                input = mapOf("label" to yt.first, "package" to yt.second),
+                successCheck = "App verified khuli.",
+            )
         }
         steps += VoicePlanStep(
             title = "'$song' search karo",
@@ -222,6 +220,24 @@ object VoicePlanParser {
             successCheck = "Search box me gaana type + submit hua.",
             fallback = "SEARCH_URL:" + youtubeSearchUrl(song),
         )
+        // Batch 2 — TAP step sirf tab jab YouTube app maujood ho
+        // (APP_OPEN step hai). YouTube app na ho to plan search par
+        // khatam hota hai; browser results par tap out-of-scope hai.
+        val tapPkg = when {
+            forceApp != null && forceApp.first.equals("YouTube", ignoreCase = true) ->
+                forceApp.second
+            forceApp == null && yt != null -> yt.second
+            else -> null
+        }
+        if (tapPkg != null) {
+            steps += VoicePlanStep(
+                title = "Pehla result play karo",
+                executor = VoicePlanExecutor.TAP_FIRST_RESULT,
+                input = mapOf("package" to tapPkg),
+                successCheck = "YouTube saamne ho aur pehla result khula ho.",
+                failMessage = "Search khol diya hai, pehla result khud tap karo (auto-play chain yahan ruka).",
+            )
+        }
         return VoicePlan(goal = original, steps = steps)
     }
 }

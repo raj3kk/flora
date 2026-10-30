@@ -26,26 +26,29 @@ class VoicePlanParserTest {
     fun compoundAurMedia() {
         val plan = VoicePlanParser.parse("youtube kholo aur arijit ka gaana bajao", resolver)
         assertNotNull(plan)
-        assertEquals(2, plan!!.steps.size)
+        assertEquals(3, plan!!.steps.size)
         assertEquals(VoicePlanExecutor.APP_OPEN, plan.steps[0].executor)
         assertEquals("YouTube", plan.steps[0].input["label"])
         assertEquals(VoicePlanExecutor.IN_APP_SEARCH, plan.steps[1].executor)
         assertEquals("arijit ka", plan.steps[1].input["query"])
+        assertEquals(VoicePlanExecutor.TAP_FIRST_RESULT, plan.steps[2].executor)
+        assertEquals("com.google.android.youtube", plan.steps[2].input["package"])
     }
 
     @Test
     fun compoundKholKMedia() {
         val plan = VoicePlanParser.parse("youtube khol k gana bajao arijit", resolver)
         assertNotNull(plan)
-        assertEquals(2, plan!!.steps.size)
+        assertEquals(3, plan!!.steps.size)
         assertEquals("arijit", plan.steps[1].input["query"])
+        assertEquals(VoicePlanExecutor.TAP_FIRST_RESULT, plan.steps[2].executor)
     }
 
     @Test
     fun compoundKholoToMedia() {
         val plan = VoicePlanParser.parse("youtube kholo to arijit ka gana bajao", resolver)
         assertNotNull(plan)
-        assertEquals(2, plan!!.steps.size)
+        assertEquals(3, plan!!.steps.size)
         assertEquals("arijit ka", plan.steps[1].input["query"])
     }
 
@@ -53,13 +56,29 @@ class VoicePlanParserTest {
     fun standaloneMedia() {
         val plan = VoicePlanParser.parse("arijit ka gana bajao", resolver)
         assertNotNull(plan)
-        assertEquals(2, plan!!.steps.size)
+        assertEquals(3, plan!!.steps.size)
         assertEquals(VoicePlanExecutor.APP_OPEN, plan.steps[0].executor)
         assertEquals("arijit ka", plan.steps[1].input["query"])
         assertEquals(
             "SEARCH_URL:https://www.youtube.com/results?search_query=arijit+ka",
             plan.steps[1].fallback,
         )
+        assertEquals(VoicePlanExecutor.TAP_FIRST_RESULT, plan.steps[2].executor)
+    }
+
+    @Test
+    fun mediaWithoutYoutubeAppHasNoTapStep() {
+        val noApp: (String) -> List<Pair<String, String>> = { emptyList() }
+        val plan = VoicePlanParser.parse("arijit ka gana bajao", noApp)
+        assertNotNull(plan)
+        assertEquals(1, plan!!.steps.size)
+        assertEquals(VoicePlanExecutor.IN_APP_SEARCH, plan.steps[0].executor)
+    }
+
+    @Test
+    fun compoundRestMediaNonYoutubeIsNull() {
+        // Batch 1 rule: rest-media chain sirf YouTube par.
+        assertNull(VoicePlanParser.parse("spotify kholo aur gaana bajao arijit", resolver))
     }
 
     @Test
