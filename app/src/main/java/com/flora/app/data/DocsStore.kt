@@ -18,8 +18,9 @@ data class FloraDoc(val title: String, val body: String)
 
 /**
  * Documents: title + body notes, on-device only (DataStore JSON).
- * No server, no backup, no sharing from this store. Export/share
- * is a separate, user-confirmed step and is NOT in v0.5.
+ * No server, no backup, no auto-sharing. Export (parity batch
+ * 2026-10-31, M8) sirf user ke tap par hota hai (DocsScreen ke
+ * buttons) — CSV + PDF, Downloads/Flora me; koi auto-share nahi.
  */
 class DocsStore(private val context: Context) {
 

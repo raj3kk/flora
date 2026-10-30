@@ -100,7 +100,7 @@ import android.content.ComponentName
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 
-private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS, APPEARANCE, COMM, FAV_SONGS, VAULT, TEACH_ONCE, CATCHER, REMINDERS, PICTURES, NOTICES, TRIGGERS }
+private enum class Screen { CHAT, SETTINGS, MEMORIES, SCAN, TOOLS, SOS, FACE, DOCS, CONNECT, PRIVACY, TERMS, AUTO, ROUTINES, LIVE, DRIVING, JOURNAL, PERMISSIONS, LICENCE, AUTO_LOG, MODELS, VOICE_ENROL, NOTIFICATIONS, WHITEBOARD, HOME, AVATAR, CAMERA_LOOK, BROWSER, LOCK, PC_LINK, BUILDER, PLANNER, DOCTOR, SD_CONNECTORS, TASK_LIST, SD8_SETTINGS, APPEARANCE, COMM, FAV_SONGS, VAULT, TEACH_ONCE, CATCHER, REMINDERS, PICTURES, NOTICES, TRIGGERS, MARKETS }
 
 /** Dropdown menu + title ke liye har screen ka dikhne wala naam. */
 private fun screenTitle(screen: Screen): String = when (screen) {
@@ -113,6 +113,7 @@ private fun screenTitle(screen: Screen): String = when (screen) {
     Screen.PICTURES -> "Meri photos"
     Screen.NOTICES -> "Notices"
     Screen.TRIGGERS -> "Event triggers"
+    Screen.MARKETS -> "Markets"
     Screen.SETTINGS -> "Settings"
     Screen.MEMORIES -> "Yaadein"
     Screen.SCAN -> "Scan"
@@ -1785,6 +1786,10 @@ fun FloraApp(
                         DropdownMenuItem(
                             text = { Text("Event triggers") },
                             onClick = { screen = Screen.TRIGGERS; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Markets") },
+                            onClick = { screen = Screen.MARKETS; menuOpen = false },
                         )
                         DropdownMenuItem(
                             // Cycle 3, F6: menu label bhi imaandaar —
@@ -5720,6 +5725,9 @@ fun FloraApp(
             } else if (screen == Screen.TRIGGERS) {
                 // Parity batch 2026-10-31, M5: sirf time trigger.
                 TriggersScreen()
+            } else if (screen == Screen.MARKETS) {
+                // Parity batch 2026-10-31, M7: read-only watchlist.
+                MarketsScreen()
             } else {
                 ToolsScreen(searchTools)
             }
