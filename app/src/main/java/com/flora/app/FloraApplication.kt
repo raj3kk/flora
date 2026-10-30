@@ -1,6 +1,7 @@
 package com.flora.app
 
 import android.app.Application
+import com.flora.app.data.CatcherEvents
 import com.flora.app.models.NeuralVoiceAttach
 import com.flora.app.planner.FloraToolsStartup
 
@@ -26,6 +27,9 @@ class FloraApplication : Application() {
         // chalta hai; fail ho to engine null hi rehta hai aur
         // system TTS barkaraar rehta hai).
         NeuralVoiceAttach.attach(this)
+        // Catcher (G2): diagnostic event store ka dir — hooks iske baad
+        // record kar sakte hain; init na ho to record no-op hai.
+        CatcherEvents.init(filesDir)
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             try {

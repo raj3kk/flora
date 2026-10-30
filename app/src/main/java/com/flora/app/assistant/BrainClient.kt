@@ -1,6 +1,7 @@
 package com.flora.app.assistant
 
 import com.flora.app.core.PinnedTrust
+import com.flora.app.data.CatcherEvents
 import com.flora.app.data.FloraPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -102,6 +103,9 @@ class BrainClient(private val prefs: FloraPreferences) {
             ?: groqAsk(providerPrompt, keys[2], laneCodes, memoryContext, cappedHistory)
             ?: groqAsk(providerPrompt, keys[3], laneCodes, memoryContext, cappedHistory)
         if (reply != null) return@withContext reply
+        // Catcher (G2): saare lanes fail — sirf HTTP codes record
+        // hote hain, na model naam, na key, na body.
+        CatcherEvents.record("API", "brain lanes fail codes=${laneCodes.map { it.second }}")
         // v2.20 user order: brain fail ho to chat me technical
         // error KABHI nahi — na code, na model naam, na "key
         // gadbad". Pehle basic baat local karo, phir warm line.

@@ -11,6 +11,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.core.content.ContextCompat
+import com.flora.app.data.CatcherEvents
 
 /**
  * Continuous listener (v2.14): system SpeechRecognizer se bina dialog
@@ -111,6 +112,7 @@ class ContinuousListener(
             return
         }
         if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
+            CatcherEvents.record("STT", "STT unavailable")
             onError()
             return
         }
@@ -169,6 +171,7 @@ class ContinuousListener(
                 override fun onError(error: Int) {
                     listening = false
                     unmuteBeeps()
+                    CatcherEvents.record("STT", "system STT error code=$error")
                     onError()
                 }
             })
@@ -190,6 +193,7 @@ class ContinuousListener(
             listening = false
             recognizer = null
             unmuteBeeps()
+            CatcherEvents.record("STT", "STT start fail")
             onError()
         }
     }

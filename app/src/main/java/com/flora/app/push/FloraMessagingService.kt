@@ -18,6 +18,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import com.flora.app.MainActivity
+import com.flora.app.data.CatcherEvents
 import com.flora.app.data.FloraPreferences
 import com.flora.app.data.LicenceClient
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -52,7 +53,10 @@ class FloraMessagingService : FirebaseMessagingService() {
                 if (synced && prefs.linkedUserId().isNotEmpty()) {
                     prefs.setLinkServerConfirmed(true)
                 }
+                // Catcher (G2): token VALUE kabhi record nahi hoti, sirf fail.
+                if (!synced) CatcherEvents.record("FCM", "token sync false")
             } catch (e: Exception) {
+                CatcherEvents.record("FCM", "token save/sync fail")
                 // Token save fail: agle app-open par dobara fetch hoga.
             }
         }

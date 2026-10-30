@@ -1,6 +1,7 @@
 package com.flora.app.automation
 
 import android.content.Context
+import com.flora.app.data.CatcherEvents
 import kotlinx.coroutines.delay
 
 /**
@@ -94,6 +95,8 @@ object VoicePlanRunner {
                 host.addMessage(msg)
                 host.speak(msg)
                 try { host.log("VoicePlan FAIL: ${plan.goal} -> ${step.title}") } catch (e: Exception) { }
+                // Catcher (G2): TAP/app-open/search fail sab isi raaste se aate hain.
+                CatcherEvents.record("PLANNER", "${plan.goal} -> ${step.title}")
                 return msg
             }
             if (step.executor == VoicePlanExecutor.APP_OPEN) previousWasOpen = true

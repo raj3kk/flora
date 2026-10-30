@@ -2,6 +2,7 @@ package com.flora.app.assistant
 
 import android.content.Context
 import android.speech.tts.TextToSpeech
+import com.flora.app.data.CatcherEvents
 import java.util.Locale
 
 /**
@@ -153,6 +154,7 @@ class VoiceEngine(context: Context) {
                             if (utteranceId == "flora-reply") {
                                 finishUtterance(listenerSeq)
                                 onSpeechDone?.invoke()
+                                CatcherEvents.record("TTS", "utterance error")
                             }
                         }
 
