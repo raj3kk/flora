@@ -150,3 +150,51 @@ copy hoga):
   pakda jayega (§2); network state sirf snapshot hai, history nahi.
 - Design Batch 2 domain (menu renames) se takkar nahi hai — Catcher
   row/menu entry nayi lines hain, rename wali lines nahi.
+
+## §8. Pre-audit (2026-10-30, spec push ke baad — PASS, tabhi implement)
+
+Har check code padhkar kiya gaya hai, guess par nahi:
+1. Hook safety: saare hooks 1-line `record()` calls hain, maujooda
+   failure paths me — BrainClient.ask all-lanes-fail (laneCodes scope me
+   hai), VoicePlan FAIL site (host.log ke saath), ContinuousListener
+   ke 3 sites (RecognitionListener.onError me code maujood hai),
+   VoiceEngine onError (sirf "flora-reply"), FloraMessagingService
+   catch + synced==false (record call me token value kabhi nahi
+   jaati — sirf literal strings). `record()` andar se try/catch hai
+   + init-na-ho to no-op, isliye hook kabhi behaviour nahi badalta
+   aur kabhi crash nahi karta.
+2. Koi naya server call nahi: report ka saara data on-device hai
+   (crash.log, catcher_events.log, AutoLogStore flow, Context system
+   state, caller licence param). Nayi files me koi network import nahi.
+3. Koi secret nahi: hooks sirf codes/reasons record karte hain;
+   sanitizer events par + poori report par dono jagah lagta hai;
+   FCM token / licence key / API key values kabhi record nahi hote.
+4. Koi silent action nahi: Copy/Share/Save sirf user tap par; event
+   recording on-device diagnostic log hai (Auto Log + crash.log ka
+   precedent), koi upload path nahi hai.
+5. Collision: Phase B Round 3 ke kisi file ko nahi chhuota — B2
+   (LicenceGate/LicenceClient), B1/B6 (FloraApp.kt), Design Batch 2
+   (FloraApp.kt menu + MainActivity) se koi overlap nahi. Hooks
+   BrainClient, VoicePlan, ContinuousListener, VoiceEngine,
+   FloraMessagingService, FloraApplication me hain — ye sab Round 3
+   ke scope se bahar hain. FloraApp.kt wiring Phase C me hi hogi
+   (B1/B6 DONE-CODE ke baad).
+6. P1 appearance defaults untouched (koi appearance pref nahi chhua).
+7. Design rule: Settings row visible hogi, koi option remove nahi,
+   labels simple Hinglish.
+8. Kotlin prepush (skill padha gaya): nayi files standalone hain;
+   CatcherScreen saara state params se lega (autoLogStore, licence,
+   autoMode, fcmStatus) — doosre composable ka param nahi; internal
+   states unhe use karne wale LaunchedEffect/Buttons se PEHLE declare
+   honge (likhne ke baad line numbers se verify hoga); nullable
+   crashText `when` se handle hoga (smart-cast trap nahi); koi
+   var/fun naam-clash nahi; koi sed edit nahi (fresh files + edit
+   tool, har badli line verify karke).
+9. Testability: events/sanitize/report pure JVM tests (temp dir,
+   JUnit — CrashLogReaderTest pattern); screen/system code Android
+   chahiye, isliye unit-test scope se bahar hai (imaandaari se note).
+10. Chat rule v2.20 barkaraar: report diagnostics file hai, chat
+    jawab nahi — Flora chat me is report ka technical text kabhi
+    nahi bolegi.
+
+Verdict: PRE-AUDIT PASS — Phase B implement kar sakte hain.
