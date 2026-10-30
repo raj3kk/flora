@@ -271,3 +271,109 @@ mila).** Implement ab batches me hoga.
 - Notification body speak — REJECTED (privacy: paas khade log sun lete).
 - Category-based importance — REJECTED (§1.4, har message bolna padta).
 - TTS call-uplink injection — NEVER (G19, public API guarantee nahi).
+
+## §7. MAYA-PARITY: SELF-ACTIVATION (user order 2026-10-30 ~12:13 IST)
+
+Maya call aate hi KHUD ACTIVE ho jati thi — user ko app kholna ya tap
+karna nahi padta tha. Flora me wahi behavior chahiye: ringing par Flora
+SELF-ACTIVATE hogi (bina user tap ke): foreground service announcement
+bolega + call UI saamne aayega. Background se seedha `startActivity`
+Android 10+ par silently drop hota hai (background activity launch ban)
+— isliye koi hidden trick nahi, sirf sanctioned raasta:
+
+### 7.1 PRIMARY raasta — Full-Screen Intent notification (sanctioned)
+- Ringing par `CallAnnouncementReceiver` ek HIGH-importance notification
+  post karega (channel importance HIGH, category CATEGORY_CALL) jisme
+  `setFullScreenIntent(pendingIntent, true)` hoga — PendingIntent nayi
+  `IncomingCallActivity` ka (showWhenLocked + turnScreenOn, CallActivity
+  jaisa pattern — CallActivity reuse NAHI hogi, wo dialer-role
+  CallHolder se bandhi hai).
+- **OS behavior (AOSP FSI limits, verify kiya gaya):** permission granted
+  ho to locked/off/AOD screen par FSI activity LAUNCH hoti hai; unlocked
+  screen par persistent heads-up notification pill buttons ke saath
+  dikhta hai (tap par activity khulti hai). Permission denied ho to
+  sirf 60-second heads-up milta hai — activity khud nahi khulegi.
+- **Permission (API 34+):** `USE_FULL_SCREEN_INTENT` declare karna hoga
+  (manifest me aaj NAHI hai — Batch 4 me judenga). Android 14+ par ye
+  sirf calling/alarm apps ko default milta hai; baaki apps ko user se
+  grant lena padta hai via `Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT`
+  ("Manage full screen intents" setting). Check API:
+  `NotificationManager.canUseFullScreenIntent()`. Flora sideload hai
+  (Play policy lagu nahi), par OS default-grant rule phir bhi lagu hai
+  — isliye spec me grant flow likha hai, auto-grant ka daava nahi.
+  Grant na ho to fallback §7.2 chalega, feature chupchaap fail nahi hoga.
+- **POST_NOTIFICATIONS bhi chahiye** (API 33+, manifest me pehle se hai):
+  grant na ho to FSI notification dikhega hi nahi — announce (voice)
+  phir bhi chalega, UI nahi. Ye bhi honest limit hai.
+- **IncomingCallActivity UI (honest, koi jhootha button nahi):** bada text
+  "Boss, {name} calling you" (unknown par "Boss, unknown number calling
+  you"), neeche do button — [Dismiss] (activity band, announce rukega
+  nahi kyunki one-shot hai) aur [Wapas call karo] (sirf ACTION_DIAL
+  kholega number ke saath — user khud call button dabayega, auto-dial
+  KABHI nahi). Answer/reject button NAHI honge — answer ke liye dialer
+  role chahiye, jo announce ka kaam nahi hai; auto-answer kabhi wapas
+  nahi aayega.
+
+### 7.2 FALLBACK raasta — Overlay banner (SYSTEM_ALERT_WINDOW)
+- Manifest me `SYSTEM_ALERT_WINDOW` pehle se hai; user settings se grant
+  kare (Flora khud ON nahi kar sakti). FSI denied ho aur overlay grant
+  ho to ringing par ek chhota overlay banner (TYPE_APPLICATION_OVERLAY,
+  OverlayMicService pattern) dikhega — naam + Dismiss + Dialer-kholo.
+  Dono grants na hon to sirf voice announce chalega (UI nahi) — ye
+  honest fallback chain hai, koi teesra hidden raasta nahi banega.
+- **Vivo kill par kya hoga:** force-stop / auto-start OFF / battery
+  restriction ho to receiver bhi nahi fire hoga — na voice, na UI. Ye
+  Batch 3 ki Vivo guidance se hi theek hoga (user-side steps); Flora
+  khud Vivo ki kill-policy bypass nahi kar sakti, aur aisa daava kabhi
+  nahi karegi.
+
+## §8. SCOPE EXPANSION — adjacent helpful features (verify karke, sirf jo pass kare)
+
+Sirf wahi liya gaya hai jo privacy + permission + no-silent rules pass
+karta hai. Baaki deferred/out hai (§6 ke saath padho).
+
+- **Missed-call summary (LIYA GAYA — Batch 4):** receiver state machine
+  (RINGING → IDLE bina OFFHOOK ke = missed) par, naye toggle
+  `MISSED_ANNOUNCE` (default OFF) ON ho to turant bole: "Boss, {name}
+  ki missed call hai" (unknown par "Boss, ek unknown number ki missed
+  call hai"). Permission wahi Batch 1 wali (Phone State + Call Log);
+  naam contacts se; Auto Log masked (last4). Poochhne par missed list
+  ("missed calls batao") planner skill ke roop me Batch 4 me attempt
+  hoga — planner-tool pattern fit na ho to deferred likha jayega, jabardasti
+  wiring nahi hogi.
+- **Important sender ka SMS announce (LIYA GAYA — Batch 2 se covered):**
+  SMS app ki notifications NotificationListener se aati hain; user SMS app
+  ko important-apps me chune to uski notifications boli jayengi (title
+  hi). SMS database kabhi nahi padha jayega — `READ_SMS` permission
+  kabhi nahi li jayegi. SMS OTP `AnnounceFilters` se hard-exclude hai
+  (OTP SMS kabhi announce/store nahi hoga).
+- **Awaaz se "call wapas karo" (LIYA GAYA — Batch 4, sirf dialer):**
+  voice intent "X ko call wapas karo" → contact resolve → sirf
+  ACTION_DIAL kholega (number bhara hua, user khud call dabayega).
+  Direct call (CALL_PHONE se auto-dial) is raaste me KABHI nahi hoga.
+  Planner-tool pattern fit na ho to deferred with reason.
+- **Driving-mode me announce (LIYA GAYA — Batch 2 ka chhota rule):**
+  `DrivingScreen` pehle se driving ON par CALL_ANNOUNCE ON kar deta hai
+  (OFF par wapas nahi badalta — maujooda behaviour barkaraar). Is par
+  ek rule judenga: driving mode ON ho to notification announce DND
+  toggle ko override karke bolega (car context me user sunna chahta
+  hai) — sirf DND override, koi naya permission nahi, koi silent
+  action nahi (driving mode user khud ON karta hai).
+- **Call UI par answer/reject (NAHI LIYA):** dialer role ke bina answer
+  possible nahi; CallScreening role alag raasta hai — out of scope (§6).
+
+## §9. REVISED BATCH LIST (Batch 4 jud gaya)
+
+- Batch 1 — Call announce upgrade (PUSHED: ec583832, CI pending).
+- Batch 2 — Notification announce (+ driving DND-override rule).
+- Batch 3 — Reliability + visibility (AnnounceService id 2008, stop,
+  boot restore, Vivo guidance).
+- **Batch 4 — Maya-parity self-activation + missed-call:** manifest
+  USE_FULL_SCREEN_INTENT + IncomingCallActivity (FSI) + overlay
+  fallback + receiver FSI post + MISSED_ANNOUNCE toggle + missed state
+  machine + voice callback-dial + missed-on-ask (attempt; fit na ho to
+  deferred with reason). Har batch: CI green wait karke agla batch.
+- Phone-test me §5 ke saath judenge: locked screen par FSI activity,
+  unlocked par heads-up, FSI denied par overlay fallback, FSI + overlay
+  dono denied par sirf voice; missed call ke baad summary; driving mode
+  me DND override; "call wapas karo" par dialer khulna (auto-dial nahi).

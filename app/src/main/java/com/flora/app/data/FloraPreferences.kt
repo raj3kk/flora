@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -64,6 +65,11 @@ class FloraPreferences(private val context: Context) {
         // licence hai).
         val CALL_ANNOUNCE = booleanPreferencesKey("call_announce")
         val EVENT_ANNOUNCE = booleanPreferencesKey("event_announce")
+        // Call + notification announce v1.2 (Batch 2): notify toggle,
+        // important-apps set, DND override — sab default OFF/khaali.
+        val NOTIFY_ANNOUNCE = booleanPreferencesKey("notify_announce")
+        val NOTIFY_IMPORTANT_APPS = stringSetPreferencesKey("notify_important_apps")
+        val NOTIFY_DND_ANNOUNCE = booleanPreferencesKey("notify_dnd_announce")
         // Lane A — A1 (R-A1-4): battery no-repeat state — aakhri warned
         // level/state key ("low"/"critical"/"charging"/"full"/"normal").
         // EVENT_ANNOUNCE pattern par DataStore key (reboot-persistent).
@@ -818,6 +824,30 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setEventAnnounce(value: Boolean) {
         context.floraDataStore.edit { it[Keys.EVENT_ANNOUNCE] = value }
+    }
+
+    /** Notification announcement toggle. Default OFF. */
+    suspend fun notifyAnnounce(): Boolean =
+        context.floraDataStore.data.map { it[Keys.NOTIFY_ANNOUNCE] ?: false }.first()
+
+    suspend fun setNotifyAnnounce(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.NOTIFY_ANNOUNCE] = value }
+    }
+
+    /** Important apps set (packages) for notification announce. Khaali = kuch nahi bolega. */
+    suspend fun notifyImportantApps(): Set<String> =
+        context.floraDataStore.data.map { it[Keys.NOTIFY_IMPORTANT_APPS] ?: emptySet() }.first()
+
+    suspend fun setNotifyImportantApps(value: Set<String>) {
+        context.floraDataStore.edit { it[Keys.NOTIFY_IMPORTANT_APPS] = value }
+    }
+
+    /** DND me bhi announce karo. Default OFF (driving-mode override alag rule hai). */
+    suspend fun notifyDndAnnounce(): Boolean =
+        context.floraDataStore.data.map { it[Keys.NOTIFY_DND_ANNOUNCE] ?: false }.first()
+
+    suspend fun setNotifyDndAnnounce(value: Boolean) {
+        context.floraDataStore.edit { it[Keys.NOTIFY_DND_ANNOUNCE] = value }
     }
 
     /** Lane A — A1: battery no-repeat key (khali = kabhi warn nahi hua). */

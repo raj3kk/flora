@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,12 +33,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import android.provider.Settings
+import com.flora.app.automation.AnnounceFilters
 import com.flora.app.automation.AppAutomation
 import com.flora.app.automation.AutoModeNotifier
 import com.flora.app.automation.FloraAutomationService
 import com.flora.app.automation.ScreenCapture
 import com.flora.app.automation.ShizukuBridge
 import com.flora.app.data.AutoLogStore
+import com.flora.app.data.NotificationStore
 import com.flora.app.data.ProjectStore
 import com.flora.app.viewing.LiveScreenViewing
 import com.flora.app.viewing.ViewingStartResult
@@ -5841,6 +5844,11 @@ private fun SettingsScreen(
     var utr by remember { mutableStateOf("") }
     var callAnnounce by remember { mutableStateOf(false) }
     var eventAnnounce by remember { mutableStateOf(false) }
+    var notifyAnnounce by remember { mutableStateOf(false) }
+    var notifyDndAnnounce by remember { mutableStateOf(false) }
+    var importantApps by remember { mutableStateOf(setOf<String>()) }
+    var recentPkgs by remember { mutableStateOf(listOf<String>()) }
+    var listenerEnabled by remember { mutableStateOf(false) }
     // Persona state (v1.8, local): launcher se PEHLE declare (order trap).
     var persona by remember { mutableStateOf("flora") }
     // Item 34: Settings se romantic tabhi jab 18+ confirm ho;
@@ -6052,6 +6060,11 @@ private fun SettingsScreen(
         utr = prefs.lastUtr()
         callAnnounce = prefs.callAnnounce()
         eventAnnounce = prefs.eventAnnounce()
+        notifyAnnounce = prefs.notifyAnnounce()
+        notifyDndAnnounce = prefs.notifyDndAnnounce()
+        importantApps = prefs.notifyImportantApps()
+        recentPkgs = NotificationStore.load(context).map { it.pkg }.distinct()
+        listenerEnabled = AnnounceFilters.isListenerEnabled(context)
         persona = prefs.persona()
         try { ageConfirmedState = prefs.ageConfirmed() } catch (e: Exception) { }
         voiceSample = prefs.voiceSample()
@@ -6642,6 +6655,76 @@ private fun SettingsScreen(
                 })
             }
             Text("Default OFF.")
+            Spacer(modifier = Modifier.height(12.dp))
+            Row {
+                Text("Notification announce (sirf important apps ki notification bol kar batana)")
+                Spacer(modifier = Modifier.padding(4.dp))
+                Switch(checked = notifyAnnounce, onCheckedChange = { value ->
+                    notifyAnnounce = value
+                    scope.launch {
+                        prefs.setNotifyAnnounce(value)
+                        if (value) {
+                            // Pehli baar ON: default SMS + dialer seed (user baad me badal sakta hai).
+                            val existing = prefs.notifyImportantApps()
+                            if (existing.isEmpty()) {
+                                val seed = mutableSetOf<String>()
+                                try {
+                                    android.telephony.Telephony.Sms.getDefaultSmsPackage(context)?.let { seed.add(it) }
+                                } catch (e: Exception) {
+                                }
+                                try {
+                                    context.getSystemService(android.telecom.TelecomManager::class.java)?.defaultDialerPackage?.let { seed.add(it) }
+                                } catch (e: Exception) {
+                                }
+                                if (seed.isNotEmpty()) {
+                                    prefs.setNotifyImportantApps(seed)
+                                    importantApps = seed
+                                }
+                            }
+                        }
+                    }
+                })
+            }
+            Text("Default OFF. Sirf neeche chuni hui apps ki notifications boli jayengi — sirf app ka naam + title, poora message kabhi nahi. OTP/code wali notification kabhi nahi boli jayegi, na save hogi.")
+            Row {
+                Text("Notification Access: " + if (listenerEnabled) "Mil gaya ✓" else "Baaki hai")
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = {
+                    context.startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                }) { Text("Settings kholo") }
+                Spacer(modifier = Modifier.padding(4.dp))
+                Button(onClick = {
+                    scope.launch { listenerEnabled = AnnounceFilters.isListenerEnabled(context) }
+                }) { Text("Status refresh") }
+            }
+            Text("Notification Access user khud Settings se ON karega — Flora khud ON nahi kar sakti. Grant na ho to announce nahi chalega.")
+            Row {
+                Text("DND me bhi announce karo")
+                Spacer(modifier = Modifier.padding(4.dp))
+                Switch(checked = notifyDndAnnounce, onCheckedChange = { value ->
+                    notifyDndAnnounce = value
+                    scope.launch { prefs.setNotifyDndAnnounce(value) }
+                })
+            }
+            Text("Default OFF. ON ho to Do Not Disturb me bhi bolega; driving mode ON ho to ye override apne aap lagu hota hai.")
+            Text("Important apps (in apps ki notifications boli jayengi):")
+            for (pkg in (recentPkgs + importantApps.toList()).distinct()) {
+                Row {
+                    val label = try {
+                        context.packageManager.getApplicationLabel(
+                            context.packageManager.getApplicationInfo(pkg, 0)
+                        ).toString()
+                    } catch (e: Exception) {
+                        pkg
+                    }
+                    Checkbox(checked = pkg in importantApps, onCheckedChange = { checked ->
+                        val updated = if (checked) importantApps + pkg else importantApps - pkg
+                        importantApps = updated
+                        scope.launch { prefs.setNotifyImportantApps(updated) }
+                    })
+                    Text(label)
+                }
+            }
             Spacer(modifier = Modifier.height(12.dp))
             Text("Persona — Flora ka tone (sirf tone badlega, awaaz nahi)")
             Text("Default (naye install par): Romantic — item 34. Ye default yahan se override nahi hota; yahan sirf apna current role badalta hai.")
