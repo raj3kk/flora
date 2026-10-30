@@ -14,8 +14,35 @@ android {
         applicationId = "com.flora.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 44
+        // Phase 2 Item 2: versionCode 44 -> 45. versionName badla nahi
+        // (koi naya version naam invent nahi); versionCode hi Item 3
+        // ke in-app update compare ki key hai. App code ya server me
+        // versionCode par koi gate nahi hai (audit se verify).
+        versionCode = 45
         versionName = "2.22.0-rebuild"
+    }
+
+    // Phase 2 Item 2 — RELEASE variant hi thin hai; debug bilkul
+    // chheda nahi gaya (CI aaj bhi sirf assembleDebug banata hai,
+    // wo flow intact hai). Release: arm64-v8a akela (4 ABI native
+    // ~196 MB se ~49 MB), R8 minify + resource shrink.
+    // Signing: repo me koi signing config nahi hai aur keystore
+    // invent nahi kiya gaya — release APK unsigned banta hai
+    // (size evidence ke liye); sideload identity debug-signed hi
+    // rahegi jab tak signing par alag faisla na ho. Play Store
+    // update KABHI NAHI (purani key lost hai).
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            ndk {
+                abiFilters += "arm64-v8a"
+            }
+        }
     }
 
     buildFeatures {
