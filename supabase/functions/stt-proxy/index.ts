@@ -16,11 +16,22 @@
 // Licence gate: tts-proxy v3 wala hi read-only gate (Pro valid
 // ya Free < 600 talk sec/day, nahi to 429 free_limit). Gate
 // sirf PADHTA hai, increment nahi karta; DB error par fail-open.
-// IMAANDAAR NOTE: aaj usage-count sirf boli hui (TTS) seconds
-// ginta hai — STT input seconds us counter me nahi judte, isliye
-// STT par ye gate approximate hai (fail-open hi rahega jab tak
-// usage-count STT ko cover na kare). Device binding yahan check
-// nahi hoti (licence-verify par enforce hoti hai).
+// STT COUNTING (user decision 2026-10-31): STT seconds bhi isi
+// 600s/day talk quota me ginte hain — isliye successful
+// transcription ke baad Deepgram ki metadata.duration (ceil,
+// max 120s) se usage counter increment hota hai (increment_usage
+// RPC, wahi UTC-day boundary jo gate + usage-count use karte
+// hain — koi nayi boundary nahi, Free limit 600s wahi hai).
+// Sirf Free users count hote hain; Pro unlimited hai isliye app
+// countUsage ki tarah skip hota hai. Increment fail ho to
+// transcript phir bhi milta hai (fail-open) — counting kabhi
+// baat-cheet nahi rokti.
+// SCOPE NOTE: ye counting sirf is proxy path ki hai. App ka
+// main-flow STT (system recognizer, text-only, koi duration
+// source nahi) yahan count nahi hota — uska koi reliable
+// duration source code me maujood nahi hai, isliye invent nahi
+// kiya gaya (alag gap, alag decision chahiye). Device binding
+// yahan check nahi hoti (licence-verify par enforce hoti hai).
 // Audio: base64 WAV (16k mono PCM, app ke DeepgramClient wale
 // wavBytes jaisa) — kabhi save nahi hota, sirf Deepgram ko
 // bheja jaata hai, transcript wapas aata hai. Cap: base64
@@ -82,21 +93,22 @@ serve(async (req) => {
   }
   if (audioBytes.length === 0) return json({ error: "audio_base64 invalid" }, 400);
 
-  async function licenceAllowed() {
+  async function licenceCheck(): Promise<{ allowed: boolean; isPro: boolean }> {
     try {
       const { data: rows } = await svc.from("licences")
         .select("plan_id,status,expires_at").eq("user_id", userData.user.id).eq("status", "active");
       const nowMs = Date.now();
       const hasPro = (rows || []).some((r) =>
         r.plan_id === "pro" && (!r.expires_at || new Date(r.expires_at).getTime() >= nowMs));
-      if (hasPro) return true;
+      if (hasPro) return { allowed: true, isPro: true };
       const day = new Date().toISOString().slice(0, 10);
       const { data: u } = await svc.from("usage").select("talk_seconds")
         .eq("user_id", userData.user.id).eq("day", day).maybeSingle();
-      return (u?.talk_seconds || 0) < 600;
-    } catch (_e) { return true; }
+      return { allowed: (u?.talk_seconds || 0) < 600, isPro: false };
+    } catch (_e) { return { allowed: true, isPro: false }; }
   }
-  if (!(await licenceAllowed())) {
+  const licence = await licenceCheck();
+  if (!licence.allowed) {
     return json({ error: "free_limit", message: "Free limit poora ho gaya hai (600 sec/day) — Pro lene par unlimited milega." }, 429);
   }
 
@@ -119,7 +131,27 @@ serve(async (req) => {
     const j = await r.json();
     const transcript = j.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
     if (!transcript.trim()) return json({ error: "stt transcript empty" }, 502);
-    return json({ transcript, language: lang });
+    // STT counting: sirf successful transcription par, sirf Free
+    // users ke liye. Duration Deepgram ki metadata.duration se
+    // (wahi audio jo process hua — WAV-byte math ka anumaan nahi).
+    // Na mile ya invalid ho to count skip (fail-open, invent nahi).
+    // Double-count nahi: app ka onSpoken sirf TTS output seconds
+    // ginta hai, ye STT input seconds hain — alag quantity.
+    let counted = 0;
+    if (!licence.isPro) {
+      const rawDur = j.metadata?.duration;
+      if (typeof rawDur === "number" && rawDur > 0) {
+        counted = Math.min(Math.ceil(rawDur), 120);
+        try {
+          const day = new Date().toISOString().slice(0, 10);
+          const { error: incErr } = await svc.rpc("increment_usage", {
+            p_user_id: userData.user.id, p_day: day, p_secs: counted, p_tools: 0,
+          });
+          if (incErr) { console.error("stt count failed (fail-open)"); counted = 0; }
+        } catch (_e) { console.error("stt count failed (fail-open)"); counted = 0; }
+      }
+    }
+    return json({ transcript, language: lang, counted_seconds: counted });
   } catch (_e) {
     return json({ error: "stt provider failed" }, 502);
   }
