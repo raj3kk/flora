@@ -1,7 +1,6 @@
 package com.flora.app.ui
 
 import android.Manifest
-import android.app.role.RoleManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -98,13 +97,6 @@ fun PermissionsScreen(onShowWizard: () -> Unit) {
         pendingPerm = null
         refreshTick++
     }
-    val roleLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) {
-        note = "Dialer role check karne ke liye Status refresh karo."
-        refreshTick++
-    }
-
     fun granted(perm: String): Boolean {
         return ContextCompat.checkSelfPermission(context, perm) ==
             PackageManager.PERMISSION_GRANTED
@@ -126,15 +118,6 @@ fun PermissionsScreen(onShowWizard: () -> Unit) {
             am.getEnabledAccessibilityServiceList(
                 android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK
             ).any { it.resolveInfo.serviceInfo.packageName == context.packageName }
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    fun dialerHeld(): Boolean {
-        return try {
-            val rm = context.getSystemService(RoleManager::class.java)
-            rm?.isRoleHeld(RoleManager.ROLE_DIALER) == true
         } catch (e: Exception) {
             false
         }
@@ -367,28 +350,10 @@ fun PermissionsScreen(onShowWizard: () -> Unit) {
             Spacer(modifier = Modifier.height(12.dp))
         }
         item {
-            Text("Call-talk — Dialer role")
-            Text(
-                "Default dialer: " + if (dialerHeld()) {
-                    "Flora hai ✓ (call uthake baat ho sakti hai)"
-                } else {
-                    "Flora nahi hai — call-talk ke liye zaroori hai"
-                }
-            )
-            Button(onClick = {
-                try {
-                    val rm = context.getSystemService(RoleManager::class.java)
-                    if (rm == null || !rm.isRoleAvailable(RoleManager.ROLE_DIALER)) {
-                        note = "Is phone par dialer role available nahi hai."
-                    } else if (rm.isRoleHeld(RoleManager.ROLE_DIALER)) {
-                        note = "Flora pehle se default dialer hai."
-                    } else {
-                        roleLauncher.launch(rm.createRequestRoleIntent(RoleManager.ROLE_DIALER))
-                    }
-                } catch (e: Exception) {
-                    note = "Dialer role dialog nahi khul paya."
-                }
-            }) { Text("Default dialer banao") }
+            // D-11 (CEO 2026-10-31): Flora default dialer nahi banegi —
+            // call-talk/dialer-role section hata diya gaya hai. Call ke
+            // liye sirf system dialer intent hai (AutoActions.placeCall).
+            Text("Calling — sirf system dialer (D-11): call ke liye system dialer khulega, Flora default dialer nahi banegi.")
             Spacer(modifier = Modifier.height(12.dp))
         }
         item {

@@ -203,7 +203,6 @@ class FloraBackupManager(
         settings.put("callAnnounce", prefs.callAnnounce())
         settings.put("eventAnnounce", prefs.eventAnnounce())
         settings.put("drivingMode", prefs.drivingMode())
-        settings.put("callTalk", prefs.callTalk())
         settings.put("continuousMic", prefs.continuousMic())
         settings.put("voiceView", prefs.voiceView())
         return settings
@@ -563,7 +562,6 @@ class FloraBackupManager(
         if (settings.has("callAnnounce")) prefs.setCallAnnounce(settings.optBoolean("callAnnounce", false))
         if (settings.has("eventAnnounce")) prefs.setEventAnnounce(settings.optBoolean("eventAnnounce", false))
         if (settings.has("drivingMode")) prefs.setDrivingMode(settings.optBoolean("drivingMode", false))
-        if (settings.has("callTalk")) prefs.setCallTalk(settings.optBoolean("callTalk", false))
         if (settings.has("continuousMic")) prefs.setContinuousMic(settings.optBoolean("continuousMic", false))
         if (settings.has("voiceView")) prefs.setVoiceView(settings.optBoolean("voiceView", false))
     }

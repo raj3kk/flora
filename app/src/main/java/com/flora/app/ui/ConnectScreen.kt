@@ -1,7 +1,6 @@
 package com.flora.app.ui
 
 import android.Manifest
-import android.app.role.RoleManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -18,11 +17,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -47,33 +44,11 @@ import kotlinx.coroutines.launch
 @Composable
 fun ConnectScreen(voice: VoiceEngine, prefs: FloraPreferences) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var callTalk by remember { mutableStateOf(false) }
-    var dialerHeld by remember { mutableStateOf(false) }
-    // note SACH ME yahan upar hai (roleLauncher se pehle) — callback
-    // isko use karta hai, isliye declaration callback se pehle hona
-    // hi chahiye, warna use-before-declaration compile error aata hai.
+    // D-11 (CEO 2026-10-31): Flora default dialer NAHI banegi — isliye
+    // call-talk/dialer-role state, role launcher aur role check yahan
+    // se hata diye gaye hain. Call ke liye sirf system dialer intent
+    // hai (AutoActions.placeCall).
     var note by remember { mutableStateOf("") }
-
-    LaunchedEffect(Unit) {
-        callTalk = prefs.callTalk()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val rm = context.getSystemService(RoleManager::class.java)
-            dialerHeld = rm?.isRoleHeld(RoleManager.ROLE_DIALER) == true
-        }
-    }
-
-    val roleLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val rm = context.getSystemService(RoleManager::class.java)
-            dialerHeld = rm?.isRoleHeld(RoleManager.ROLE_DIALER) == true
-            note = if (dialerHeld) "Flora ab default dialer hai."
-                else "Default dialer nahi bana — bina iske Flora call nahi utha sakti."
-        }
-    }
-    // note upar (roleLauncher se pehle) declare hai, isliye yahan dobara nahi.
     var shareText by remember { mutableStateOf("") }
     var callNumber by remember { mutableStateOf("") }
     var smsNumber by remember { mutableStateOf("") }
@@ -106,7 +81,7 @@ fun ConnectScreen(voice: VoiceEngine, prefs: FloraPreferences) {
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
-            Text("Auto Call — ek confirmation ke baad seedha call lagega (draft nahi)")
+            Text("Auto Call — ek confirmation ke baad system dialer khulega (number bhara hua; Call tum dabaaoge — D-11)")
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = callNumber, onValueChange = { callNumber = it },
@@ -170,38 +145,7 @@ fun ConnectScreen(voice: VoiceEngine, prefs: FloraPreferences) {
                 }
             }) { Text("Share sheet kholo") }
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Call-talk (dialer role) — call aane par Flora 3 options degi (Flora se baat karao / Khud baat karo / Kaato), sirf tab jab aap khud ise default dialer banayenge.")
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Default dialer: " + if (dialerHeld) "Flora hai" else "Flora nahi hai")
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = {
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                    note = "Dialer role ke liye Android 10+ chahiye."
-                } else {
-                    val rm = context.getSystemService(RoleManager::class.java)
-                    if (rm == null || !rm.isRoleAvailable(RoleManager.ROLE_DIALER)) {
-                        note = "Is phone par dialer role available nahi hai."
-                    } else if (rm.isRoleHeld(RoleManager.ROLE_DIALER)) {
-                        note = "Flora pehle se default dialer hai."
-                    } else {
-                        roleLauncher.launch(rm.createRequestRoleIntent(RoleManager.ROLE_DIALER))
-                    }
-                }
-            }) { Text("Flora ko default dialer banao") }
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = {
-                val next = !callTalk
-                scope.launch {
-                    prefs.setCallTalk(next)
-                    callTalk = next
-                    val msg = if (next) "Call-talk ON: default dialer hote hi Flora call uthayegi."
-                        else "Call-talk OFF."
-                    note = msg
-                    voice.speak(msg)
-                }
-            }) { Text("Call-talk: " + if (callTalk) "ON" else "OFF") }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Limit imaandari se: TTS ka doosri taraf saaf sunai dena phone test ke baad hi kaha ja sakta hai — pehle se guarantee nahi hai.")
+            Text("D-11: Flora default dialer nahi banegi — call ke liye sirf system dialer khulega. Call-talk (dialer role) hata diya gaya hai.")
             if (note.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(note)
@@ -213,16 +157,16 @@ fun ConnectScreen(voice: VoiceEngine, prefs: FloraPreferences) {
         AlertDialog(
             onDismissRequest = { pendingCall = null },
             title = { Text("Call lagau?") },
-            text = { Text("$number par seedha call lagega. Confirm karne par call lag jayegi.") },
+            text = { Text("$number par system dialer khulega (number bhara hua). Confirm karne par dialer khul jayega, Call tum dabaaoge.") },
             confirmButton = {
                 TextButton(onClick = {
                     pendingCall = null
                     note = if (AutoActions.placeCall(context, number)) {
-                        "Call laga di gayi: $number"
+                        "System dialer khol diya gaya: $number"
                     } else {
-                        "Call nahi lagi — permission ya number check kijiye."
+                        "Dialer nahi khula — number check kijiye."
                     }
-                }) { Text("Haan, call lagao") }
+                }) { Text("Haan, dialer kholo") }
             },
             dismissButton = {
                 TextButton(onClick = { pendingCall = null }) { Text("Ruko") }

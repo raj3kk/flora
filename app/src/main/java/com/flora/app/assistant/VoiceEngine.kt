@@ -41,8 +41,8 @@ class VoiceEngine(context: Context) {
     /**
      * Phase 1 (server-shift) Item B — cloud TTS lane (optional,
      * attach-only). MainActivity attach karta hai (prefs +
-     * licenceClient wahi maujood hain); FloraInCallService /
-     * BackgroundMicService attach nahi karte — wahan lane null
+     * licenceClient wahi maujood hain); BackgroundMicService
+     * attach nahi karta (D-11 se InCallService hata diya gaya) — wahan lane null
      * rehta hai aur system path bilkul waisa hi chalta hai.
      * Lane attach hone par bhi koi hard dependency nahi:
      * fetch fail/unavailable/free-limit/error par speak()

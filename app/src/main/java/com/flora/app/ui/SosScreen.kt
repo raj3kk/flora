@@ -109,10 +109,10 @@ fun SosScreen(sosStore: SosStore) {
                     }
                 },
                 enabled = contacts.isNotEmpty()
-            ) { Text("Auto SOS — ek confirmation, seedha call + SMS") }
+            ) { Text("Auto SOS — ek confirmation, dialer + SMS") }
             Text(
-                "Auto SOS: confirm karne par pehle contact ko seedha call lagegi aur " +
-                    "SMS bhi seedha jayega — koi draft nahi. Manual SOS me dialer/SMS draft khulta hai."
+                "Auto SOS: confirm karne par pehle contact ka system dialer khulega aur " +
+                    "SMS bhi seedha jayega. Manual SOS me dialer/SMS draft khulta hai."
             )
             if (note.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -167,7 +167,7 @@ fun SosScreen(sosStore: SosStore) {
             title = { Text("Auto SOS bhejna hai?") },
             text = {
                 Text(
-                    "${first.name} (${first.number}) ko seedha call lagegi aur " +
+                    "${first.name} (${first.number}) ka system dialer khulega aur " +
                         "SMS bhi seedha jayega. Confirm karne par dono ho jayenge."
                 )
             },
@@ -179,7 +179,7 @@ fun SosScreen(sosStore: SosStore) {
                         context, first.number,
                         "Flora SOS: mujhe madad chahiye, kripya call kijiye."
                     )
-                    note = "Auto SOS: call ${if (called) "lag gayi" else "nahi lagi"}, " +
+                    note = "Auto SOS: dialer ${if (called) "khul gaya" else "nahi khula"}, " +
                         "SMS ${if (texted) "bhej diya gaya" else "nahi gaya"}."
                 }) { Text("Haan, bhejo") }
             },

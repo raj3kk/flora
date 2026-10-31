@@ -1228,7 +1228,7 @@ fun FloraApp(
                     if (number.length >= 7 && AutoActions.hasCallPermission(appContext)) {
                         runGuardedVoice {
                         val ok = AutoActions.placeCall(appContext, number)
-                        voice.speak(if (ok) "Routine call laga di gayi: $number" else "Routine call nahi lagi.")
+                        voice.speak(if (ok) "Routine ke liye system dialer khol diya gaya: $number" else "System dialer nahi khula.")
                         scope.launch {
                             try { autoLogStore.add("Routine call (auto): $number -> ${if (ok) "ho gaya" else "fail"}") } catch (e: Exception) { }
                         }
@@ -2299,7 +2299,7 @@ fun FloraApp(
                     if (!gateFeature("calls")) return
                     runGuardedVoice {
                         val ok = AutoActions.placeCall(appContext, number)
-                        val msg = if (ok) "Call laga di gayi: $number" else "Call nahi lagi, permission ya number check kijiye."
+                        val msg = if (ok) "System dialer khol diya gaya: $number" else "Dialer nahi khula, number check kijiye."
                         messages = messages + ChatMsg("Flora: $msg", false)
                         voice.speak(msg)
                         scope.launch {
@@ -2390,9 +2390,9 @@ fun FloraApp(
                             autoExecuteCall(number)
                         } else {
                             messages = messages + ChatMsg(
-                                "Flora: Theek hai, $number par call laga raha hun — ek baar confirm kijiye.", false
+                                "Flora: Theek hai, $number par system dialer khol raha hun — ek baar confirm kijiye.", false
                             )
-                            voice.speak("Theek hai, call laga raha hun, ek baar confirm kijiye.")
+                            voice.speak("Theek hai, system dialer khol raha hun, ek baar confirm kijiye.")
                             if (AutoActions.hasCallPermission(appContext)) {
                                 voiceCallConfirm = number
                             } else {
@@ -3771,9 +3771,9 @@ fun FloraApp(
                                 autoExecuteCall(number)
                             } else {
                                 messages = messages + ChatMsg(
-                                    "Flora: Theek hai, $number par call laga raha hun — ek baar confirm kijiye.", false
+                                    "Flora: Theek hai, $number par system dialer khol raha hun — ek baar confirm kijiye.", false
                                 )
-                                voice.speak("Theek hai, call laga raha hun, ek baar confirm kijiye.")
+                                voice.speak("Theek hai, system dialer khol raha hun, ek baar confirm kijiye.")
                                 if (AutoActions.hasCallPermission(appContext)) {
                                     voiceCallConfirm = number
                                 } else {
@@ -5974,17 +5974,17 @@ fun FloraApp(
                 AlertDialog(
                     onDismissRequest = { voiceCallConfirm = null },
                     title = { Text("Call lagau?") },
-                    text = { Text("$number par seedha call lagega.") },
+                    text = { Text("$number par system dialer khulega (number bhara hua) — Call tum dabaaoge.") },
                     confirmButton = {
                         TextButton(onClick = {
                             voiceCallConfirm = null
                             runGuardedVoice {
                             val ok = AutoActions.placeCall(appContext, number)
-                            val msg = if (ok) "Call laga di gayi: $number" else "Call nahi lagi, permission ya number check kijiye."
+                            val msg = if (ok) "System dialer khol diya gaya: $number" else "Dialer nahi khula, number check kijiye."
                             messages = messages + ChatMsg("Flora: $msg", false)
                             voice.speak(msg)
                             }
-                        }) { Text("Haan, call lagao") }
+                        }) { Text("Haan, dialer kholo") }
                     },
                     dismissButton = {
                         TextButton(onClick = { voiceCallConfirm = null }) { Text("Ruko") }
@@ -7335,14 +7335,8 @@ private fun SettingsScreen(
                     context.startActivity(intent)
                 }) { Text("Default assistant banao") }
                 Spacer(modifier = Modifier.padding(4.dp))
-                Button(onClick = {
-                    val intent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    context.startActivity(intent)
-                }) { Text("Default dialer banao") }
             }
-            Text("Default assistant: system settings me Flora chuno — phir Flora har jagah se bulayi ja sakegi. Default dialer: default apps me Flora chuno — phir call UI Flora ka chalega.")
+            Text("Default assistant: system settings me Flora chuno — phir Flora har jagah se bulayi ja sakegi. (D-11: Flora default dialer nahi banegi — call ke liye sirf system dialer khulega.)")
             Spacer(modifier = Modifier.height(12.dp))
             Text("Shizuku — system permission ek tap me (bina root ke, tumhare control me)")
             Text(shizukuStatus)

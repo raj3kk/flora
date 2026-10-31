@@ -1032,14 +1032,6 @@ class FloraPreferences(private val context: Context) {
         context.floraDataStore.edit { it[Keys.THEME] = value }
     }
 
-    /** Call-talk (dialer role): default OFF, user khud ON karega. */
-    suspend fun callTalk(): Boolean =
-        context.floraDataStore.data.map { it[Keys.CALL_TALK] ?: false }.first()
-
-    suspend fun setCallTalk(value: Boolean) {
-        context.floraDataStore.edit { it[Keys.CALL_TALK] = value }
-    }
-
     /** Permission gate (v2.12): pehli baar app khulte hi sab
      * permissions ek saath maange jaate hain; gate poora hone ke
      * baad ye flag true ho jata hai aur dobara gate nahi khulta
