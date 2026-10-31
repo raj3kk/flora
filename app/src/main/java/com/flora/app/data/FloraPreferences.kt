@@ -153,6 +153,11 @@ class FloraPreferences(private val context: Context) {
         val AVATAR = stringPreferencesKey("avatar")
         val TALK_DATE = stringPreferencesKey("talk_date")
         val TALK_SECONDS = longPreferencesKey("talk_seconds")
+        // D-24 (CEO 2026-10-31): system-recognizer STT counter, DISPLAY
+        // ONLY — TTS counting ka mirror (day boundary + definition).
+        // Server enforcement isse kabhi nahi badalta.
+        val STT_DATE = stringPreferencesKey("stt_date")
+        val STT_SECONDS = longPreferencesKey("stt_seconds")
         // B5 (fix-cycle): cap warning kis date ko di gayi (din me ek baar).
         val CAP_WARN_DATE = stringPreferencesKey("cap_warn_date")
         val PERMISSIONS_GATE_DONE = booleanPreferencesKey("permissions_gate_done")
@@ -1099,6 +1104,21 @@ class FloraPreferences(private val context: Context) {
             val used = if (prefs[Keys.TALK_DATE] == today) prefs[Keys.TALK_SECONDS] ?: 0L else 0L
             prefs[Keys.TALK_DATE] = today
             prefs[Keys.TALK_SECONDS] = used + seconds
+        }
+    }
+
+    /** D-24: TTS counting ka mirror — device-local din (yyyy-MM-dd),
+     *  din badalte hi 0; sirf display ke liye, enforcement nahi. */
+    suspend fun sttSecondsUsed(today: String): Long {
+        val prefs = context.floraDataStore.data.first()
+        return if (prefs[Keys.STT_DATE] == today) prefs[Keys.STT_SECONDS] ?: 0L else 0L
+    }
+
+    suspend fun addSttSeconds(today: String, seconds: Long) {
+        context.floraDataStore.edit { prefs ->
+            val used = if (prefs[Keys.STT_DATE] == today) prefs[Keys.STT_SECONDS] ?: 0L else 0L
+            prefs[Keys.STT_DATE] = today
+            prefs[Keys.STT_SECONDS] = used + seconds
         }
     }
 

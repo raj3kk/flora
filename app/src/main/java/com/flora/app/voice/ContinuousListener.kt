@@ -13,6 +13,11 @@ import android.speech.SpeechRecognizer
 import androidx.core.content.ContextCompat
 import com.flora.app.data.CatcherEvents
 import com.flora.app.data.CatcherHooks
+import com.flora.app.data.FloraPreferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Continuous listener (v2.14): system SpeechRecognizer se bina dialog
@@ -70,6 +75,30 @@ class ContinuousListener(
     private val appContext = context.applicationContext
     private var recognizer: SpeechRecognizer? = null
     private var listening = false
+    // D-24 (CEO 2026-10-31): system-recognizer STT counter, DISPLAY
+    // ONLY. Listen window ka elapsed (TTS counting ka mirror: floor
+    // seconds, kam se kam 1) — sirf successful non-empty result par
+    // gina jata hai. Audio kabhi save/server par nahi jata (is class
+    // ka standing disclosure barkaraar); server enforcement
+    // (LicenceClient.countUsage) isse chhua hi nahi jata.
+    private var listenStartMs = 0L
+    private val countScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private fun countSttSeconds() {
+        val start = listenStartMs
+        if (start <= 0L) return
+        listenStartMs = 0L
+        val seconds = maxOf(1L, (System.currentTimeMillis() - start) / 1000L)
+        countScope.launch {
+            try {
+                val today = java.text.SimpleDateFormat(
+                    "yyyy-MM-dd", java.util.Locale.US
+                ).format(java.util.Date())
+                FloraPreferences(appContext).addSttSeconds(today, seconds)
+            } catch (e: Exception) {
+            }
+        }
+    }
     // Phase 0, Item 3 — session-internal retry state: wahi recognizer
     // + wahi intent dobara start hoga (naya instance nahi), isliye
     // listening=true aur beep-mute barkaraar rahenge — mic indicator
@@ -211,7 +240,11 @@ class ContinuousListener(
                         } catch (e: Exception) {
                         }
                     }
-                    if (!text.isNullOrBlank()) onResult(text)
+                    if (!text.isNullOrBlank()) {
+                        // D-24: sirf successful non-empty result gina jata hai.
+                        countSttSeconds()
+                        onResult(text)
+                    }
                 }
 
                 override fun onError(error: Int) {
@@ -257,6 +290,7 @@ class ContinuousListener(
             lastIntent = intent
             listening = true
             muteBeeps()
+            listenStartMs = System.currentTimeMillis()
             rec.startListening(intent)
         } catch (e: Exception) {
             mainHandler.removeCallbacks(retryRunnable)

@@ -100,6 +100,8 @@ fun Sd8SettingsScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
     var clearChatArmed by remember { mutableStateOf(false) }
     var clearMemArmed by remember { mutableStateOf(false) }
     var musicStatus by remember { mutableStateOf("Music status abhi check nahi hua.") }
+    // D-24 (CEO 2026-10-31): system-recognizer STT counter — DISPLAY ONLY.
+    var sttToday by remember { mutableStateOf(0L) }
     var musicPlaying by remember { mutableStateOf(false) }
 
     fun log(msg: String) {
@@ -123,6 +125,15 @@ fun Sd8SettingsScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
                 emailConsent = prefs.sd8EmailConsent()
                 socialConsent = prefs.sd8SocialConsent()
                 patterns = learnedEngine.loadAll()
+                // D-24 display: aaj ka system-STT seconds (device-local din).
+                sttToday = try {
+                    val today = java.text.SimpleDateFormat(
+                        "yyyy-MM-dd", java.util.Locale.US
+                    ).format(java.util.Date())
+                    prefs.sttSecondsUsed(today)
+                } catch (e: Exception) {
+                    0L
+                }
             } catch (e: Exception) {
                 note = "Settings padhne me dikkat aayi — dobara kholo."
             }
@@ -298,6 +309,9 @@ fun Sd8SettingsScreen(autoLogStore: AutoLogStore, onBack: () -> Unit) {
             Text("Thinking details chhupi hui hain.")
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("System STT (aaj, sirf display — D-24)")
+        Text("System recognizer se sune gaye seconds (aaj): $sttToday s. Ye counter sirf dikhane ke liye hai — server enforcement isse nahi badalta. Audio kabhi save/server par nahi jata.")
         Spacer(modifier = Modifier.height(16.dp))
         Text("8.8 Music-app control (MediaSession pehle, app-open fallback)")
         Text(musicStatus)
