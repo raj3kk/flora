@@ -60,8 +60,9 @@ import java.util.Locale
  * hai, koi server call nahi, koi auto-open nahi. QR milte hi value
  * screen par ruk jaati hai (dobara scan tabhi jab user kahe);
  * URL ho to "Browser me kholo" sirf tab dikhta hai jab caller ne
- * onOpenUrl diya ho (FloraApp call site abhi default par hai —
- * wiring follow-up hai, is push me FloraApp chhua nahi gaya).
+ * onOpenUrl diya ho (FloraApp call site ab wired hai — M1
+ * browser-open wiring: onOpenUrl QR URL ko BrowserNav.request
+ * se BrowserScreen me kholta hai).
  */
 @OptIn(ExperimentalGetImage::class)
 @Composable

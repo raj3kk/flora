@@ -5600,7 +5600,10 @@ fun FloraApp(
             } else if (screen == Screen.MEMORIES) {
                 MemoriesScreen(memoriesStore)
             } else if (screen == Screen.SCAN) {
-                ScanScreen(voice)
+                ScanScreen(voice, onOpenUrl = { url ->
+                    com.flora.app.tools.BrowserNav.request(url = url)
+                    screen = Screen.BROWSER
+                })
             } else if (screen == Screen.CAMERA_LOOK) {
                 CameraLookScreen(voice, prefs)
             } else if (screen == Screen.SOS) {
