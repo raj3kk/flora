@@ -26,7 +26,7 @@ raj3kk/flora (PRIVATE, branch sirf main)
 └── .github/workflows/android.yml   CI: JDK 17 + Gradle 8.7 + assembleDebug + APK upload
 ```
 
-**Note on legacy naming:** `settings.gradle.kts` me `rootProject.name = "maya-rebuild"` abhi bhi wahi hai — build files me naam badalna CI/artifacts ko chhoo sakta hai, isliye isko blindly nahi badla gaya hai. App ka naam, package aur product Flora hi hai.
+**Note on legacy naming:** `settings.gradle.kts` me `rootProject.name` ab `"flora"` hai (pehle `"maya-rebuild"` tha; verify karke badla gaya hai). App ka naam, package aur product Flora hi hai.
 
 ## Build (APK kahan banta hai)
 
