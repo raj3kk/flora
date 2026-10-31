@@ -16,6 +16,16 @@ package com.flora.app.data
  *
  * Language completeness (G2P) Part 1 team ka scope hai; ye file
  * sirf accessibility audit hai, usse overlap nahi karti.
+ *
+ * STATIC AUDIT (fixer M5, 2026-10-31): catalog ke 12 labels ko
+ * actual UI se milaya gaya (button texts + contentDescription
+ * scan). Natija: poori UI me sirf 1 contentDescription hai
+ * (PicturesScreen photos); baaki text buttons apna visible text
+ * hi announce karte hain. Isliye catalog labels ko actual visible
+ * texts se theek kiya gaya hai (neeche); orb koi button nahi hai
+ * (visual only) aur builder me koi preview button nahi hai
+ * (sirf preview section text) — dono entries isi sach ke saath
+ * darj hain. Phone par screen-reader audit Part 4 flow me hoga.
  */
 object AccessibilityCatalog {
 
@@ -23,18 +33,18 @@ object AccessibilityCatalog {
 
     /** Audit checklist — har entry par screen reader me ye label bolna chahiye. */
     val REQUIREMENTS: List<LabelRequirement> = listOf(
-        LabelRequirement("home", "orb-button", "Flora se baat karein"),
-        LabelRequirement("home", "mic-button", "Mic se bolein"),
-        LabelRequirement("chat", "send-button", "Message bhejein"),
-        LabelRequirement("chat", "message-input", "Message likhein"),
-        LabelRequirement("settings", "update-button", "App update check karein"),
-        LabelRequirement("settings", "permissions-button", "Permissions dekhein"),
-        LabelRequirement("catcher", "copy-button", "Report copy karein"),
-        LabelRequirement("catcher", "share-button", "Report share karein"),
-        LabelRequirement("catcher", "note-input", "Apni note likhein"),
-        LabelRequirement("builder", "preview-button", "Preview dekhein"),
-        LabelRequirement("reminders", "add-button", "Naya reminder banayein"),
-        LabelRequirement("docs", "new-doc-button", "Naya document banayein")
+        LabelRequirement("home", "orb-display", "Flora orb (visual only, koi button nahi)"),
+        LabelRequirement("home", "mic-button", "Mic"),
+        LabelRequirement("chat", "send-button", "Bhejo"),
+        LabelRequirement("chat", "message-input", "Message likhiye ya mic dabaiye"),
+        LabelRequirement("settings", "update-button", "Update check karo"),
+        LabelRequirement("settings", "permissions-button", "Permissions dobara dekho"),
+        LabelRequirement("catcher", "copy-button", "Report copy karo"),
+        LabelRequirement("catcher", "share-button", "Report share karo"),
+        LabelRequirement("catcher", "note-input", "Ye kar raha tha tab hua…"),
+        LabelRequirement("builder", "preview-section", "Preview (sirf is file ka):"),
+        LabelRequirement("reminders", "add-button", "Reminder lagao"),
+        LabelRequirement("docs", "new-doc-button", "Document save karo")
     )
 
     /** Theme tests — har release checklist me chalte hain. */

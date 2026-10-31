@@ -41,8 +41,12 @@ class BackupRestoreGuard {
     /**
      * Verify ka natija: pass → RESTORED; fail → purana data hi
      * rehta hai (FAILED_KEPT_ORIGINAL) — data loss kabhi nahi.
+     * Fixer L3 (strict): verify sirf RESTORING se hi transition
+     * karta hai — IDLE/BACKUP_TAKEN se verify bulane par state
+     * badalti nahi (pehle IDLE se bhi FAILED mark ho jata tha).
      */
     fun verifyRestored(ok: Boolean): State {
+        if (state != State.RESTORING) return state
         state = if (ok) State.RESTORED else State.FAILED_KEPT_ORIGINAL
         return state
     }

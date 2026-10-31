@@ -60,6 +60,11 @@ class SosStore(private val context: Context) {
         return true
     }
 
+    /** P3-04 delete scope: SOS contacts saaf karo. */
+    suspend fun clearAll() {
+        save(emptyList())
+    }
+
     suspend fun remove(index: Int) {
         val current = contacts.first().toMutableList()
         if (index in current.indices) {

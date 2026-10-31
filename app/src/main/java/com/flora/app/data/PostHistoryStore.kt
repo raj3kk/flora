@@ -108,4 +108,9 @@ object PostHistoryStore {
         val enc = MemoryCrypto.encodeStored(toJson(updated)) ?: return
         context.postHistoryDataStore.edit { it[key] = enc }
     }
+
+    /** P3-04 delete scope: post history saaf karo (AutoLogStore.clear jaisa pattern). */
+    suspend fun clear(context: Context) {
+        context.postHistoryDataStore.edit { it[key] = "[]" }
+    }
 }

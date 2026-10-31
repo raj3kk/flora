@@ -20,10 +20,18 @@ package com.flora.app.data
  *   flow chalega — doosra [tryApprove] false payega.
  * - Receipt: UTR sirf last-4 ke saath dikhta hai, poora kabhi nahi.
  * - Payment auto-confirm kabhi nahi (exclusion rule).
+ * - LIMITATION (fixer note, saaf darj): [UtrLedger] sirf
+ *   in-memory hai — app restart hote hi seen-UTR set khatam ho
+ *   jata hai. Isliye device ledger POORI duplicate protection
+ *   nahi hai; asli duplicate protection server/admin-match par
+ *   hai (admin UTR ko server ledger se milata hai). Ledger ko
+ *   persist isliye nahi kiya gaya kyunki is plain class ke paas
+ *   Context/DataStore plumbing nahi hai — naya risky storage
+ *   invent karne se behtar documented limitation hai.
  */
 object PaymentVerify {
 
-    enum class SubmitResult { FIRST, DUPLICATE }
+    enum class SubmitResult { FIRST, DUPLICATE, INVALID }
 
     data class Receipt(
         val utrLast4: String,
@@ -48,14 +56,20 @@ object PaymentVerify {
     }
 }
 
-/** Ek device-session ka UTR ledger (server ledger iska replacement nahi). */
+/** Ek device-session ka UTR ledger (server ledger iska replacement nahi).
+ *
+ * LIMITATION: ye set sirf memory me hai — app restart par khatam.
+ * Device ledger poori duplicate protection nahi deta; asli
+ * protection server/admin-match par hai. */
 class UtrLedger {
     private val seen = mutableSetOf<String>()
     private val approving = mutableSetOf<String>()
 
     @Synchronized
     fun submit(raw: String): PaymentVerify.SubmitResult {
-        if (!PaymentVerify.isValidUtrFormat(raw)) return PaymentVerify.SubmitResult.DUPLICATE
+        // Fixer L1: invalid format ab DUPLICATE nahi — alag INVALID
+        // result, taaki galat UTR aur dobara UTR alag dikhen.
+        if (!PaymentVerify.isValidUtrFormat(raw)) return PaymentVerify.SubmitResult.INVALID
         val utr = PaymentVerify.normalizeUtr(raw)
         if (!seen.add(utr)) return PaymentVerify.SubmitResult.DUPLICATE
         return PaymentVerify.SubmitResult.FIRST

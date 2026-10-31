@@ -6058,6 +6058,10 @@ private fun SettingsScreen(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    // P3-04/P3-05 (fixer wiring): delete/export + consent screens
+    // Settings se khulti hain — states yahin, use se PEHLE.
+    var showDeleteExport by remember { mutableStateOf(false) }
+    var showConsent by remember { mutableStateOf(false) }
     var anonKey by remember { mutableStateOf("") }
     var geminiKey by remember { mutableStateOf("") }
     var groqKey by remember { mutableStateOf("") }
@@ -6818,6 +6822,16 @@ private fun SettingsScreen(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = { onShowPermissions() }) { Text("Permissions dobara dekho") }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = { showConsent = true }) { Text("Privacy + consent dekho") }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = { showDeleteExport = true }) { Text("Data delete + export") }
+            if (showConsent) {
+                ConsentScreen(prefs = prefs, onClose = { showConsent = false })
+            }
+            if (showDeleteExport) {
+                DataDeleteExportScreen(onClose = { showDeleteExport = false })
+            }
             // Phase 9, A2 (R-A2-5): Live wallpaper — Settings row,
             // wahi chooser intent jo voice branch kholta hai
             // (WallpaperChooser, ek raasta). Koi dedicated

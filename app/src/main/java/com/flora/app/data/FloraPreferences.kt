@@ -167,6 +167,13 @@ class FloraPreferences(private val context: Context) {
         // server sync safal hua ya nahi — awaaz wale jawab isi
         // se "sync baaki hai" ka sach bolenge.
         val HOME_SERVER_SYNCED = booleanPreferencesKey("home_server_synced")
+        // P3-05: per-permission consent toggles — sab default OFF
+        // (ConsentCatalog.ENTRIES ke defaultOn se match karta hai).
+        val CONSENT_MIC_24X7 = booleanPreferencesKey("consent_mic_24x7")
+        val CONSENT_SCREEN_VIEW = booleanPreferencesKey("consent_screen_view")
+        val CONSENT_CAMERA = booleanPreferencesKey("consent_camera")
+        val CONSENT_NOTIFICATION_READ = booleanPreferencesKey("consent_notification_read")
+        val CONSENT_CONTACTS = booleanPreferencesKey("consent_contacts")
     }
 
     /**
@@ -273,6 +280,33 @@ class FloraPreferences(private val context: Context) {
 
     suspend fun setHomeServerSynced(value: Boolean) {
         context.floraDataStore.edit { it[Keys.HOME_SERVER_SYNCED] = value }
+    }
+
+    /**
+     * P3-05: ConsentCatalog key ("mic-24x7", "screen-view", "camera",
+     * "notification-read", "contacts") se consent toggle padho/likho.
+     * Koi key maujood na ho to OFF (default OFF — catalog se match).
+     * Keys object private hai, isliye screen isi API se guzregi.
+     */
+    suspend fun consentEnabled(catalogKey: String): Boolean {
+        val key = consentKeyFor(catalogKey) ?: return false
+        return context.floraDataStore.data.map { it[key] ?: false }.first()
+    }
+
+    suspend fun setConsentEnabled(catalogKey: String, value: Boolean) {
+        val key = consentKeyFor(catalogKey) ?: return
+        context.floraDataStore.edit { it[key] = value }
+    }
+
+    private fun consentKeyFor(catalogKey: String): Preferences.Key<Boolean>? {
+        return when (catalogKey) {
+            "mic-24x7" -> Keys.CONSENT_MIC_24X7
+            "screen-view" -> Keys.CONSENT_SCREEN_VIEW
+            "camera" -> Keys.CONSENT_CAMERA
+            "notification-read" -> Keys.CONSENT_NOTIFICATION_READ
+            "contacts" -> Keys.CONSENT_CONTACTS
+            else -> null
+        }
     }
 
     suspend fun userId(): String {

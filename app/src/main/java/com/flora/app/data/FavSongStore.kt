@@ -99,6 +99,11 @@ object FavSongStore {
         return song
     }
 
+    /** P3-04 delete scope: fav songs saaf karo (AutoLogStore.clear jaisa pattern). */
+    suspend fun clear(context: Context) {
+        context.favSongDataStore.edit { it[key] = "[]" }
+    }
+
     suspend fun remove(context: Context, id: String): Boolean {
         val current = list(context)
         val updated = current.filter { it.id != id }

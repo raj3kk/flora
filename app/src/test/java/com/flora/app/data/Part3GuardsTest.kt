@@ -47,6 +47,19 @@ class Part3GuardsTest {
     }
 
     @Test
+    fun verifyFromIdleDoesNotMarkFailed() {
+        // Fixer L3 (strict): IDLE se verify par state badalti nahi —
+        // pehle IDLE se bhi FAILED mark ho jata tha (loose machine).
+        val guard = BackupRestoreGuard()
+        assertEquals(BackupRestoreGuard.State.IDLE, guard.verifyRestored(false))
+        assertFalse(guard.originalKept())
+        val guard2 = BackupRestoreGuard()
+        guard2.markBackupTaken()
+        assertEquals(BackupRestoreGuard.State.BACKUP_TAKEN, guard2.verifyRestored(false))
+        assertFalse(guard2.originalKept())
+    }
+
+    @Test
     fun releaseGateNeedsEveryBlockingItem() {
         val all = ReleaseChecklist.ITEMS.associate { it.id to true }
         assertTrue(ReleaseChecklist.gatePass(all))

@@ -14,7 +14,15 @@ class PaymentVerifyTest {
         assertEquals(PaymentVerify.SubmitResult.DUPLICATE, ledger.submit("123456789012"))
         // Spaces/dashes ke saath wahi UTR = replay, phir bhi duplicate.
         assertEquals(PaymentVerify.SubmitResult.DUPLICATE, ledger.submit("1234 5678 9012"))
-        assertEquals(PaymentVerify.SubmitResult.DUPLICATE, ledger.submit("12345"))
+        // Fixer L1: invalid format ab DUPLICATE nahi — alag INVALID.
+        assertEquals(PaymentVerify.SubmitResult.INVALID, ledger.submit("12345"))
+    }
+
+    @Test
+    fun invalidDoesNotPoisonLedger() {
+        val ledger = UtrLedger()
+        assertEquals(PaymentVerify.SubmitResult.INVALID, ledger.submit("abc"))
+        assertEquals(PaymentVerify.SubmitResult.FIRST, ledger.submit("123456789012"))
     }
 
     @Test
