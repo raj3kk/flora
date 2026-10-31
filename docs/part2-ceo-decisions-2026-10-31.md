@@ -234,14 +234,16 @@ Koi code change bina CI green ke DONE-CODE nahi kehlata; live deploy claims is d
     code is item ke liye chhedna allowed tha, par zaroorat nahi padi; doosre parts
     ka behavior bilkul nahi badla gaya.
 
-## 8. D-15 — K7 comment: GATED (solo push nahi)
+## 8. D-15 — K7 comment: is cycle ke aakhri push me ride kiya (solo push nahi)
 
-- Is cycle me koi server file ka SOLO push K7 ke liye nahi hua. Agar is cycle ki
-  koi server-function push hoti hai (jaise user-data-delete ya provider_keys fix),
-  to usi push me K7 comment refresh karne ka niyam tha — par is cycle ki server
-  pushes code-push hain, dashboard deploy abhi parent step par pending hai, isliye
-  K7 ko chheda nahi gaya hai. K7 GATED darj hai: agle ASLI SERVER PUSH (dashboard
-  deploy wali) ke saath ride karega, solo push kabhi nahi.
+- NOTE (imaandaar): pehli do server pushes (user-data-delete, provider_keys fix)
+  me K7 comment nahi tha — wo is cycle ke aakhri push (K4 fill + K3 step) me
+  `supabase/functions/feature-flags/index.ts` ke header comment ke taur par
+  joda gaya hai, jo khud ek server file hai. K7 kabhi SOLO push nahi hua —
+  hamesha kisi doosre kaam ke push ke saath ride kiya, jo D-15 ka maksad hai.
+- Clarification ka content: feature-flags ka CORS block sirf isi function par
+  lagta hai; S3-3/S3-4 allowlist faisla alag se Part 2 doc §3 me darj hai.
+  Sirf comment hai, behavior change nahi.
   (Note: `supabase/sql/usage_atomic_increment.sql` + function comments me K7 ka
   purana zikr maujood hai — wo is cycle me badla nahi gaya.)
 
@@ -277,6 +279,32 @@ Koi code change bina CI green ke DONE-CODE nahi kehlata; live deploy claims is d
    current link 13 Nov 2026 tak).
 6. Uske baad: Part 4 validation -> user phone test -> final re-audit (sequence
    decisions doc §Sequence ke mutabiq).
+
+## 10b. SEQUENCE UPDATE — real release build mil gaya (is cycle me hi)
+
+- Release CI run 41211883993 completed/success (workflow_dispatch, head 175f0483):
+  signing-restore step success, assembleRelease success, publish success.
+- Published asset: tag `release-build-1` (prerelease, D-26 sign-off tak),
+  file `app-release.apk`, size 72,571,820 bytes.
+- Download verify (VM par, APK run nahi — sirf file verify):
+  aapt2 badging: package `com.flora.app`, versionCode 45, versionName
+  `2.22.0-rebuild`, application-debuggable flag NAHI (release variant);
+  SHA-256: `8dead87873d7e539ecff1685a312ecd63cad3964a0a1c3cbf7d260a535166602`.
+  Apksigner verify VM par nahi chal paya (java VM par nahi mila) — ye APK ka
+  fail nahi hai, CI release-signing step + non-debuggable badging hi evidence hai.
+- TABHI K4 fill hua: `web/updates/version.json` me apkUrl (release-build-1 asset)
+  + upar wala REAL release SHA (DEBUG SHA se kabhi nahi) + notes se private-repo
+  note aur 50 MB clause hataya gaya (D-01 Releases route se superseded).
+  `/download.html` bhi update hua: naya size/SHA/link, release-signed note,
+  Swiss v2.22 link superseded note.
+- TABHI K3 step: `release.yml` me "Record update metadata (K3)" step joda gaya
+  (publish ke baad SHA + download URL run summary me; koi commit/push nahi karta).
+  K3 ka asli update-upload step Publish release APK hi hai (tag release-build-1).
+- Swiss nayi upload ki TAIYAARI: asset + procedure ready hai (nayi upload, extend
+  nahi, sirf CI-green REAL build ki — ye build wahi hai), par Swiss upload KHUD
+  parent browser step hai, is cycle me upload nahi hua.
+- Agla trigger: Part 4 validation (is release build par) -> user phone test +
+  sign-off (D-26) -> tabhi full-release flag + final re-audit.
 
 ## Out-of-scope flags
 

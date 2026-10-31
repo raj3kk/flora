@@ -36,6 +36,12 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// ZP-K7 scope clarification (CEO batch 2026-10-31, D-15 — agle asli server
+// push ke saath ride, solo push nahi; sirf comment, behavior change nahi):
+// is file ka CORS block SIRF is function (feature-flags) par lagta hai —
+// ye kisi doosre function ke CORS ka daava nahi karta, aur S3-3/S3-4
+// allowlist (Vercel domains only, wildcard nahi) ka faisla alag se
+// Part 2 doc me darj hai, is comment se nahi badalta.
 // S2-1 (Cycle 2 FIX, PARTIAL — sirf free functions): CORS preflight.
 // Browser calls (panel/website, Authorization header wali) par
 // OPTIONS ko 200 + allow headers do; wahi headers har response

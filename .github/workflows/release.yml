@@ -44,3 +44,13 @@ jobs:
         run: |
           TAG="release-build-${{ github.run_number }}"
           gh release create "$TAG" --prerelease --title "Flora release build ${{ github.run_number }}" --notes "Commit ${{ github.sha }} — prerelease until user phone sign-off (D-26)" app/build/outputs/apk/release/*.apk
+      # K3 update-upload step (CEO batch sequence, real SHA par depend):
+      # publish ke baad built APK ka SHA-256 + download URL run summary me
+      # darj hota hai — wahi SHA K4 (version.json) fill me use hota hai.
+      # Ye step koi commit/push nahi karta (loop se bachne ke liye).
+      - name: Record update metadata (K3)
+        run: |
+          TAG="release-build-${{ github.run_number }}"
+          echo "## Flora release $TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download: https://github.com/raj3kk/flora/releases/download/$TAG/app-release.apk" >> "$GITHUB_STEP_SUMMARY"
+          sha256sum app/build/outputs/apk/release/*.apk >> "$GITHUB_STEP_SUMMARY"
