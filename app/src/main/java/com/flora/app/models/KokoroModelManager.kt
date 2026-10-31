@@ -61,6 +61,25 @@ object KokoroModelManager {
 
     private fun okFile(context: Context): File = File(dir(context), ".ok")
 
+    /**
+     * FIXER ISSUE-1: .part naam ab URL + expected SHA se banta hai
+     * (hash, hex-only) — sirf fixed target filename se nahi.
+     * URL ya SHA badle to purani .part naye download me append
+     * NAHI hogi (alag naam = naya part; purana orphan, mix nahi).
+     * SHA check: caller download() me strict equality hai —
+     * khali expected SHA kabhi file hash se match nahi karta,
+     * isliye Kokoro path me ISSUE-3 jaisa fail-open hole NAHI
+     * hai (khali SHA par 3 attempts fail + koi .ok nahi) —
+     * isliye yahan SHA logic chheda nahi gaya (Kokoro path clean).
+     */
+    private fun partFileFor(target: File, urlText: String, wantSha: String): File {
+        val key = "$urlText|$wantSha"
+        val hex = MessageDigest.getInstance("SHA-256")
+            .digest(key.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }.take(16)
+        return File(target.path + "-$hex.part")
+    }
+
     fun isReady(context: Context): Boolean {
         // REG-F9 residual (Part 1): .ok-marker validation — sirf
         // existence nahi, .ok ke andar likhe SHA config ke SHA
@@ -137,7 +156,7 @@ object KokoroModelManager {
                 for ((urlText, target, wantSha) in jobs) {
                     var ok = false
                     for (attempt in 1..3) {
-                        if (downloadOne(urlText, target) { chunk ->
+                        if (downloadOne(urlText, target, wantSha) { chunk ->
                             done += chunk
                             onProgress(done, total)
                         } && sha256(target).equals(wantSha, ignoreCase = true)) {
@@ -145,7 +164,7 @@ object KokoroModelManager {
                             break
                         } else {
                             try { target.delete() } catch (e: Exception) { }
-                            try { File(target.path + ".part").delete() } catch (e: Exception) { }
+                            try { partFileFor(target, urlText, wantSha).delete() } catch (e: Exception) { }
                         }
                     }
                     if (!ok) return@withContext false
@@ -177,16 +196,28 @@ object KokoroModelManager {
      * resume karega); SHA check caller (download) karta hai.
      */
     private fun downloadOne(
-        urlText: String, target: File, onChunk: (Long) -> Unit
+        urlText: String, target: File, wantSha: String, onChunk: (Long) -> Unit
     ): Boolean {
-        val part = File(target.path + ".part")
-        val resumeFrom = if (part.exists()) part.length() else 0L
+        val part = partFileFor(target, urlText, wantSha)
+        var resumeFrom = if (part.exists()) part.length() else 0L
         return try {
-            val conn = PinnedTrust.openConnection(URL(urlText)) as HttpURLConnection
+            var conn = PinnedTrust.openConnection(URL(urlText)) as HttpURLConnection
             conn.requestMethod = "GET"
             if (resumeFrom > 0) conn.setRequestProperty("Range", "bytes=$resumeFrom-")
             conn.connectTimeout = 20_000
             conn.readTimeout = 60_000
+            // FIXER ISSUE-2: 416 par .part delete karke EK BAAR
+            // fresh (bina Range) retry — bounded; dobara 416
+            // aaye to neeche false hi rahega, loop kabhi nahi.
+            if (conn.responseCode == 416 && resumeFrom > 0) {
+                conn.disconnect()
+                part.delete()
+                resumeFrom = 0L
+                conn = PinnedTrust.openConnection(URL(urlText)) as HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.connectTimeout = 20_000
+                conn.readTimeout = 60_000
+            }
             if (conn.responseCode !in 200..299) {
                 conn.disconnect()
                 return false

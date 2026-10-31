@@ -75,6 +75,22 @@ object ModelDownloader {
     private fun okFile(context: Context, model: FloraModel): File =
         File(modelDir(context, model.id), ".ok")
 
+    /**
+     * FIXER ISSUE-1: .part naam ab manifest key se banta hai
+     * (URL + version + SHA ka hash) — sirf model-id se nahi.
+     * Manifest me wahi id ka URL/version/SHA badle to purani
+     * .part naye download me append NAHI hogi (alag naam =
+     * naya part, purana orphan reh jayega, kabhi mix nahi).
+     * Naam sirf hex hai, isliye filesystem-safe hai.
+     */
+    private fun partFile(context: Context, model: FloraModel): File {
+        val key = "${model.url}|${model.version}|${model.sha256}"
+        val hex = MessageDigest.getInstance("SHA-256")
+            .digest(key.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }.take(16)
+        return File(modelDir(context, model.id), "download-$hex.part")
+    }
+
     private fun dataFile(context: Context, model: FloraModel): File {
         val name = model.url.substringAfterLast("/").ifEmpty { model.id }
         return File(modelDir(context, model.id), name)
@@ -173,24 +189,45 @@ object ModelDownloader {
     suspend fun download(context: Context, model: FloraModel): Boolean =
         withContext(Dispatchers.IO) {
             if (model.bundled || model.url.isEmpty()) return@withContext false
+            // FIXER ISSUE-3: remote/manifest model ke liye khali SHA
+            // fail-OPEN tha (bina verify accept + .ok). Ab khali SHA
+            // par download shuru hi nahi hoga — false, .ok nahi.
+            // Bundled models is path par aate hi nahi (upar return).
+            if (model.sha256.isEmpty()) return@withContext false
             synchronized(downloading) {
                 if (model.id in downloading) return@withContext false
                 downloading += model.id
             }
             try {
-                val part = File(modelDir(context, model.id), "download.part")
+                val part = partFile(context, model)
                 // REG-F9 residual (Part 1): resume — aadhi .part ho to
                 // Range se wahi se jaari rakho; server 206 na de to
                 // (200) shuru se. Digest me .part ke bytes bhi
                 // shamil hain, taaki aakhri SHA poori file ka ho.
-                val resumeFrom = if (part.exists()) part.length() else 0L
+                var resumeFrom = if (part.exists()) part.length() else 0L
                 // G17 (Phase 8): model URL pin-checked
                 // (Supabase bucket host; doosre hosts par plain).
-                val conn = PinnedTrust.openConnection(URL(model.url)) as HttpURLConnection
+                var conn = PinnedTrust.openConnection(URL(model.url)) as HttpURLConnection
                 conn.requestMethod = "GET"
                 if (resumeFrom > 0) conn.setRequestProperty("Range", "bytes=$resumeFrom-")
                 conn.connectTimeout = 20_000
                 conn.readTimeout = 60_000
+                // FIXER ISSUE-2: 416 = Range aage nikal gaya (part
+                // server file se bada/purana). Purana code .part
+                // rakh kar false deta tha → har retry wahi Range
+                // bhejta tha → data-clear tak stall. Ab 416 par
+                // .part delete karke EK BAAR fresh (bina Range)
+                // retry — bounded, dobara 416 aaye to false hi
+                // rahega, loop kabhi nahi.
+                if (conn.responseCode == 416 && resumeFrom > 0) {
+                    conn.disconnect()
+                    part.delete()
+                    resumeFrom = 0L
+                    conn = PinnedTrust.openConnection(URL(model.url)) as HttpURLConnection
+                    conn.requestMethod = "GET"
+                    conn.connectTimeout = 20_000
+                    conn.readTimeout = 60_000
+                }
                 if (conn.responseCode !in 200..299) {
                     conn.disconnect()
                     return@withContext false
