@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -168,7 +169,7 @@ object ModelDownloader {
         }
     }
 
-    /** Ek remote model download karo: .part → SHA verify → .ok. */
+    /** Ek remote model download karo: .part (+Range resume) → SHA verify → .ok. */
     suspend fun download(context: Context, model: FloraModel): Boolean =
         withContext(Dispatchers.IO) {
             if (model.bundled || model.url.isEmpty()) return@withContext false
@@ -178,19 +179,38 @@ object ModelDownloader {
             }
             try {
                 val part = File(modelDir(context, model.id), "download.part")
+                // REG-F9 residual (Part 1): resume — aadhi .part ho to
+                // Range se wahi se jaari rakho; server 206 na de to
+                // (200) shuru se. Digest me .part ke bytes bhi
+                // shamil hain, taaki aakhri SHA poori file ka ho.
+                val resumeFrom = if (part.exists()) part.length() else 0L
                 // G17 (Phase 8): model URL pin-checked
                 // (Supabase bucket host; doosre hosts par plain).
                 val conn = PinnedTrust.openConnection(URL(model.url)) as HttpURLConnection
                 conn.requestMethod = "GET"
+                if (resumeFrom > 0) conn.setRequestProperty("Range", "bytes=$resumeFrom-")
                 conn.connectTimeout = 20_000
                 conn.readTimeout = 60_000
                 if (conn.responseCode !in 200..299) {
                     conn.disconnect()
                     return@withContext false
                 }
+                val resumed = conn.responseCode == 206
                 val digest = MessageDigest.getInstance("SHA-256")
+                if (resumed) {
+                    FileInputStream(part).use { existing ->
+                        val buf = ByteArray(8192)
+                        while (true) {
+                            val n = existing.read(buf)
+                            if (n < 0) break
+                            digest.update(buf, 0, n)
+                        }
+                    }
+                } else if (part.exists()) {
+                    part.delete()
+                }
                 conn.inputStream.use { input ->
-                    FileOutputStream(part).use { output ->
+                    FileOutputStream(part, resumed).use { output ->
                         val buf = ByteArray(8192)
                         while (true) {
                             val n = input.read(buf)
@@ -219,10 +239,9 @@ object ModelDownloader {
                 )
                 true
             } catch (e: Exception) {
-                try {
-                    File(modelDir(context, model.id), "download.part").delete()
-                } catch (e2: Exception) {
-                }
+                // Resume ke liye .part RAKHO — agla try wahi se
+                // jaari rakhega. Galat SHA par upar delete hota
+                // hi hai, isliye corrupt part kabhi ready nahi.
                 false
             } finally {
                 synchronized(downloading) { downloading -= model.id }

@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -61,9 +62,19 @@ object KokoroModelManager {
     private fun okFile(context: Context): File = File(dir(context), ".ok")
 
     fun isReady(context: Context): Boolean {
+        // REG-F9 residual (Part 1): .ok-marker validation — sirf
+        // existence nahi, .ok ke andar likhe SHA config ke SHA
+        // se milne chahiye, warna stale .ok ready nahi manega.
+        // (Poori 354 MB re-hash har check par nahi — SHA verify
+        // download ke waqt hi hota hai, .ok tabhi likha jata hai.)
         return try {
-            okFile(context).exists() &&
-                modelFile(context).exists() && modelFile(context).length() > 0 &&
+            val ok = okFile(context)
+            if (!ok.exists()) return false
+            val saved = JSONObject(ok.readText())
+            if (saved.optString("model_sha") != FloraConfig.KOKORO_MODEL_SHA256 ||
+                saved.optString("voices_sha") != FloraConfig.KOKORO_VOICES_SHA256
+            ) return false
+            modelFile(context).exists() && modelFile(context).length() > 0 &&
                 voicesFile(context).exists() && voicesFile(context).length() > 0
         } catch (e: Exception) {
             false
@@ -94,11 +105,12 @@ object KokoroModelManager {
     /**
      * Dono file download karo (3 attempts tak). Progress
      * callback ko (downloadedBytes, totalBytes) milta hai —
-     * UI percent dikhata hai. Fail ho to false; .part delete
-     * kar di jati hai taaki aadhi file kabhi ready na mane.
-     * Resume is build me nahi hai (dobara try poori file
-     * phir se download karega) — docs me limit ke roop me
-     * likha hai.
+     * UI percent dikhata hai. Fail ho to false; aadhi file
+     * kabhi ready nahi mani jayegi (SHA verify + .ok tabhi).
+     * REG-F9 residual (Part 1): resume — aadhi .part ho to
+     * agla attempt Range se wahi se jaari rakhta hai (server
+     * 206 na de to shuru se); SHA galat nikle to hi .part
+     * delete hoti hai.
      */
     suspend fun download(
         context: Context,
@@ -158,25 +170,31 @@ object KokoroModelManager {
     /**
      * Ek file .part me download karo. Progress callback ko
      * har 512 KB ke baad chunk bytes milte hain (UI ko har
-     * 8 KB par update karna bekaar hota). HTTP 200 ke alawa
-     * kuch mile to false.
+     * 8 KB par update karna bekaar hota). HTTP 200/206 ke
+     * alawa kuch mile to false. Resume: aadhi .part ho to
+     * Range header se wahi se jaari; server 206 na de to
+     * shuru se. Fail par .part rakhi jati hai (agla attempt
+     * resume karega); SHA check caller (download) karta hai.
      */
     private fun downloadOne(
         urlText: String, target: File, onChunk: (Long) -> Unit
     ): Boolean {
         val part = File(target.path + ".part")
+        val resumeFrom = if (part.exists()) part.length() else 0L
         return try {
             val conn = PinnedTrust.openConnection(URL(urlText)) as HttpURLConnection
             conn.requestMethod = "GET"
+            if (resumeFrom > 0) conn.setRequestProperty("Range", "bytes=$resumeFrom-")
             conn.connectTimeout = 20_000
             conn.readTimeout = 60_000
             if (conn.responseCode !in 200..299) {
                 conn.disconnect()
                 return false
             }
+            val resumed = conn.responseCode == 206
             var sinceReport = 0L
             conn.inputStream.use { input ->
-                part.outputStream().use { out ->
+                FileOutputStream(part, resumed).use { out ->
                     val buf = ByteArray(8 * 1024)
                     while (true) {
                         val n = input.read(buf)
@@ -198,7 +216,7 @@ object KokoroModelManager {
             }
             true
         } catch (e: Exception) {
-            try { part.delete() } catch (ignored: Exception) { }
+            // .part rakho — agla attempt resume karega.
             false
         }
     }

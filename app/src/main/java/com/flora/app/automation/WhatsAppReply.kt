@@ -56,7 +56,7 @@ import kotlinx.coroutines.delay
  * Per-message confirmation dialog is executor me nahi hai —
  * wo chahiye to alag decision se judna chahiye, chhupke nahi.
  *
- * Honest limits (phone par prove hona baaki hai, Phase 10):
+ * Honest limits (phone par prove hona baaki hai, Final Validation Flow me):
  * WhatsApp ka UI badal sakta hai (send button ka description,
  * chat row layout, header bounds). Isliye har step verify +
  * fail-safe hai, par UI-fragility ki guarantee nahi di ja sakti

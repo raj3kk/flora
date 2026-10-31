@@ -15,17 +15,35 @@ import java.util.Locale
  * Hooks isko [record] se bulate hain — ye kabhi throw nahi karta aur
  * init na hua ho to no-op hai, isliye hook wali jagah ka behaviour
  * kabhi nahi badalta. Detail likhte waqt sanitize hoti hai
- * (CatcherSanitize) + single-line + 500 chars cap. Rotation: file
- * 100KB se upar ho to aadhi purani lines hata do.
+ * (CatcherSanitize) + single-line + 500 chars cap.
+ *
+ * Rotation (P3-01 fix — purana aadha-drop hataya gaya): file
+ * 100KB se upar ho to poori file ek generation ke liye
+ * catcher_events.prev.log me archive hoti hai, phir nayi file ek
+ * ROTATION marker line se shuru hoti hai. Koi line chupchaap
+ * aadhi-drop nahi hoti — purana evidence prev file me milta hai.
+ * Auto-upload kabhi nahi; copy/share/save sirf user-tap par.
  *
  * Crash isme nahi aata — crash FloraApplication ke crash.log me hai,
  * Catcher use CrashLogReader se padhta hai.
  */
 object CatcherEvents {
     private const val FILE_NAME = "catcher_events.log"
+    const val PREV_FILE_NAME = "catcher_events.prev.log"
     private const val MAX_BYTES = 100 * 1024
     private const val MAX_DETAIL_CHARS = 500
     const val MAX_TAIL_EVENTS = 50
+
+    /** True jab [init] chala ho — Catcher screen isse init-health dikhata hai. */
+    fun isInitialised(): Boolean = dir != null
+
+    fun prevLogExists(filesDir: File): Boolean {
+        return try {
+            File(filesDir, PREV_FILE_NAME).exists()
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     @Volatile
     private var dir: File? = null
@@ -56,9 +74,14 @@ object CatcherEvents {
         val log = File(filesDir, FILE_NAME)
         try {
             if (log.exists() && log.length() > MAX_BYTES) {
-                val lines = log.readLines()
-                val kept = if (lines.size > 1) lines.drop(lines.size / 2) else emptyList()
-                log.writeText(if (kept.isEmpty()) line else kept.joinToString("\n") + "\n" + line)
+                // P3-01: archive poori file, marker ke saath nayi shuruaat.
+                // Archive fail ho to bhi naya event kabhi nahi khota — append karo.
+                try {
+                    log.copyTo(File(filesDir, PREV_FILE_NAME), overwrite = true)
+                    log.writeText("$ts | ROTATION | previous generation archived to $PREV_FILE_NAME\n" + line)
+                } catch (e: Exception) {
+                    log.appendText(line)
+                }
             } else {
                 log.appendText(line)
             }
@@ -72,6 +95,30 @@ object CatcherEvents {
             if (!log.exists()) emptyList() else log.readLines().takeLast(maxEvents)
         } catch (e: Exception) {
             emptyList()
+        }
+    }
+
+    /**
+     * REG-F9 residual (Part 1): per-class counts — log ki har
+     * category ki ginti. Pure File IO; line format
+     * `time | CATEGORY | detail` hai, kharab line skip hoti
+     * hai. Kabhi throw nahi karta (fail par empty map).
+     */
+    fun countsByCategory(filesDir: File): Map<String, Int> {
+        return try {
+            val log = File(filesDir, FILE_NAME)
+            if (!log.exists()) return emptyMap()
+            val counts = mutableMapOf<String, Int>()
+            for (line in log.readLines()) {
+                val parts = line.split(" | ")
+                if (parts.size < 3) continue
+                val category = parts[1].trim()
+                if (category.isEmpty()) continue
+                counts[category] = (counts[category] ?: 0) + 1
+            }
+            counts
+        } catch (e: Exception) {
+            emptyMap()
         }
     }
 

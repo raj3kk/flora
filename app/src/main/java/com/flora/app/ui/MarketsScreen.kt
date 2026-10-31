@@ -1,5 +1,8 @@
 package com.flora.app.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -179,6 +182,15 @@ fun MarketsScreen() {
                 onClick = { refreshAll(symbols) },
                 enabled = symbols.isNotEmpty() && !refreshing
             ) { Text(if (refreshing) "Refresh ho raha hai…" else "Prices refresh karo") }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("Flora watchlist", WatchlistStore.exportText(symbols)))
+                    note = "Watchlist copy ho gayi — ${symbols.size} symbol."
+                },
+                enabled = symbols.isNotEmpty()
+            ) { Text("Watchlist export karo (copy)") }
             if (note.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(note)

@@ -51,4 +51,8 @@ object WatchlistStore {
     suspend fun remove(context: Context, symbol: String) {
         save(context, load(context).filter { it != symbol })
     }
+
+    /** GAP-M8 (Part 1): watchlist export — ek symbol per line, plain text. Pure, koi IO nahi. */
+    fun exportText(symbols: List<String>): String =
+        symbols.filter { it.isNotBlank() }.joinToString("\n")
 }

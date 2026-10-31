@@ -97,4 +97,25 @@ class CatcherEventsTest {
             dir.deleteRecursively()
         }
     }
+
+    @Test
+    fun countsByCategoryGroupsPerClass() {
+        val dir = tempDir()
+        try {
+            CatcherEvents.recordTo(dir, "API", "first")
+            CatcherEvents.recordTo(dir, "API", "second")
+            CatcherEvents.recordTo(dir, "STT", "third")
+            val counts = CatcherEvents.countsByCategory(dir)
+            assertEquals(2, counts["API"])
+            assertEquals(1, counts["STT"])
+            val empty = tempDir()
+            try {
+                assertEquals(emptyMap<String, Int>(), CatcherEvents.countsByCategory(empty))
+            } finally {
+                empty.deleteRecursively()
+            }
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
 }

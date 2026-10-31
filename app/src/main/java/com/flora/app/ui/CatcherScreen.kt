@@ -71,6 +71,7 @@ fun CatcherScreen(
     var note by remember { mutableStateOf("") }
     var crashText by remember { mutableStateOf<String?>(null) }
     var events by remember { mutableStateOf<List<String>>(emptyList()) }
+    var countsText by remember { mutableStateOf("") }
     var savedMsg by remember { mutableStateOf("") }
     var report by remember { mutableStateOf("") }
     val autoItems by autoLogStore.items.collectAsState(initial = emptyList())
@@ -78,8 +79,11 @@ fun CatcherScreen(
     LaunchedEffect(Unit) {
         val c = withContext(Dispatchers.IO) { CrashLogReader.readCrashLog(context.filesDir) }
         val e = withContext(Dispatchers.IO) { CatcherEvents.readTail() }
+        val counts = withContext(Dispatchers.IO) { CatcherEvents.countsByCategory(context.filesDir) }
         crashText = c
         events = e
+        countsText = counts.entries.sortedByDescending { it.value }
+            .joinToString(", ") { "${it.key}: ${it.value}" }
     }
     LaunchedEffect(crashText, events, autoItems, note, licence, autoMode, fcmStatus) {
         val fmt = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
@@ -118,6 +122,10 @@ fun CatcherScreen(
                 "events, Auto Log aur system state. Isme password, key, OTP " +
                 "ya poora UTR kabhi nahi aata."
         )
+        if (countsText.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Events by category: $countsText")
+        }
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
             value = note,
