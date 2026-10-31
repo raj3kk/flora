@@ -1,4 +1,5 @@
 package com.flora.app.tools
+import com.flora.app.data.CatcherHooks
 
 import com.flora.app.data.BuilderService
 import com.flora.app.data.FloraPreferences
@@ -59,6 +60,7 @@ class VercelClient(
     private suspend fun token(): String = try {
         prefs.builderToken(BuilderService.VERCEL)
     } catch (e: Exception) {
+        CatcherHooks.networkError("vercel", "exception", "exception")
         ""
     }
 
@@ -84,6 +86,7 @@ class VercelClient(
                 BuilderOutcome.Failure(BuilderHttp.classifyHttp(raw.code), "http ${raw.code}")
             }
         } catch (e: Exception) {
+            CatcherHooks.networkError("vercel", "exception", "exception")
             BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
         }
     }
@@ -107,6 +110,7 @@ class VercelClient(
                     BuilderOutcome.Failure(BuilderHttp.classifyHttp(raw.code), "http ${raw.code}")
                 }
             } catch (e: Exception) {
+                CatcherHooks.networkError("vercel", "exception", "exception")
                 BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
             }
         }
@@ -144,6 +148,7 @@ class VercelClient(
                 BuilderOutcome.Failure(BuilderHttp.classifyHttp(raw.code), "http ${raw.code}")
             }
         } catch (e: Exception) {
+            CatcherHooks.networkError("vercel", "exception", "exception")
             BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
         }
     }

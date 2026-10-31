@@ -38,6 +38,7 @@ class AutoLogStore(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("auto-log", "unknown", "exception")
         }
         out
     }
@@ -52,6 +53,7 @@ class AutoLogStore(private val context: Context) {
                 if (el is JSONObject) list.add(el.optString("text", "") to el.optLong("ts", 0L))
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("auto-log", "add", "exception")
         }
         list.add(text to System.currentTimeMillis())
         val arr = JSONArray()
@@ -75,6 +77,7 @@ class AutoLogStore(private val context: Context) {
                 if (el is JSONObject && el.optLong("ts", 0L) >= cutoffMs) kept.put(el)
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("auto-log", "pruneOlderThan", "exception")
         }
         context.autoLogDataStore.edit { val enc = MemoryCrypto.encodeStored(kept.toString()); if (enc != null) it[key] = enc }
     }

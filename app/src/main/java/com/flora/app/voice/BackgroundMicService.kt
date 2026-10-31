@@ -1,4 +1,5 @@
 package com.flora.app.voice
+import com.flora.app.data.CatcherHooks
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -163,6 +164,7 @@ class BackgroundMicService : Service() {
                     prefs.addTalkSeconds(today, seconds)
                     licenceClient.countUsage(prefs.effectiveUserId(), seconds)
                 } catch (e: Exception) {
+                    CatcherHooks.laneError("mic", "exception")
                 }
             }
         }
@@ -222,6 +224,7 @@ class BackgroundMicService : Service() {
                             }
                             startActivity(launch)
                         } catch (e: Exception) {
+                            CatcherHooks.laneError("mic", "exception")
                         }
                     }
                 }
@@ -259,6 +262,7 @@ class BackgroundMicService : Service() {
             }
             startForegroundService(show)
         } catch (e: Exception) {
+            CatcherHooks.laneError("mic", "exception")
         }
     }
 
@@ -329,6 +333,7 @@ class BackgroundMicService : Service() {
         val faceLocked = try {
             prefs.faceLock() && !prefs.isFaceLockUnlocked()
         } catch (e: Exception) {
+            CatcherHooks.laneError("mic", "exception")
             true
         }
         if (faceLocked) {
@@ -343,6 +348,7 @@ class BackgroundMicService : Service() {
                 }
                 startActivity(launch)
             } catch (e: Exception) {
+                CatcherHooks.laneError("mic", "exception")
             }
             return
         }
@@ -362,6 +368,7 @@ class BackgroundMicService : Service() {
                 }
                 startActivity(launch)
             } catch (e: Exception) {
+                CatcherHooks.laneError("mic", "exception")
             }
             return
         }
@@ -387,6 +394,7 @@ class BackgroundMicService : Service() {
             val visionGate = try {
                 LicenceGate.check(prefs)
             } catch (e: Exception) {
+                CatcherHooks.laneError("mic", "exception")
                 null
             }
             if (visionGate is LicenceGate.Result.Blocked) {
@@ -396,9 +404,12 @@ class BackgroundMicService : Service() {
             val jpeg = try {
                 FloraAutomationService.instance?.screenshotJpeg()
             } catch (e: Exception) {
+                CatcherHooks.laneError("mic", "exception")
                 null
             }
-            val key = try { prefs.geminiApiKey() } catch (e: Exception) { "" }
+            val key = try { prefs.geminiApiKey() } catch (e: Exception) {
+                CatcherHooks.laneError("mic", "exception")
+            "" }
             if (jpeg != null && key.isNotEmpty()) {
                 // Tree context (Phase 3, Maya jaisa): background me bhi
                 // vision ko sirf photo nahi, saamne wali app + likha text
@@ -406,12 +417,14 @@ class BackgroundMicService : Service() {
                 val treeTexts = try {
                     FloraAutomationService.instance?.visibleTexts(25)
                 } catch (e: Exception) {
+                    CatcherHooks.laneError("mic", "exception")
                     null
                 }
                 val richQuestion = if (!treeTexts.isNullOrEmpty()) {
                     val fg = try {
                         FloraAutomationService.instance?.foregroundPackage()
                     } catch (e: Exception) {
+                        CatcherHooks.laneError("mic", "exception")
                         null
                     }
                     "Saamne wali app: ${fg ?: "pata nahi"}. " +
@@ -423,6 +436,7 @@ class BackgroundMicService : Service() {
                 val reply = try {
                     VisionClient().askAboutImage(richQuestion, jpeg, key)
                 } catch (e: Exception) {
+                    CatcherHooks.laneError("mic", "exception")
                     null
                 }
                 voice?.speak(reply?.take(500) ?: "Is baar dekh nahi payi — dobara boliye.")
@@ -455,6 +469,7 @@ class BackgroundMicService : Service() {
             val imageGate = try {
                 LicenceGate.check(prefs)
             } catch (e: Exception) {
+                CatcherHooks.laneError("mic", "exception")
                 null
             }
             if (imageGate is LicenceGate.Result.Blocked) {
@@ -484,6 +499,7 @@ class BackgroundMicService : Service() {
                 ).plan
                 cachedPlanAtMs = nowMs
             } catch (e: Exception) {
+                CatcherHooks.laneError("mic", "exception")
                 // Verify fail: purana cached plan hi use hoga
                 // (fail-open); timestamp update nahi, taaki agla
                 // sawaal dobara verify ki koshish kare.
@@ -492,21 +508,31 @@ class BackgroundMicService : Service() {
         val today = java.text.SimpleDateFormat(
             "yyyy-MM-dd", java.util.Locale.US
         ).format(java.util.Date())
-        val used = try { prefs.talkSecondsUsed(today) } catch (e: Exception) { 0L }
+        val used = try { prefs.talkSecondsUsed(today) } catch (e: Exception) {
+            CatcherHooks.laneError("mic", "exception")
+        0L }
         if (cachedPlan != "pro" && used >= 600) {
             // B5 (fix-cycle): message ki doosri copy nahi — LicenceGate ka const.
             voice?.speak(LicenceGate.FREE_LIMIT_MESSAGE)
-            try { AutoLogStore(applicationContext).add("Free talk time khatam (10 min/day) — cap laga.") } catch (e: Exception) { }
+            try { AutoLogStore(applicationContext).add("Free talk time khatam (10 min/day) — cap laga.") } catch (e: Exception) {
+                CatcherHooks.laneError("mic", "exception")
+            }
             return
         }
         // B5 (fix-cycle): cap se pehle ek baar chetavni (din me ek baar) —
         // cap par surprise nahi hona chahiye. Pro par kabhi nahi.
         if (cachedPlan != "pro" && used >= 540) {
-            val warned = try { prefs.capWarnDate() } catch (e: Exception) { "" }
+            val warned = try { prefs.capWarnDate() } catch (e: Exception) {
+                CatcherHooks.laneError("mic", "exception")
+            "" }
             if (warned != today) {
-                try { prefs.setCapWarnDate(today) } catch (e: Exception) { }
+                try { prefs.setCapWarnDate(today) } catch (e: Exception) {
+                    CatcherHooks.laneError("mic", "exception")
+                }
                 voice?.speak("Free talk time bas 1 minute bacha hai.")
-                try { AutoLogStore(applicationContext).add("Free talk time warning: bas 1 minute bacha hai.") } catch (e: Exception) { }
+                try { AutoLogStore(applicationContext).add("Free talk time warning: bas 1 minute bacha hai.") } catch (e: Exception) {
+                    CatcherHooks.laneError("mic", "exception")
+                }
             }
         }
         // N5/NOTCH-07: foreground jaisi history — persisted
@@ -518,6 +544,7 @@ class BackgroundMicService : Service() {
             ChatMemoryStore(applicationContext).loadAll()
                 .map { BrainClient.ChatTurn(it.fromUser, it.text) }
         } catch (e: Exception) {
+            CatcherHooks.laneError("mic", "exception")
             emptyList()
         }
         // A1 follow-up F3: background-mic conversational path bhi
@@ -538,6 +565,7 @@ class BackgroundMicService : Service() {
                 transientNote = BatteryTransientNote.note(applicationContext, prefs),
             )
         } catch (e: Exception) {
+            CatcherHooks.laneError("mic", "exception")
             "Brain se baat nahi ho payi, dobara boliye."
         }
         // Background turn bhi yaad rahe (warna agla foreground
@@ -548,6 +576,7 @@ class BackgroundMicService : Service() {
             store.addTurn(true, question)
             store.addTurn(false, reply)
         } catch (e: Exception) {
+            CatcherHooks.laneError("mic", "exception")
         }
         voice?.speak(reply)
     }
@@ -564,6 +593,7 @@ class BackgroundMicService : Service() {
             try {
                 startForegroundService(Intent(this, BackgroundMicService::class.java))
             } catch (e: Exception) {
+                CatcherHooks.laneError("mic", "exception")
             }
         }
     }

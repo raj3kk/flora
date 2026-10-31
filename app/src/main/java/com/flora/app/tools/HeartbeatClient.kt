@@ -1,4 +1,5 @@
 package com.flora.app.tools
+import com.flora.app.data.CatcherHooks
 
 import com.flora.app.core.FloraConfig
 import com.flora.app.core.PinnedTrust
@@ -48,11 +49,14 @@ object HeartbeatClient {
                     // Response code kuch bhi ho (200 ya 404 ya 403):
                     // sirf padh kar chhod do — heartbeat kabhi
                     // app ka kaam nahi rokta.
-                    try { conn.responseCode } catch (e: Exception) { }
+                    try { conn.responseCode } catch (e: Exception) {
+                        CatcherHooks.networkError("heartbeat", "exception", "exception")
+                    }
                 } finally {
                     conn.disconnect()
                 }
             } catch (e: Exception) {
+                CatcherHooks.networkError("heartbeat", "exception", "exception")
                 // Silent skip — upar ke niyam ke mutaabiq.
             }
         }

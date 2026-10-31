@@ -31,6 +31,7 @@ object WatchlistStore {
                 if (s.isNotBlank()) out.add(s)
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("watchlist", "load", "exception")
         }
         return out
     }

@@ -9,7 +9,7 @@ import com.flora.app.planner.FloraToolsStartup
 /**
  * Flora application class. No background work starts on its own.
  *
- * Crash-evidence (v2.22, production-ready bar): koi bhi
+ * Crash-evidence (v2.22): koi bhi
  * uncaught crash hone par uska stacktrace phone par hi
  * crash.log me likha jata hai (koi server upload nahi),
  * phir pehle wala default handler hi chalta hai — app ka

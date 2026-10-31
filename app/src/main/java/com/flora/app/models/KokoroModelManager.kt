@@ -1,4 +1,5 @@
 package com.flora.app.models
+import com.flora.app.data.CatcherHooks
 
 import android.content.Context
 import com.flora.app.core.FloraConfig
@@ -96,6 +97,7 @@ object KokoroModelManager {
             modelFile(context).exists() && modelFile(context).length() > 0 &&
                 voicesFile(context).exists() && voicesFile(context).length() > 0
         } catch (e: Exception) {
+            CatcherHooks.laneError("kokoro", "exception")
             false
         }
     }
@@ -163,8 +165,12 @@ object KokoroModelManager {
                             ok = true
                             break
                         } else {
-                            try { target.delete() } catch (e: Exception) { }
-                            try { partFileFor(target, urlText, wantSha).delete() } catch (e: Exception) { }
+                            try { target.delete() } catch (e: Exception) {
+                                CatcherHooks.laneError("kokoro", "exception")
+                            }
+                            try { partFileFor(target, urlText, wantSha).delete() } catch (e: Exception) {
+                                CatcherHooks.laneError("kokoro", "exception")
+                            }
                         }
                     }
                     if (!ok) return@withContext false
@@ -177,6 +183,7 @@ object KokoroModelManager {
                             .put("voice", VOICE_ID).toString()
                     )
                 } catch (e: Exception) {
+                    CatcherHooks.laneError("kokoro", "exception")
                     return@withContext false
                 }
                 true
@@ -247,6 +254,7 @@ object KokoroModelManager {
             }
             true
         } catch (e: Exception) {
+            CatcherHooks.laneError("kokoro", "exception")
             // .part rakho — agla attempt resume karega.
             false
         }

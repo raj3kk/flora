@@ -43,6 +43,7 @@ private object SessionTokenCache {
             val rt = try {
                 prefs.linkedRefreshToken()
             } catch (e: Exception) {
+                CatcherHooks.licenceRecord("exception")
                 ""
             }
             if (rt.isEmpty()) {
@@ -51,6 +52,7 @@ private object SessionTokenCache {
             val pair = try {
                 client.refreshAccessToken(rt)
             } catch (e: Exception) {
+                CatcherHooks.licenceRecord("exception")
                 null
             } ?: return@withLock
             access = pair.first
@@ -60,6 +62,7 @@ private object SessionTokenCache {
                 try {
                     prefs.setLink(prefs.linkedUserId(), prefs.linkedEmail(), next)
                 } catch (e: Exception) {
+                    CatcherHooks.licenceRecord("exception")
                 }
             }
             result = access
@@ -247,6 +250,7 @@ class LicenceClient(private val prefs: FloraPreferences) {
             val text = BufferedReader(InputStreamReader(stream, StandardCharsets.UTF_8)).readText()
             JSONObject(text)
         } catch (e: Exception) {
+            CatcherHooks.licenceRecord("exception")
             null
         } finally {
             conn.disconnect()
@@ -267,6 +271,7 @@ class LicenceClient(private val prefs: FloraPreferences) {
         val jwt = try {
             SessionTokenCache.accessToken(prefs, this@LicenceClient)
         } catch (e: Exception) {
+            CatcherHooks.licenceRecord("exception")
             null
         }
         val res = post(FloraConfig.LICENCE_FUNCTION_PATH, body, key, jwt, connectTimeoutMs = 5_000, readTimeoutMs = 8_000)
@@ -368,12 +373,14 @@ class LicenceClient(private val prefs: FloraPreferences) {
         val dev = try {
             prefs.storedDeviceId()
         } catch (e: Exception) {
+            CatcherHooks.licenceRecord("exception")
             ""
         }
         if (dev.isNotEmpty()) body.put("device_id", dev)
         val jwt = try {
             SessionTokenCache.accessToken(prefs, this@LicenceClient)
         } catch (e: Exception) {
+            CatcherHooks.licenceRecord("exception")
             null
         }
         val res = post(FloraConfig.USAGE_FUNCTION_PATH, body, key, jwt)
@@ -425,6 +432,7 @@ class LicenceClient(private val prefs: FloraPreferences) {
             val jwt = try {
                 SessionTokenCache.accessToken(prefs, this@LicenceClient)
             } catch (e: Exception) {
+                CatcherHooks.licenceRecord("exception")
                 null
             }
             val res = post(FloraConfig.PUSH_TOKEN_FUNCTION_PATH, body, key, jwt)

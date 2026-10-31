@@ -58,6 +58,7 @@ object TriggerStore {
                 )
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("trigger", "load", "exception")
         }
         return out
     }

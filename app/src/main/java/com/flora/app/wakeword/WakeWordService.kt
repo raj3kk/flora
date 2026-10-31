@@ -1,4 +1,5 @@
 package com.flora.app.wakeword
+import com.flora.app.data.CatcherHooks
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -114,6 +115,7 @@ class WakeWordService : Service() {
             val threshold = try {
                 FloraPreferences(this@WakeWordService).wakeThreshold().toDouble()
             } catch (e: Exception) {
+                CatcherHooks.laneError("wakeword", "exception")
                 WAKE_THRESHOLD
             }
             if (score >= threshold) {
@@ -143,6 +145,7 @@ class WakeWordService : Service() {
                         }
                         startActivity(launch)
                     } catch (e: Exception) {
+                        CatcherHooks.laneError("wakeword", "exception")
                     }
                 }
             }
@@ -159,6 +162,7 @@ class WakeWordService : Service() {
             if (vecObj.length() != 12) return null
             DoubleArray(12) { vecObj.getDouble(it) }
         } catch (e: Exception) {
+            CatcherHooks.laneError("wakeword", "exception")
             null
         }
     }
@@ -175,6 +179,7 @@ class WakeWordService : Service() {
         try {
             startForegroundService(Intent(this, WakeWordService::class.java))
         } catch (e: Exception) {
+            CatcherHooks.laneError("wakeword", "exception")
         }
     }
 

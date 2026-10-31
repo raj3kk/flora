@@ -1,4 +1,5 @@
 package com.flora.app.ui
+import com.flora.app.data.CatcherHooks
 
 import android.app.Activity
 import android.content.Intent
@@ -110,6 +111,7 @@ fun BuilderScreen(
             autoLogStore.add(entry)
             true
         } catch (e: Exception) {
+            CatcherHooks.featureError("builder", "BuilderScreen", "exception")
             false
         }
     }
@@ -271,6 +273,7 @@ fun BuilderScreen(
                         }
                     }
                 } catch (e: Exception) {
+                    CatcherHooks.featureError("builder", "BuilderScreen", "exception")
                     note = "File padhte waqt kuch gadbad hui — dobara koshish karo."
                 }
             }
@@ -287,6 +290,7 @@ fun BuilderScreen(
                 note = "Project index kharab lag raha hai — purane projects dikh nahi rahe; naya project/file save roka jayega taaki purana data overwrite na ho. Backup se restore karo."
             }
         } catch (e: Exception) {
+            CatcherHooks.featureError("builder", "BuilderScreen", "exception")
             note = "Project list load nahi ho payi — dobara kholo."
         }
     }
@@ -345,6 +349,7 @@ fun BuilderScreen(
                 val gateMsg = try {
                     quotaGate?.invoke(projects.size)
                 } catch (e: Exception) {
+                    CatcherHooks.featureError("builder", "BuilderScreen", "exception")
                     null
                 }
                 if (gateMsg != null) {
@@ -363,6 +368,7 @@ fun BuilderScreen(
                         val logOk = logBuilder("Builder: project bana (${created.name})")
                         note = "Project ban gaya." + if (!logOk) " (Auto Log me entry nahi likh payi.)" else ""
                     } catch (e: Exception) {
+                        CatcherHooks.featureError("builder", "BuilderScreen", "exception")
                         note = e.message ?: "Project ban nahi paya — dobara koshish karo."
                     }
                 }
@@ -448,6 +454,7 @@ fun BuilderScreen(
                         }
                         speechLauncher.launch(intent)
                     } catch (e: Exception) {
+                        CatcherHooks.featureError("builder", "BuilderScreen", "exception")
                         note = "Voice recognition is phone par nahi khul paya — text likh kar save karo."
                     }
                 }, modifier = Modifier.padding(end = 4.dp)) { Text("🎤 Bolo aur jodo") }
@@ -542,6 +549,7 @@ fun BuilderScreen(
                             note = "Export nahi ho paya — dobara koshish karo."
                         }
                     } catch (e: Exception) {
+                        CatcherHooks.featureError("builder", "shouldInterceptRequest", "exception")
                         note = "Export nahi ho paya — dobara koshish karo."
                     }
                 }

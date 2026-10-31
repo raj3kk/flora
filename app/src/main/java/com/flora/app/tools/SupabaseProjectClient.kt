@@ -1,4 +1,5 @@
 package com.flora.app.tools
+import com.flora.app.data.CatcherHooks
 
 import com.flora.app.data.BuilderService
 import com.flora.app.data.FloraPreferences
@@ -71,6 +72,7 @@ object SupabaseProjectParsing {
             }
             out
         } catch (e: Exception) {
+            CatcherHooks.networkError("supabase", "exception", "exception")
             null
         }
     }
@@ -111,6 +113,7 @@ class SupabaseProjectClient(
     private suspend fun token(): String = try {
         prefs.builderToken(BuilderService.SUPABASE)
     } catch (e: Exception) {
+        CatcherHooks.networkError("supabase", "exception", "exception")
         ""
     }
 
@@ -137,6 +140,7 @@ class SupabaseProjectClient(
                 BuilderOutcome.Failure(BuilderHttp.classifyHttp(raw.code), "http ${raw.code}")
             }
         } catch (e: Exception) {
+            CatcherHooks.networkError("supabase", "exception", "exception")
             BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
         }
     }
@@ -164,6 +168,7 @@ class SupabaseProjectClient(
                 BuilderOutcome.Failure(BuilderHttp.classifyHttp(raw.code), "http ${raw.code}")
             }
         } catch (e: Exception) {
+            CatcherHooks.networkError("supabase", "exception", "exception")
             BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
         }
     }
@@ -196,6 +201,7 @@ class SupabaseProjectClient(
                 BuilderOutcome.Failure(BuilderHttp.classifyHttp(raw.code), "http ${raw.code}")
             }
         } catch (e: Exception) {
+            CatcherHooks.networkError("supabase", "exception", "exception")
             BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
         }
     }
@@ -223,6 +229,7 @@ class SupabaseProjectClient(
                 BuilderOutcome.Failure(BuilderHttp.classifyHttp(raw.code), "http ${raw.code}")
             }
         } catch (e: Exception) {
+            CatcherHooks.networkError("supabase", "exception", "exception")
             BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
         }
     }
@@ -258,6 +265,7 @@ class SupabaseProjectClient(
                 }
             }
         } catch (e: Exception) {
+            CatcherHooks.networkError("supabase", "exception", "exception")
             BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
         }
     }
@@ -302,6 +310,7 @@ class SupabaseProjectClient(
                 }
             }
         } catch (e: Exception) {
+            CatcherHooks.networkError("supabase", "exception", "exception")
             BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
         }
     }
@@ -312,6 +321,7 @@ class SupabaseProjectClient(
             val refresh = try {
                 prefs.builderRefreshToken(BuilderService.SUPABASE)
             } catch (e: Exception) {
+                CatcherHooks.networkError("supabase", "exception", "exception")
                 ""
             }
             if (refresh.isEmpty()) {
@@ -350,6 +360,7 @@ class SupabaseProjectClient(
                     }
                 }
             } catch (e: Exception) {
+                CatcherHooks.networkError("supabase", "exception", "exception")
                 BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
             }
         }

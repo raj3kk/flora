@@ -66,6 +66,7 @@ object LicenceGate {
         return try {
             checkInner(prefs)
         } catch (e: Exception) {
+            CatcherHooks.licenceRecord("exception")
             // Gate kabhi chat ko crash nahi karega — local cap
             // rule par gir jao (free-cap ke andar ho to Allowed).
             localCapResult(prefs)
@@ -108,6 +109,7 @@ object LicenceGate {
         val used = try {
             prefs.talkSecondsUsed(today)
         } catch (e: Exception) {
+            CatcherHooks.licenceRecord("exception")
             0L
         }
         return (FREE_DAILY_SECONDS - used).coerceAtLeast(0L)
@@ -121,11 +123,13 @@ object LicenceGate {
         val uid = try {
             prefs.effectiveUserId()
         } catch (e: Exception) {
+            CatcherHooks.licenceRecord("exception")
             ""
         }
         val dev = try {
             prefs.storedDeviceId()
         } catch (e: Exception) {
+            CatcherHooks.licenceRecord("exception")
             ""
         }
         if (uid.isEmpty() || dev.isEmpty()) {
@@ -134,6 +138,7 @@ object LicenceGate {
         val st = try {
             LicenceClient(prefs).verify(uid, dev)
         } catch (e: Exception) {
+            CatcherHooks.licenceRecord("exception")
             null
         }
         if (st != null && st.serverChecked) {

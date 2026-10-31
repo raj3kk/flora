@@ -1,4 +1,5 @@
 package com.flora.app.voice
+import com.flora.app.data.CatcherHooks
 
 import com.flora.app.core.FloraConfig
 import com.flora.app.core.PinnedTrust
@@ -71,6 +72,7 @@ class ServerTtsClient(
         val refresh = try {
             prefs.linkedRefreshToken()
         } catch (e: Exception) {
+            CatcherHooks.networkError("server-tts", "exception", "exception")
             ""
         }
         if (refresh.isBlank()) {
@@ -82,6 +84,7 @@ class ServerTtsClient(
         val pair = try {
             licenceClient.refreshAccessToken(refresh)
         } catch (e: Exception) {
+            CatcherHooks.networkError("server-tts", "exception", "exception")
             null
         } ?: return@withContext TtsResult.Unavailable(
             "tts-proxy ka session refresh nahi hua — dobara link karo."
@@ -95,6 +98,7 @@ class ServerTtsClient(
             try {
                 prefs.setLink(prefs.linkedUserId(), prefs.linkedEmail(), next)
             } catch (e: Exception) {
+                CatcherHooks.networkError("server-tts", "exception", "exception")
             }
         }
         val body = JSONObject().put("text", capped)
@@ -114,17 +118,20 @@ class ServerTtsClient(
                 val errText = try {
                     BufferedReader(InputStreamReader(conn.errorStream, StandardCharsets.UTF_8)).readText()
                 } catch (e: Exception) {
+                    CatcherHooks.networkError("server-tts", "exception", "exception")
                     ""
                 }
                 val err = try {
                     JSONObject(errText).optString("error", "")
                 } catch (e: Exception) {
+                    CatcherHooks.networkError("server-tts", "exception", "exception")
                     ""
                 }
                 if (isFreeLimit(code, err)) {
                     val msg = try {
                         JSONObject(errText).optString("message", "")
                     } catch (e: Exception) {
+                        CatcherHooks.networkError("server-tts", "exception", "exception")
                         ""
                     }
                     return@withContext TtsResult.FreeLimit(
@@ -136,6 +143,7 @@ class ServerTtsClient(
             val bytes = try {
                 conn.inputStream.readBytes()
             } catch (e: Exception) {
+                CatcherHooks.networkError("server-tts", "exception", "exception")
                 ByteArray(0)
             }
             if (bytes.isEmpty()) {
@@ -143,6 +151,7 @@ class ServerTtsClient(
             }
             return@withContext TtsResult.Audio(bytes)
         } catch (e: Exception) {
+            CatcherHooks.networkError("server-tts", "exception", "exception")
             return@withContext TtsResult.Error("tts-proxy se network nahi juda.")
         } finally {
             conn.disconnect()

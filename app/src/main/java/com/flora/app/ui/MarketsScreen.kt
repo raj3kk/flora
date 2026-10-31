@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.flora.app.data.CatcherHooks
 import com.flora.app.data.WatchlistStore
 import com.flora.app.tools.SearchTools
 import kotlinx.coroutines.launch
@@ -148,6 +149,14 @@ fun MarketsScreen() {
                 out[symbol] = searchTools.stockPrice(symbol)
             }
             quotes = out
+            // P3-01: price-fetch fail sirf count ke saath record hota
+            // hai — symbol/price values Catcher me kabhi nahi jati.
+            val failed = out.values.count {
+                it.startsWith("Market price nahi") || it.startsWith("Market ka jawab")
+            }
+            if (failed > 0) {
+                CatcherHooks.featureError("markets", "refreshAll", "price-fetch-failed")
+            }
             refreshing = false
         }
     }

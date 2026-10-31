@@ -37,6 +37,7 @@ class SosStore(private val context: Context) {
                 out.add(SosContact(obj.optString("name"), obj.optString("number")))
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("sos", "unknown", "exception")
             // Corrupt stored JSON: treat as empty rather than crashing.
         }
         out

@@ -1,4 +1,5 @@
 package com.flora.app.tools
+import com.flora.app.data.CatcherHooks
 
 import android.webkit.WebView
 import androidx.compose.runtime.getValue
@@ -173,6 +174,7 @@ object BrowserController {
         return try {
             JSONArray("[$raw]").getString(0)
         } catch (e: Exception) {
+            CatcherHooks.featureError("browser", "decodeJsString", "exception")
             raw.trim().trim('"')
         }
     }
@@ -232,6 +234,7 @@ object BrowserController {
                         )
                     )
                 } catch (e: Exception) {
+                    CatcherHooks.featureError("browser", "readPageInfo", "exception")
                     onDone(PageInfo(null, "", false))
                 }
             }
@@ -389,6 +392,7 @@ object BrowserController {
                     }
                     onDone(out)
                 } catch (e: Exception) {
+                    CatcherHooks.featureError("browser", "detectFields", "exception")
                     onDone(null)
                 }
             }

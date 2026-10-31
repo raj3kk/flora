@@ -1,4 +1,5 @@
 package com.flora.app.automation
+import com.flora.app.data.CatcherHooks
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -37,6 +38,7 @@ class JobAlarmReceiver : BroadcastReceiver() {
                     JobScheduler.schedule(context, job)
                 }
             } catch (e: Exception) {
+                CatcherHooks.featureError("routines", "onReceive", "exception")
             } finally {
                 pending.finish()
             }
@@ -61,6 +63,7 @@ class JobAlarmReceiver : BroadcastReceiver() {
                 .build()
             nm.notify(routine.hashCode(), notif)
         } catch (e: Exception) {
+            CatcherHooks.featureError("routines", "showNotification", "exception")
         }
     }
 }

@@ -1,4 +1,5 @@
 package com.flora.app.automation
+import com.flora.app.data.CatcherHooks
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -51,6 +52,7 @@ class TriggerAlarmReceiver : BroadcastReceiver() {
                     if (trigger.enabled) TriggerScheduler.schedule(context, trigger)
                 }
             } catch (e: Exception) {
+                CatcherHooks.featureError("triggers", "onReceive", "exception")
             } finally {
                 pending.finish()
             }
@@ -75,6 +77,7 @@ class TriggerAlarmReceiver : BroadcastReceiver() {
                 .build()
             nm.notify(("trigger:" + name).hashCode(), notif)
         } catch (e: Exception) {
+            CatcherHooks.featureError("triggers", "showNotification", "exception")
         }
     }
 }

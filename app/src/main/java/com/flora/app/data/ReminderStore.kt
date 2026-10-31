@@ -55,6 +55,7 @@ object ReminderStore {
                 )
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("reminder", "load", "exception")
         }
         return out
     }

@@ -1,4 +1,5 @@
 package com.flora.app.automation
+import com.flora.app.data.CatcherHooks
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -31,6 +32,7 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
                     ReminderScheduler.schedule(context, reminder)
                 }
             } catch (e: Exception) {
+                CatcherHooks.featureError("reminders", "onReceive", "exception")
             } finally {
                 pending.finish()
             }
@@ -56,6 +58,7 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
                 .build()
             nm.notify(("reminder:" + title).hashCode(), notif)
         } catch (e: Exception) {
+            CatcherHooks.featureError("reminders", "showNotification", "exception")
         }
     }
 }

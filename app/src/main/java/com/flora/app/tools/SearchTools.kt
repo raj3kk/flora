@@ -1,4 +1,5 @@
 package com.flora.app.tools
+import com.flora.app.data.CatcherHooks
 
 import com.flora.app.data.FloraPreferences
 import android.content.pm.PackageManager
@@ -33,6 +34,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             if (conn.responseCode !in 200..299) return null
             BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).readText()
         } catch (e: Exception) {
+            CatcherHooks.featureError("search", "get", "exception")
             null
         } finally {
             conn.disconnect()
@@ -50,6 +52,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             if (conn.responseCode !in 200..299) return null
             BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).readText()
         } catch (e: Exception) {
+            CatcherHooks.featureError("search", "getWithHeader", "exception")
             null
         } finally {
             conn.disconnect()
@@ -101,6 +104,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             val body = listOf(title, desc, url).filter { it.isNotBlank() }.joinToString("\n")
             if (body.isBlank()) null else body + "\n\nSource: Brave"
         } catch (e: Exception) {
+            CatcherHooks.featureError("search", "braveSearch", "exception")
             null
         }
     }
@@ -138,6 +142,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             val body = listOf(title, snippet, link).filter { it.isNotBlank() }.joinToString("\n")
             if (body.isBlank()) null else body + "\n\nSource: SerpAPI"
         } catch (e: Exception) {
+            CatcherHooks.featureError("search", "serpSearch", "exception")
             null
         }
     }
@@ -188,6 +193,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             if (lat.isNaN() || lng.isNaN()) return null
             "Jagah: $address\nLocation: $lat, $lng\nSource: Google Maps (tumhari key se)"
         } catch (e: Exception) {
+            CatcherHooks.featureError("search", "googleGeocode", "exception")
             null
         }
     }
@@ -207,6 +213,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             val full = if (country.isNotBlank()) "$name, $country" else name
             "Jagah: $full\nLocation: $lat, $lon\nSource: Open-Meteo geocoding (free, bina key)"
         } catch (e: Exception) {
+            CatcherHooks.featureError("search", "openMeteoGeocode", "exception")
             null
         }
     }
@@ -232,6 +239,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             }
             return "Is sawal ka seedha jawab nahi mila."
         } catch (e: Exception) {
+            CatcherHooks.featureError("search", "duckDuckGo", "exception")
             return "Search ka jawab samajh nahi aaya, dobara koshish kijiye."
         }
     }
@@ -254,6 +262,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             }
             null
         } catch (e: Exception) {
+            CatcherHooks.featureError("search", "tavilySearch", "exception")
             null
         }
     }
@@ -270,6 +279,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             if (conn.responseCode !in 200..299) return null
             BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).readText()
         } catch (e: Exception) {
+            CatcherHooks.featureError("search", "postJson", "exception")
             null
         } finally {
             conn.disconnect()
@@ -290,6 +300,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             val country = first.optString("country", "")
             forecast(lat, lon, "$name, $country")
         } catch (e: Exception) {
+            CatcherHooks.featureError("search", "weather", "exception")
             "Mausam ka jawab samajh nahi aaya, dobara koshish kijiye."
         }
     }
@@ -321,6 +332,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
                         val loc = manager.getLastKnownLocation(provider)
                         if (loc != null && (best == null || loc.time > best.time)) best = loc
                     } catch (e: Exception) {
+                        CatcherHooks.featureError("search", "weatherHere", "exception")
                     }
                 }
                 val loc = best
@@ -328,6 +340,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
                         "ON karke thodi der baad dobara poochhiye."
                 forecast(loc.latitude, loc.longitude, "Yahan")
             } catch (e: Exception) {
+                CatcherHooks.featureError("search", "weatherHere", "exception")
                 "Yahan ka mausam nahi mil paya."
             }
         }
@@ -344,6 +357,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             if (temp.isNaN()) return "Mausam ka data nahi mila."
             "$place — abhi $temp°C, humidity $humidity%, hawa $wind km/h."
         } catch (e: Exception) {
+            CatcherHooks.featureError("search", "forecast", "exception")
             "Mausam ka jawab samajh nahi aaya, dobara koshish kijiye."
         }
     }
@@ -363,6 +377,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
                 if (converted.isNaN()) return@withContext "Ye currency pair nahi mila, code check kijiye."
                 "$amount $fromCode = $converted $toCode (aaj ka rate, Frankfurter API)"
             } catch (e: Exception) {
+                CatcherHooks.featureError("search", "convertCurrency", "exception")
                 "Currency ka jawab samajh nahi aaya, dobara koshish kijiye."
             }
         }
@@ -382,6 +397,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             val part = firstMeaning?.optString("partOfSpeech", "") ?: ""
             "${word.trim()} ($part): $definition"
         } catch (e: Exception) {
+            CatcherHooks.featureError("search", "defineWord", "exception")
             "Ye shabd dictionary me nahi mila, spelling check kijiye."
         }
     }
@@ -407,6 +423,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             if (parts.isEmpty()) return@withContext "Is topic par kuch nahi mila, topic badal kar koshish kijiye."
             parts.joinToString("\n\n") + "\n\nSource: DuckDuckGo"
         } catch (e: Exception) {
+            CatcherHooks.featureError("search", "study", "exception")
             "Study ka jawab samajh nahi aaya, dobara koshish kijiye."
         }
     }
@@ -427,6 +444,7 @@ class SearchTools(private val prefs: FloraPreferences? = null) {
             val changeText = if (change.isNaN()) "" else " (${String.format("%.2f", change)}%)"
             "${symbol.trim().uppercase()}: $price $currency$changeText\nNote: live price ki pushti exchange/app se karo. Source: Yahoo Finance"
         } catch (e: Exception) {
+            CatcherHooks.featureError("search", "stockPrice", "exception")
             "Market ka jawab samajh nahi aaya, dobara koshish kijiye."
         }
     }

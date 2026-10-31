@@ -1,4 +1,5 @@
 package com.flora.app.ui
+import com.flora.app.data.CatcherHooks
 
 import android.content.Intent
 import android.net.Uri
@@ -115,6 +116,7 @@ fun DrivingScreen(voice: VoiceEngine, prefs: FloraPreferences, onMicRequest: () 
                     context.startActivity(intent)
                     note = "SMS app khul gaya — Send tum dabao ge."
                 } catch (e: Exception) {
+                    CatcherHooks.featureError("driving", "DrivingScreen", "exception")
                     note = "SMS app kholne me fail hua."
                 }
             }) { Text("SMS app me kholo") }

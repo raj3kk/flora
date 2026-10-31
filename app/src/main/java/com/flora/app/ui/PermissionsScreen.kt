@@ -31,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.flora.app.automation.OneTapFix
 import com.flora.app.data.AutoLogStore
+import com.flora.app.data.CatcherHooks
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -84,6 +85,11 @@ fun PermissionsScreen(onShowWizard: () -> Unit) {
     val singlePermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
+        // P3-01: denial snapshot se bahar bhi record ho — sirf
+        // permission naam + surface, koi user data nahi.
+        if (!granted) {
+            CatcherHooks.permissionDenied(pendingPerm ?: "unknown", "permissions-screen")
+        }
         note = if (granted) {
             "Permission mil gayi ✓"
         } else {

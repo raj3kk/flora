@@ -37,6 +37,7 @@ object MacroStore {
                 }
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("macro", "load", "exception")
         }
         return out
     }

@@ -48,6 +48,7 @@ object NotificationStore {
                 )
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("notification", "load", "exception")
         }
         return out
     }
@@ -67,6 +68,7 @@ object NotificationStore {
         try {
             context.notifStore.edit { prefs -> val enc = MemoryCrypto.encodeStored(arr.toString()); if (enc != null) prefs[KEY] = enc }
         } catch (e: Exception) {
+            CatcherHooks.dbError("notification", "add", "exception")
         }
     }
 
@@ -74,6 +76,7 @@ object NotificationStore {
         try {
             context.notifStore.edit { prefs -> prefs[KEY] = "[]" }
         } catch (e: Exception) {
+            CatcherHooks.dbError("notification", "clear", "exception")
         }
     }
 }

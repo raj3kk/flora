@@ -1,4 +1,5 @@
 package com.flora.app.voice
+import com.flora.app.data.CatcherHooks
 
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -63,6 +64,7 @@ class DeepgramStreamClient {
                         listener.onPartial(transcript)
                     }
                 } catch (e: Exception) {
+                    CatcherHooks.laneError("deepgram", "exception")
                 }
             }
 
@@ -80,6 +82,7 @@ class DeepgramStreamClient {
             bytes.asShortBuffer().put(pcm)
             ws.send(bytes.array().toByteString())
         } catch (e: Exception) {
+            CatcherHooks.laneError("deepgram", "exception")
         }
     }
 
@@ -87,6 +90,7 @@ class DeepgramStreamClient {
         try {
             ws?.close(1000, "done")
         } catch (e: Exception) {
+            CatcherHooks.laneError("deepgram", "exception")
         }
         ws = null
     }

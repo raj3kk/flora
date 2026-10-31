@@ -39,6 +39,7 @@ object JobStore {
                 )
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("job", "load", "exception")
         }
         return out
     }

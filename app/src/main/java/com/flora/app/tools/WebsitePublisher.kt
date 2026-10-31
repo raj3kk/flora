@@ -1,4 +1,5 @@
 package com.flora.app.tools
+import com.flora.app.data.CatcherHooks
 
 import com.flora.app.core.FloraConfig
 import com.flora.app.core.PinnedTrust
@@ -41,7 +42,9 @@ object WebsitePublisher {
                 out.write(bytes)
                 out.flush()
             } finally {
-                try { out?.close() } catch (e: Exception) { }
+                try { out?.close() } catch (e: Exception) {
+                    CatcherHooks.networkError("website", "exception", "exception")
+                }
             }
             val code = conn.responseCode
             if (code in 200..299) {
@@ -49,10 +52,13 @@ object WebsitePublisher {
             } else {
                 val body = try {
                     conn.errorStream?.bufferedReader()?.readText()?.take(200) ?: ""
-                } catch (e: Exception) { "" }
+                } catch (e: Exception) {
+                    CatcherHooks.networkError("website", "exception", "exception")
+                "" }
                 Result.failure(Exception("Upload nahi hua (HTTP $code) $body — bucket flora-sites ya uski policy dashboard se lagani baaki ho sakti hai."))
             }
         } catch (e: Exception) {
+            CatcherHooks.networkError("website", "exception", "exception")
             Result.failure(Exception("Upload me dikkat: ${e.message ?: "internet check karo"}"))
         }
     }

@@ -1,4 +1,5 @@
 package com.flora.app.backup
+import com.flora.app.data.CatcherHooks
 
 import com.flora.app.data.FloraPreferences
 import com.flora.app.tools.BuilderOAuth
@@ -139,6 +140,7 @@ class DriveClient(private val prefs: FloraPreferences) {
             val expiresIn = json.optLong("expires_in", 3600L)
             prefs.setDriveTokens(access, refresh, System.currentTimeMillis() + expiresIn * 1000L)
         } catch (e: Exception) {
+            CatcherHooks.networkError("drive", "exception", "exception")
             false
         }
     }
@@ -171,6 +173,7 @@ class DriveClient(private val prefs: FloraPreferences) {
             val expiresIn = json.optLong("expires_in", 3600L)
             prefs.setDriveTokens(access, nextRefresh, System.currentTimeMillis() + expiresIn * 1000L)
         } catch (e: Exception) {
+            CatcherHooks.networkError("drive", "exception", "exception")
             false
         }
     }
@@ -202,6 +205,7 @@ class DriveClient(private val prefs: FloraPreferences) {
                 timeZone = java.util.TimeZone.getTimeZone("UTC")
             }.parse(value)?.time ?: 0L
         } catch (e: Exception) {
+            CatcherHooks.networkError("drive", "exception", "exception")
             0L
         }
     }
@@ -228,6 +232,7 @@ class DriveClient(private val prefs: FloraPreferences) {
                 resp.close()
                 ok
             } catch (e: Exception) {
+                CatcherHooks.networkError("drive", "exception", "exception")
                 false
             }
             if (alive) return stored
@@ -268,6 +273,7 @@ class DriveClient(private val prefs: FloraPreferences) {
             prefs.setDriveFolderId(id)
             id
         } catch (e: Exception) {
+            CatcherHooks.networkError("drive", "exception", "exception")
             null
         }
     }
@@ -336,8 +342,10 @@ class DriveClient(private val prefs: FloraPreferences) {
                     return null
                 }
             } catch (e: IOException) {
+                CatcherHooks.networkError("drive", "exception", "exception")
                 if (attempt == MAX_ATTEMPTS - 1) return null
             } catch (e: Exception) {
+                CatcherHooks.networkError("drive", "exception", "exception")
                 return null
             }
         }
@@ -377,6 +385,7 @@ class DriveClient(private val prefs: FloraPreferences) {
             }
             out.filter { it.id.isNotEmpty() }
         } catch (e: Exception) {
+            CatcherHooks.networkError("drive", "exception", "exception")
             emptyList()
         }
     }
@@ -411,6 +420,7 @@ class DriveClient(private val prefs: FloraPreferences) {
             response.close()
             out.readByteArray()
         } catch (e: Exception) {
+            CatcherHooks.networkError("drive", "exception", "exception")
             null
         }
     }

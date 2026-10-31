@@ -1,4 +1,5 @@
 package com.flora.app.tools
+import com.flora.app.data.CatcherHooks
 
 import java.net.URLDecoder
 import java.security.MessageDigest
@@ -125,6 +126,7 @@ object BuilderOAuth {
             params[key] = try {
                 URLDecoder.decode(part.substringAfter('=', ""), "UTF-8")
             } catch (e: Exception) {
+                CatcherHooks.networkError("builder-oauth", "exception", "exception")
                 return null
             }
         }

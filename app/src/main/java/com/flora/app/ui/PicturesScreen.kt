@@ -1,4 +1,5 @@
 package com.flora.app.ui
+import com.flora.app.data.CatcherHooks
 
 import android.Manifest
 import android.content.ContentUris
@@ -124,6 +125,7 @@ fun PicturesScreen() {
                 note = if (out.isEmpty()) "Pictures/Flora me abhi koi photo nahi hai — Scan, Whiteboard ya ImageGen se save karo."
                 else "${out.size} photos mili hain."
             } catch (e: Exception) {
+                CatcherHooks.featureError("pictures", "loadPhotos", "exception")
                 note = "Photos padhne me fail hua, dobara try karo."
             }
         }
@@ -158,6 +160,7 @@ fun PicturesScreen() {
                         context.contentResolver.loadThumbnail(photo.uri, Size(256, 256), null)
                     }
                 } catch (e: Exception) {
+                    CatcherHooks.featureError("pictures", "loadPhotos", "exception")
                     null
                 }
             }
@@ -171,6 +174,7 @@ fun PicturesScreen() {
                             }
                             context.startActivity(intent)
                         } catch (e: Exception) {
+                            CatcherHooks.featureError("pictures", "loadPhotos", "exception")
                             note = "Photo kholne me fail hua."
                         }
                     }

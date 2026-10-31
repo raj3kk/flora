@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import com.flora.app.data.CatcherEvents
+import com.flora.app.data.CatcherHooks
 import com.flora.app.voice.ServerTtsClient
 import java.io.File
 import java.util.Locale
@@ -200,6 +201,7 @@ class VoiceEngine(context: Context) {
                                 finishUtterance(listenerSeq)
                                 onSpeechDone?.invoke()
                                 CatcherEvents.record("TTS", "utterance error")
+                                CatcherHooks.laneError("system-tts", "utterance-error")
                             }
                         }
 

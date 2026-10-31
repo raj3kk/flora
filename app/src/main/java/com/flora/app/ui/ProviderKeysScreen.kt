@@ -21,6 +21,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.flora.app.assistant.BrainClient
+import com.flora.app.data.CatcherHooks
 import com.flora.app.data.FloraPreferences
 import kotlinx.coroutines.launch
 
@@ -85,19 +86,29 @@ fun ProviderKeysScreen(prefs: FloraPreferences, brain: BrainClient) {
 
     fun checkSaved() {
         scope.launch {
-            results = brain.checkKeys().filter { it.name in providerNames }
+            val checked = brain.checkKeys().filter { it.name in providerNames }
+            results = checked
+            // P3-01: invalid key check sirf count-signal ke saath —
+            // key value ya note text Catcher me kabhi nahi jata.
+            if (checked.any { it.saved && !it.valid }) {
+                CatcherHooks.featureError("keys", "checkSaved", "invalid")
+            }
             note = ""
         }
     }
 
     fun checkTyped() {
         scope.launch {
-            results = brain.checkKeysFor(
+            val checked = brain.checkKeysFor(
                 gemini = "", gemini2 = "", groq = "", groq2 = "", deepgram = "",
                 openai = openai, anthropic = anthropic, mistral = mistral,
                 together = together, xai = xai, deepseek = deepseek,
                 deepinfra = deepinfra, nvidia = nvidia, openrouter = openrouter,
             ).filter { it.name in providerNames }
+            results = checked
+            if (checked.any { it.saved && !it.valid }) {
+                CatcherHooks.featureError("keys", "checkTyped", "invalid")
+            }
             note = ""
         }
     }

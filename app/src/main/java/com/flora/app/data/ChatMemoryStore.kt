@@ -64,6 +64,7 @@ class ChatMemoryStore(private val context: Context) {
                 )
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("chat-memory", "decode", "exception")
         }
         return out
     }
@@ -85,6 +86,7 @@ class ChatMemoryStore(private val context: Context) {
         return try {
             turns.first()
         } catch (e: Exception) {
+            CatcherHooks.dbError("chat-memory", "loadAll", "exception")
             emptyList()
         }
     }

@@ -1,4 +1,5 @@
 package com.flora.app.voice
+import com.flora.app.data.CatcherHooks
 
 import com.flora.app.data.FloraPreferences
 import kotlinx.coroutines.Dispatchers
@@ -76,6 +77,7 @@ object DeepgramClient {
                     ?.optString("transcript", "") ?: ""
                 if (transcript.isBlank()) null else transcript
             } catch (e: Exception) {
+                CatcherHooks.laneError("deepgram", "exception")
                 null
             }
         }

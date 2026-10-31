@@ -44,6 +44,7 @@ object JobChainStore {
                 out.add(JobChain(obj.optString("name"), names))
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("job-chain", "load", "exception")
         }
         return out
     }

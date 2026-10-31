@@ -1,4 +1,5 @@
 package com.flora.app.ui
+import com.flora.app.data.CatcherHooks
 
 import android.content.ContentValues
 import android.content.Context
@@ -156,6 +157,7 @@ private fun saveToDownloads(context: Context, fileName: String, mime: String, by
         context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
         "Downloads/Flora/$fileName"
     } catch (e: Exception) {
+        CatcherHooks.featureError("docs", "saveToDownloads", "exception")
         null
     }
 }
@@ -232,6 +234,7 @@ private fun exportDocsPdf(context: Context, docs: List<FloraDoc>): String {
         )
         if (path != null) "PDF save ho gaya: $path." else "PDF save nahi ho paya, dobara try karo."
     } catch (e: Exception) {
+        CatcherHooks.featureError("docs", "newPage", "exception")
         "PDF banane me fail hua, dobara try karo."
     }
 }

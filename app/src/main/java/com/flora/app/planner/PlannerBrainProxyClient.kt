@@ -1,4 +1,5 @@
 package com.flora.app.planner
+import com.flora.app.data.CatcherHooks
 
 import com.flora.app.core.FloraConfig
 import com.flora.app.core.PinnedTrust
@@ -46,11 +47,13 @@ class PlannerBrainProxyClient(
         val userId = try {
             prefs.linkedUserId()
         } catch (e: Exception) {
+            CatcherHooks.networkError("brain-proxy", "exception", "exception")
             ""
         }
         val refresh = try {
             prefs.linkedRefreshToken()
         } catch (e: Exception) {
+            CatcherHooks.networkError("brain-proxy", "exception", "exception")
             ""
         }
         if (userId.isBlank() || refresh.isBlank()) {
@@ -62,6 +65,7 @@ class PlannerBrainProxyClient(
         val pair = try {
             licenceClient.refreshAccessToken(refresh)
         } catch (e: Exception) {
+            CatcherHooks.networkError("brain-proxy", "exception", "exception")
             null
         } ?: return@withContext ProxyResult.Unavailable(
             "brain-proxy ka session refresh nahi hua — dobara link karo."
@@ -90,18 +94,21 @@ class PlannerBrainProxyClient(
             val text = try {
                 BufferedReader(InputStreamReader(stream, StandardCharsets.UTF_8)).readText()
             } catch (e: Exception) {
+                CatcherHooks.networkError("brain-proxy", "exception", "exception")
                 ""
             }
             if (code !in 200..299) {
                 val err = try {
                     JSONObject(text).optString("error", "")
                 } catch (e: Exception) {
+                    CatcherHooks.networkError("brain-proxy", "exception", "exception")
                     ""
                 }
                 if (code == 429 || err == "free_limit") {
                     val msg = try {
                         JSONObject(text).optString("message", "")
                     } catch (e: Exception) {
+                        CatcherHooks.networkError("brain-proxy", "exception", "exception")
                         ""
                     }
                     return@withContext ProxyResult.FreeLimit(
@@ -113,6 +120,7 @@ class PlannerBrainProxyClient(
             val reply = try {
                 JSONObject(text).optString("reply", "")
             } catch (e: Exception) {
+                CatcherHooks.networkError("brain-proxy", "exception", "exception")
                 ""
             }
             if (reply.isBlank()) {
@@ -120,6 +128,7 @@ class PlannerBrainProxyClient(
             }
             return@withContext ProxyResult.Reply(reply)
         } catch (e: Exception) {
+            CatcherHooks.networkError("brain-proxy", "exception", "exception")
             return@withContext ProxyResult.Error("brain-proxy se network nahi juda.")
         } finally {
             conn.disconnect()

@@ -24,6 +24,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.flora.app.data.AutoLogStore
+import com.flora.app.data.CatcherHooks
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -151,12 +152,20 @@ fun SetupWizard(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         attempted = true
+        // P3-01: denial record — sirf permission naam + surface.
+        if (!granted) {
+            CatcherHooks.permissionDenied(lastRequested, "setup-wizard")
+        }
         grants = grants + (lastRequested to granted)
     }
     val multiLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
         attempted = true
+        // P3-01: har denied permission alag se record ho.
+        result.filter { !it.value }.forEach { (perm, _) ->
+            CatcherHooks.permissionDenied(perm, "setup-wizard")
+        }
         grants = grants + result
     }
     // Cycle 1, APP-C1-001: system check HI sach hai. Pehle

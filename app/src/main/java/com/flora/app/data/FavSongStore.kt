@@ -70,6 +70,7 @@ object FavSongStore {
                 )
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("fav-song", "fromJson", "exception")
         }
         return out.filter { it.id.isNotEmpty() && it.title.isNotEmpty() }
     }

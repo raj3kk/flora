@@ -47,6 +47,7 @@ class PendingTaskStore(private val context: Context) {
                 if (text.isNotBlank()) out.add(text)
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("pending-task", "decode", "exception")
         }
         return out
     }
@@ -63,6 +64,7 @@ class PendingTaskStore(private val context: Context) {
         return try {
             tasks.first()
         } catch (e: Exception) {
+            CatcherHooks.dbError("pending-task", "loadAll", "exception")
             emptyList()
         }
     }

@@ -133,6 +133,7 @@ class ProjectFileStore(val root: File, val cipher: ProjectCipher) {
             target.writeBytes(encoded.toByteArray(Charsets.UTF_8))
             Result.success(SaveResult(versionCreated = versionName != null, versionName = versionName))
         } catch (e: Exception) {
+            CatcherHooks.dbError("project", "saveText", "exception")
             Result.failure(e)
         }
     }
@@ -147,6 +148,7 @@ class ProjectFileStore(val root: File, val cipher: ProjectCipher) {
                 ?: return Result.failure(IllegalStateException("decrypt failed"))
             Result.success(plain)
         } catch (e: Exception) {
+            CatcherHooks.dbError("project", "readText", "exception")
             Result.failure(e)
         }
     }
@@ -163,6 +165,7 @@ class ProjectFileStore(val root: File, val cipher: ProjectCipher) {
                 ?: return Result.failure(IllegalStateException("decrypt failed"))
             Result.success(plain)
         } catch (e: Exception) {
+            CatcherHooks.dbError("project", "readVersionText", "exception")
             Result.failure(e)
         }
     }
@@ -181,6 +184,7 @@ class ProjectFileStore(val root: File, val cipher: ProjectCipher) {
             }
             Result.success(Unit)
         } catch (e: Exception) {
+            CatcherHooks.dbError("project", "writeZip", "exception")
             Result.failure(e)
         }
     }
@@ -230,6 +234,7 @@ fun extractFirstTextEntry(zipBytes: ByteArray): ExtractedFile? {
         }
         null
     } catch (e: Exception) {
+        CatcherHooks.dbError("project", "extractFirstTextEntry", "exception")
         null
     }
 }
@@ -258,6 +263,7 @@ class ProjectStore(
                 try {
                     json.decodeFromString(ProjectIndex.serializer(), decrypted)
                 } catch (e: Exception) {
+                    CatcherHooks.dbError("project", "extractFirstTextEntry", "exception")
                     ProjectIndex()
                 }
             }
@@ -291,6 +297,7 @@ class ProjectStore(
             json.decodeFromString(ProjectIndex.serializer(), decrypted)
             false
         } catch (e: Exception) {
+            CatcherHooks.dbError("project", "isIndexCorrupt", "exception")
             true
         }
     }
@@ -462,6 +469,7 @@ class ProjectStore(
             if (!saveIndex(ProjectIndex(projects = restored))) return false
             true
         } catch (e: Exception) {
+            CatcherHooks.dbError("project", "replaceAllProjects", "exception")
             false
         }
     }

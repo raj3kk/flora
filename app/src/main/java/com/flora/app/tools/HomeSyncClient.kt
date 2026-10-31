@@ -1,4 +1,5 @@
 package com.flora.app.tools
+import com.flora.app.data.CatcherHooks
 
 import android.content.Context
 import android.provider.Settings
@@ -54,6 +55,7 @@ object HomeSyncClient {
                     try {
                         prefs.setLink(linkedUid, prefs.linkedEmail(), nextRefresh)
                     } catch (e: Exception) {
+                        CatcherHooks.featureError("home-sync", "sync", "exception")
                     }
                 }
                 val androidId = Settings.Secure.getString(
@@ -76,11 +78,13 @@ object HomeSyncClient {
                     (if (code in 200..299) conn.inputStream else conn.errorStream)
                         ?.bufferedReader()?.readText()
                 } catch (e: Exception) {
+                    CatcherHooks.featureError("home-sync", "sync", "exception")
                     null
                 }
                 conn.disconnect()
                 if (code in 200..299) text else null
             } catch (e: Exception) {
+                CatcherHooks.featureError("home-sync", "sync", "exception")
                 null
             }
         }

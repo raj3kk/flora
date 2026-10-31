@@ -1,4 +1,5 @@
 package com.flora.app.models
+import com.flora.app.data.CatcherHooks
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
@@ -120,7 +121,10 @@ class KokoroOrtEngine private constructor(
             try {
                 session = env.createSession(modelPath, options)
             } catch (e: Exception) {
-                try { options.close() } catch (ignored: Exception) { }
+                CatcherHooks.laneError("kokoro", "exception")
+                try { options.close() } catch (ignored: Exception) {
+                    CatcherHooks.laneError("kokoro", "exception")
+                }
                 throw IllegalStateException("ORT session create failed", e)
             }
             try {
@@ -163,8 +167,13 @@ class KokoroOrtEngine private constructor(
                     inputIds, style, speed, output
                 )
             } catch (e: Exception) {
-                try { session.close() } catch (ignored: Exception) { }
-                try { options.close() } catch (ignored: Exception) { }
+                CatcherHooks.laneError("kokoro", "exception")
+                try { session.close() } catch (ignored: Exception) {
+                    CatcherHooks.laneError("kokoro", "exception")
+                }
+                try { options.close() } catch (ignored: Exception) {
+                    CatcherHooks.laneError("kokoro", "exception")
+                }
                 throw e
             }
         }
@@ -245,10 +254,13 @@ class KokoroOrtEngine private constructor(
         try {
             executor.execute { runUtterance(gen, text, onStart, onDone) }
         } catch (e: Exception) {
+            CatcherHooks.laneError("kokoro", "exception")
             // Executor dead (app tearing down): caller ko
             // latkao mat — ek onDone de do, system fallback
             // aage sambhal lega.
-            try { onDone() } catch (ignored: Exception) { }
+            try { onDone() } catch (ignored: Exception) {
+                CatcherHooks.laneError("kokoro", "exception")
+            }
         }
     }
 
@@ -260,17 +272,24 @@ class KokoroOrtEngine private constructor(
         try {
             currentTrack?.stop()
         } catch (e: Exception) {
+            CatcherHooks.laneError("kokoro", "exception")
         }
     }
 
     /** App-lifetime singleton hai — close sirf tests ke liye. */
     fun close() {
         generation.incrementAndGet()
-        try { currentTrack?.stop() } catch (e: Exception) { }
-        try { currentTrack?.release() } catch (e: Exception) { }
+        try { currentTrack?.stop() } catch (e: Exception) {
+            CatcherHooks.laneError("kokoro", "exception")
+        }
+        try { currentTrack?.release() } catch (e: Exception) {
+            CatcherHooks.laneError("kokoro", "exception")
+        }
         currentTrack = null
         executor.shutdownNow()
-        try { session.close() } catch (e: Exception) { }
+        try { session.close() } catch (e: Exception) {
+            CatcherHooks.laneError("kokoro", "exception")
+        }
     }
 
     private fun runUtterance(
@@ -282,7 +301,9 @@ class KokoroOrtEngine private constructor(
         val doneFired = AtomicBoolean(false)
         fun fireDoneOnce() {
             if (doneFired.compareAndSet(false, true)) {
-                try { onDone() } catch (ignored: Exception) { }
+                try { onDone() } catch (ignored: Exception) {
+                    CatcherHooks.laneError("kokoro", "exception")
+                }
             }
         }
         var track: AudioTrack? = null
@@ -298,6 +319,7 @@ class KokoroOrtEngine private constructor(
             val tokens = try {
                 tokenize(clean)
             } catch (e: Exception) {
+                CatcherHooks.laneError("kokoro", "exception")
                 Log.w(TAG, "G2P failed", e)
                 fireDoneOnce()
                 return
@@ -322,6 +344,7 @@ class KokoroOrtEngine private constructor(
                     track = createTrack() ?: break
                     currentTrack = track
                     try { track.play() } catch (e: Exception) {
+                        CatcherHooks.laneError("kokoro", "exception")
                         Log.w(TAG, "AudioTrack.play failed", e)
                         break
                     }
@@ -339,22 +362,30 @@ class KokoroOrtEngine private constructor(
                     val written = try {
                         track.write(pcm, 0, n)
                     } catch (e: Exception) {
+                        CatcherHooks.laneError("kokoro", "exception")
                         Log.w(TAG, "AudioTrack.write failed", e)
                         break
                     }
                     if (written < 0) break
                     if (!started.getAndSet(true)) {
-                        try { onStart() } catch (ignored: Exception) { }
+                        try { onStart() } catch (ignored: Exception) {
+                            CatcherHooks.laneError("kokoro", "exception")
+                        }
                     }
                     offset += n
                 }
                 if (generation.get() != gen) break
             }
         } catch (e: Exception) {
+            CatcherHooks.laneError("kokoro", "exception")
             Log.w(TAG, "Kokoro utterance failed", e)
         } finally {
-            try { track?.stop() } catch (ignored: Exception) { }
-            try { track?.release() } catch (ignored: Exception) { }
+            try { track?.stop() } catch (ignored: Exception) {
+                CatcherHooks.laneError("kokoro", "exception")
+            }
+            try { track?.release() } catch (ignored: Exception) {
+                CatcherHooks.laneError("kokoro", "exception")
+            }
             if (currentTrack === track) currentTrack = null
             // Interrupt/stop par bhi EXACTLY-ONCE onDone:
             // VoiceEngine stale seq ko ignore karta hai, isliye
@@ -402,13 +433,22 @@ class KokoroOrtEngine private constructor(
             val value = (result[outputName] as? OnnxTensor)?.value ?: return null
             return flattenWaveform(value)
         } catch (e: Exception) {
+            CatcherHooks.laneError("kokoro", "exception")
             Log.w(TAG, "ORT inference failed", e)
             return null
         } finally {
-            try { result?.close() } catch (ignored: Exception) { }
-            try { speedTensor?.close() } catch (ignored: Exception) { }
-            try { styleTensor?.close() } catch (ignored: Exception) { }
-            try { idsTensor?.close() } catch (ignored: Exception) { }
+            try { result?.close() } catch (ignored: Exception) {
+                CatcherHooks.laneError("kokoro", "exception")
+            }
+            try { speedTensor?.close() } catch (ignored: Exception) {
+                CatcherHooks.laneError("kokoro", "exception")
+            }
+            try { styleTensor?.close() } catch (ignored: Exception) {
+                CatcherHooks.laneError("kokoro", "exception")
+            }
+            try { idsTensor?.close() } catch (ignored: Exception) {
+                CatcherHooks.laneError("kokoro", "exception")
+            }
         }
     }
 
@@ -457,6 +497,7 @@ class KokoroOrtEngine private constructor(
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
         } catch (e: Exception) {
+            CatcherHooks.laneError("kokoro", "exception")
             Log.w(TAG, "AudioTrack create failed", e)
             null
         }

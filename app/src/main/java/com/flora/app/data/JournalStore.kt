@@ -40,6 +40,7 @@ class JournalStore(private val context: Context) {
                 )
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("journal", "unknown", "exception")
         }
         out
     }

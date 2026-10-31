@@ -5,6 +5,7 @@ import android.graphics.Rect
 import android.view.accessibility.AccessibilityNodeInfo
 import com.flora.app.assistant.NeuralSpeaker
 import com.flora.app.data.AutoLogStore
+import com.flora.app.data.CatcherHooks
 import com.flora.app.data.FloraPreferences
 import kotlinx.coroutines.delay
 
@@ -205,6 +206,7 @@ object WhatsAppReply {
         code: String,
         reason: String,
     ): Result.NotSent {
+        CatcherHooks.featureError("whatsapp-reply", "sendReply", code)
         log(context, "WhatsApp reply NAHI bheja — $title — $reason")
         announce(context, "WhatsApp reply nahi bheja — $reason")
         return Result.NotSent(code, reason)

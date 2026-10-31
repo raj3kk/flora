@@ -1,4 +1,5 @@
 package com.flora.app.wakeword
+import com.flora.app.data.CatcherHooks
 
 import android.annotation.SuppressLint
 import android.media.AudioFormat
@@ -45,11 +46,14 @@ object WakeWordRecorder {
                     filled += read
                 }
             } finally {
-                try { record.stop() } catch (e: Exception) { /* ignore */ }
+                try { record.stop() } catch (e: Exception) {
+                    CatcherHooks.laneError("wakeword", "exception")
+                /* ignore */ }
                 record.release()
             }
             if (filled < totalSamples / 2) null else out.copyOf(filled)
         } catch (e: Exception) {
+            CatcherHooks.laneError("wakeword", "exception")
             null
         }
     }

@@ -71,6 +71,7 @@ class ProjectMemoryStore(private val context: Context) {
                 )
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("project-memory", "decode", "exception")
         }
         return out
     }
@@ -97,6 +98,7 @@ class ProjectMemoryStore(private val context: Context) {
             val raw = context.projectMemoryDataStore.data.map { it[key] ?: "[]" }.first()
             decode(raw)
         } catch (e: Exception) {
+            CatcherHooks.dbError("project-memory", "loadAll", "exception")
             emptyList()
         }
     }
@@ -133,6 +135,7 @@ class ProjectMemoryStore(private val context: Context) {
             saveAll(kept)
             true
         } catch (e: Exception) {
+            CatcherHooks.dbError("project-memory", "save", "exception")
             false
         }
     }
@@ -155,6 +158,7 @@ class ProjectMemoryStore(private val context: Context) {
             saveAll(entries.take(MAX_ENTRIES))
             true
         } catch (e: Exception) {
+            CatcherHooks.dbError("project-memory", "replaceAll", "exception")
             false
         }
     }

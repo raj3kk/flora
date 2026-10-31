@@ -38,6 +38,7 @@ object RoutineStore {
                 out.add(Routine(obj.optString("name"), cmds))
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("routine", "load", "exception")
         }
         return out
     }

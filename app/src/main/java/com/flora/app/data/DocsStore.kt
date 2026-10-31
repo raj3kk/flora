@@ -37,6 +37,7 @@ class DocsStore(private val context: Context) {
                 out.add(FloraDoc(obj.optString("title"), obj.optString("body")))
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("docs", "unknown", "exception")
             // Corrupt stored JSON: treat as empty rather than crashing.
         }
         out

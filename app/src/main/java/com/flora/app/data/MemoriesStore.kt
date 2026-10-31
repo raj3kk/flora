@@ -39,6 +39,7 @@ class MemoriesStore(private val context: Context) {
                 else out.add(arr.optString(i))
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("memories", "unknown", "exception")
             // Corrupt stored JSON: treat as empty rather than crashing.
         }
         out
@@ -62,6 +63,7 @@ class MemoriesStore(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("memories", "loadPairs", "exception")
         }
         return out
     }

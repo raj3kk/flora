@@ -77,6 +77,7 @@ object PostHistoryStore {
                 )
             }
         } catch (e: Exception) {
+            CatcherHooks.dbError("post-history", "fromJson", "exception")
         }
         return out.filter { it.id.isNotEmpty() }
     }

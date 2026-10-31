@@ -1,4 +1,5 @@
 package com.flora.app.tools
+import com.flora.app.data.CatcherHooks
 
 import android.util.Base64
 import com.flora.app.data.BuilderAuthKind
@@ -73,6 +74,7 @@ class GitHubClient(
     private suspend fun token(): String = try {
         prefs.builderToken(BuilderService.GITHUB)
     } catch (e: Exception) {
+        CatcherHooks.networkError("github", "exception", "exception")
         ""
     }
 
@@ -97,6 +99,7 @@ class GitHubClient(
                 BuilderOutcome.Failure(BuilderHttp.classifyHttp(raw.code), "http ${raw.code}")
             }
         } catch (e: Exception) {
+            CatcherHooks.networkError("github", "exception", "exception")
             BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
         }
     }
@@ -126,6 +129,7 @@ class GitHubClient(
                     BuilderOutcome.Failure(BuilderHttp.classifyHttp(raw.code), "http ${raw.code}")
                 }
             } catch (e: Exception) {
+                CatcherHooks.networkError("github", "exception", "exception")
                 BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
             }
         }
@@ -173,6 +177,7 @@ class GitHubClient(
                 BuilderOutcome.Failure(BuilderHttp.classifyHttp(raw.code), "http ${raw.code}")
             }
         } catch (e: Exception) {
+            CatcherHooks.networkError("github", "exception", "exception")
             BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
         }
     }
@@ -217,6 +222,7 @@ class GitHubClient(
                 }
             }
         } catch (e: Exception) {
+            CatcherHooks.networkError("github", "exception", "exception")
             BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
         }
     }
@@ -227,6 +233,7 @@ class GitHubClient(
             val refresh = try {
                 prefs.builderRefreshToken(BuilderService.GITHUB)
             } catch (e: Exception) {
+                CatcherHooks.networkError("github", "exception", "exception")
                 ""
             }
             if (refresh.isEmpty()) {
@@ -265,6 +272,7 @@ class GitHubClient(
                     }
                 }
             } catch (e: Exception) {
+                CatcherHooks.networkError("github", "exception", "exception")
                 BuilderOutcome.Failure(BuilderFailureKind.NETWORK, "network")
             }
         }
