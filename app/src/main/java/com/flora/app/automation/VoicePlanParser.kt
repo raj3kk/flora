@@ -142,9 +142,12 @@ object VoicePlanParser {
             val first = lower.substringBefore(" kholo ").trim()
             val rest = lower.substringAfter(" kholo ").trim()
             if (first.isNotEmpty() && rest.isNotEmpty() &&
-                first !in OWN_SCREEN_NAMES &&
                 MEDIA_VERBS.any { rest.contains(it) }
             ) {
+                // Fixer: §1b me aate hi faisla isi branch ka hai —
+                // own-screen naam (camera/yaadein/memories) par bhi null,
+                // warna §3 us naam ko chhod kar YouTube plan bana deta.
+                if (first in OWN_SCREEN_NAMES) return null
                 val matches = resolveApp(first)
                 if (matches.size == 1) {
                     val (label, pkg) = matches[0]
@@ -175,8 +178,12 @@ object VoicePlanParser {
                     }
                     return null
                 }
-                // App resolve na ho / ambiguous ho to neeche
-                // standalone media raasta waisa hi chalega.
+                // Fixer: §1 ke aur-compound niyam jaisa — app resolve
+                // na ho (0) ya ambiguous ho (>1) to null; §3 par
+                // fall-through se naam wala app chhup kar YouTube
+                // plan nahi banega (size == 1 ka block upar hamesha
+                // return karta hai, isliye yahan sirf != 1 bachta hai).
+                return null
             }
         }
 

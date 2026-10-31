@@ -204,4 +204,22 @@ class VoicePlanParserTest {
         assertEquals("arijit", plan.steps[1].input["query"])
         assertEquals(VoicePlanExecutor.TAP_FIRST_RESULT, plan.steps[2].executor)
     }
+
+    // Fixer regression: §1b (kholo-space) me naam wala app resolve
+    // na ho / ambiguous ho / own-screen ho to null — §3 par
+    // fall-through se YouTube plan nahi banega.
+    @Test
+    fun kholoSpaceUnknownAppIsNull() {
+        assertNull(VoicePlanParser.parse("xyzapp kholo video chalao arijit", resolver))
+    }
+
+    @Test
+    fun kholoSpaceAmbiguousAppIsNull() {
+        assertNull(VoicePlanParser.parse("music kholo video chalao arijit", resolver))
+    }
+
+    @Test
+    fun kholoSpaceOwnScreenIsNull() {
+        assertNull(VoicePlanParser.parse("camera kholo video chalao arijit", resolver))
+    }
 }
