@@ -22,9 +22,15 @@
 ## K3 — Workflow-step DRAFT text only (web UI se lagane ke liye)
 
 > YE SIRF DRAFT TEXT HAI — `.github/workflows/` me kuch push NAHI hua
-> hai (API se workflow push BLOCKED hai: token ke paas workflows scope
-> nahi hai). Ye step tab lagega jab D-01 + release APK (P2-07) dono hon,
-> aur tab bhi GitHub web UI se Edit + paste + Commit se.
+> hai. CORRECTION (fixer, 2026-10-31): purana "token ke paas workflows
+> scope nahi hai" wala daava STALE tha — 2026-10-31 ke GitHub API read
+> me `workflow` scope maujood mila hai, isliye asli rok scope NAHI hai.
+> Asli rok D-01 host decision + P2-07 real release SHA gates hain.
+> Scope hona approval nahi hai — ye step tabhi lagega jab D-01 + release
+> APK (P2-07) dono hon, aur tab bhi sirf approved tareeke se (draft ke
+> mutabiq GitHub web UI se Edit + paste + Commit). Is fix me KOI workflow
+> push attempt nahi hua hai, KOI workflow file edit nahi hui hai, aur K3
+> step abhi bhi GATED hai.
 
 ```yaml
 # DRAFT — release APK ko chosen host par publish karne ka step (naam
@@ -36,8 +42,9 @@
 #     echo "Koi keystore/password is step me kabhi nahi aayega"
 ```
 
-- Dead CI upload step ka purana record: web UI se lagane par hi theek
-  hoga — API se dobara ghumana mana hai.
+- Dead CI upload step ka purana record: is draft ke mutabiq web UI se
+  lagane ki taiyari hai; is round me koi workflow push attempt nahi hua
+  hai aur koi workflow file edit nahi hui hai.
 
 ## K4 — Fill procedure (BLOCKED: D-01 + P2-07 SHA)
 

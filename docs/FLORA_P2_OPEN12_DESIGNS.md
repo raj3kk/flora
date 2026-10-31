@@ -36,6 +36,10 @@
 - Decision needed: D-05 (S1-6). D-24 (main-flow counting route) aur D-30
   (STT seconds Free counter me shamil ya nahi) se juda hai — teeno alag
   faisle hain, ek ko doosre ka faisla mat mano.
+- Decisions-trace note (fixer, 2026-10-31): D-24 isi S1-6 link se trace
+  hota hai — main-flow counting route ka faisla; D-05 (S1-6 design) aur
+  D-30 (STT seconds) se alag faisla hai, koi decision yahan invent nahi
+  hua hai.
 
 ## S1-17 — TTS model
 

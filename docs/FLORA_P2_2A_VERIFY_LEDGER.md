@@ -58,7 +58,10 @@ expired / wrong-project / anon-key tha. Settle sirf fresh-JWT test se hoga
 
 ## 5. Deployment ledger DRAFT (code-side fields only)
 
-- Commit SHA (tip): `c26a9ac4`
+- Commit SHA: `58631cd0` (is ledger wali Part 2 implementer commit khud).
+  `c26a9ac4` sirf tip-at-writing tha (doc likhte waqt ka tip) — usko is
+  ledger ka apna SHA mat mano; upar §1 ka TIP-MOVE NOTE bhi isi hisaab
+  se padho.
 - Function versions: upar §3 wali tip states (file header versions).
 - CI run IDs: is round ke push ke baad wale run id yahan nahi — push ke
   baad CI verify karke coordinator ko report me diye jayenge.

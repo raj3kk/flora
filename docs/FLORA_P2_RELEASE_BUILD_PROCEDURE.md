@@ -51,5 +51,6 @@
    copy na rahe (local files apni secure jagah par hi rahenge, repo me
    kabhi nahi).
 6. Is procedure ke baad bhi publish tabhi jab Parts 1–3 DONE-CODE +
-   virtual-test pass hon (publish gate Part 4 ka hai — yahan publish ka
-   daava nahi).
+   virtual-test pass hon (publish gate Part 4 ka hai — D-26 publish
+   sign-off gate ka label yahan darj hai, koi decision yahan nahi liya
+   gaya hai — yahan publish ka daava nahi).

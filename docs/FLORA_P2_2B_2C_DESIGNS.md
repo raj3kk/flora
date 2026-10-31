@@ -74,6 +74,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS payment_submissions_utr_approved_uidx
   number (S1-20); ZP-F11 N4 key-path live test; ZP-F12 N5 D8 gate live test
   (Free <600s → 429); ZP-F17 Phase 7 E2E licence flow.
 - Decision needed: D-10, RD-C-12 (D-21 ke saath), D-30 (STT seconds).
+- P2-05 status note (fixer, 2026-10-31): website pages HAVE (text) /
+  visual + UPI + wording PENDING — plan ke mutabiq; iske liye koi nayi
+  file nahi banayi gayi hai, note isi 2C doc me darj hai.
 
 ## §4. P2-11 — Gmail lane (spec skeleton draft, deploy NAHI)
 
@@ -117,3 +120,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS payment_submissions_utr_approved_uidx
    unlinked key users key path use nahi kar sakte jaisa hai; iska confirm
    bhi parent session se hoga.
 - Live test parent-delegation me hai.
+
+## §7. Decisions-trace note (fixer, 2026-10-31) — D-09
+
+- D-09 (WhatsApp Business Cloud API CLOSED): Part 2 me iski relevance
+  sirf itni hai ki koi bhi live-send scope re-confirmation isi closure
+  ke against hogi; spend approval alag se chahiye. Isse koi Part 2
+  live-send step khulta nahi — isliye Part 2 ke liye D-09 note-only hai.
+  Koi decision yahan invent nahi hua hai.
