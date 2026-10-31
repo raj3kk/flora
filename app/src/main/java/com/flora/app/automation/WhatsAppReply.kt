@@ -27,11 +27,14 @@ import kotlinx.coroutines.delay
  *      (exact match, screen ke upari hisse me) + message input
  *      dono milne par hi aage badho. Doubt/ambiguity ho to
  *      MAT BHEJO — log karo, wapas aao.
- *   4. Reply type karo (password field me kabhi nahi) + type
- *      hua text wapas padh kar verify karo.
- *   5. Send dabao, phir input clear hua ya nahi dekh kar
- *      sent verify karo. Verify na ho to "bheja gaya" ka daava
- *      kabhi nahi — user ko WhatsApp me dekhne ko kaho.
+ *   4. Type se pehle conversation dobara verify, phir reply
+ *      type karo (password field me kabhi nahi) + type hua text
+ *      wapas padh kar verify karo.
+ *   5. Send dabao (sirf exact-description, substring fallback
+ *      nahi), phir wahi conversation dobara verify + input
+ *      clear hua ya nahi dekh kar sent verify karo. Verify na
+ *      ho to "bheja gaya" ka daava kabhi nahi — user ko
+ *      WhatsApp me dekhne ko kaho.
  *
  * Transparency (mandatory, koi silent path nahi):
  *   - Reply ke waqt WhatsApp screen khuli hoti hai (user dekh
@@ -321,6 +324,16 @@ object WhatsAppReply {
             if (!autoModeOn(context)) {
                 return fail(context, title, "cancelled", "auto mode band ho gaya — ruk gaya")
             }
+            // R4-9 fix (b): type se pehle conversation-open dobara
+            // verify — sirf settled flag par bharosa nahi (settle
+            // chat-list screen par laga ho to text search field
+            // me ja sakta hai).
+            if (!isConversationOpen(service, title, screenHeight)) {
+                return fail(
+                    context, title, "chat_verify_failed",
+                    "type se pehle sahi chat verify nahi hui — galat jagah type karne se behtar hai na bhejna"
+                )
+            }
             if (service.firstEditableIsPassword()) {
                 return fail(context, title, "input_not_found", "message box ki jagah password field mili")
             }
@@ -340,12 +353,24 @@ object WhatsAppReply {
             if (!autoModeOn(context)) {
                 return fail(context, title, "cancelled", "auto mode band ho gaya — ruk gaya")
             }
-            val sentClicked = service.clickByExactDescription("Send") ||
-                service.clickText("Send")
+            // R4-9 fix (c): Send click sirf exact-description par —
+            // substring clickText fallback hata diya gaya hai (wo
+            // "send" wali kisi bhi clickable node ko daba sakta tha).
+            val sentClicked = service.clickByExactDescription("Send")
             if (!sentClicked) {
                 return fail(
                     context, title, "send_button_not_found",
                     "Send button nahi mila — message type hua pada hai, tum Send daba sakte ho"
+                )
+            }
+            // R4-9 fix (a): input-clear check se PEHLE conversation
+            // dobara verify — match na ho to send_unverified, Sent
+            // kabhi nahi (input kisi aur screen par bhi clear ho
+            // sakta hai).
+            if (!isConversationOpen(service, title, screenHeight)) {
+                return fail(
+                    context, title, "send_unverified",
+                    "Send ke baad sahi chat verify nahi hui — bheja gaya ya nahi pakka nahi, WhatsApp me dekh lo"
                 )
             }
             var cleared = false
