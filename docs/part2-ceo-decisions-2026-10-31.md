@@ -116,10 +116,28 @@ Koi code change bina CI green ke DONE-CODE nahi kehlata; live deploy claims is d
 
 ### S3-3/S3-4 — CORS sirf Vercel project domains, koi wildcard nahi
 
-- CURRENT STATE (gap, chhupaya nahi): tip par `usage-count`, `stt-proxy`,
-  `tts-proxy`, `brain-proxy`, `admin-keys` — sab me `Access-Control-Allow-Origin: "*"`
-  hai. `tts-proxy` ka comment khud kehta hai S3-4 allowlist HELD hai (host list
-  parent se aane par badlega).
+- CURRENT STATE (gap, chhupaya nahi — scope correction, 2026-10-31 tip grep se
+  verify): tip par sirf 5 functions nahi, POORE 25/25 functions me
+  `Access-Control-Allow-Origin: "*"` hai — `admin-approve`, `admin-flags`,
+  `admin-instructions`, `admin-keys`, `admin-licences`, `admin-list`,
+  `admin-overview`, `admin-payments`, `admin-plan-features`, `admin-settings`,
+  `brain-proxy`, `feature-flags`, `gmail-proxy`, `heartbeat`, `home-sync`,
+  `licence-key`, `licence-verify`, `public-settings`, `push-token-sync`,
+  `send-push`, `stt-proxy`, `tts-proxy`, `usage-count`, `user-data-delete`,
+  `whatsapp-template-send`. Allowlist migration ka scope isi poore 25-function
+  set par hai — pehle wali 5-function list scope ko understated karti thi, isliye
+  use is poori list se correct kiya gaya hai. `tts-proxy` ka comment khud kehta
+  hai S3-4 allowlist HELD hai (host list parent se aane par badlega).
+- CEO ITEMS (is doc-fix cycle se darj, koi behavior change nahi):
+  - (a) `user-data-delete` bhi `*` ke saath aaya hai — ye maujooda pattern-consistent
+    hai, par decided S3-3/S3-4 principle (sirf Vercel domains) ke against hai.
+    CEO ko explicitly faisla darj karna hai: is function ko grandfather karo ya
+    allowlist migration me include karo — bhoolna nahi hai.
+  - (b) P3-04 `provider_keys` contradiction — `provider_keys` GLOBAL table hai
+    (primary key `provider`, koi `user_id` column nahi), isliye user-data-delete
+    use delete nahi karta. CEO decision pending hai: decisions list se
+    `provider_keys` hatao ya alag admin-only global purge route banao; tab tak
+    function ka use retained rakhna sahi hai (detail §4 FLAG me hai).
 - Is cycle me wildcard ko code me NAHI badla gaya hai, kyunki sahi domain list
   parent browser session se verify honi hai (galat allowlist panel/website tod degi)
   aur live deploy waise bhi parent step hai. Domain list PROPOSAL (verify karni hai):
