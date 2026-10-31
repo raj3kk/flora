@@ -99,6 +99,64 @@ class CatcherEventsTest {
     }
 
     @Test
+    fun countsPureFunctionSkipsMalformedLines() {
+        // FIXER ISSUE-5/6: pure count(lines) — koi IO nahi.
+        val counts = CatcherEvents.count(
+            listOf(
+                "2026-10-31 10:00:00 | API | first",
+                "garbage line with no separators",
+                "2026-10-31 10:00:01 |  | empty category",
+                "2026-10-31 10:00:02 | API",
+                "2026-10-31 10:00:03 | STT | third",
+            )
+        )
+        assertEquals(1, counts["API"])
+        assertEquals(1, counts["STT"])
+        assertEquals(2, counts.size)
+    }
+
+    @Test
+    fun countsByCategorySkipsMalformedLines() {
+        // FIXER ISSUE-5: file-based wrapper bhi kharab line skip kare.
+        val dir = tempDir()
+        try {
+            File(dir, "catcher_events.log").writeText(
+                "garbage line with no separators\n" +
+                    "2026-10-31 10:00:00 |  | empty category\n" +
+                    "2026-10-31 10:00:01 | API | ok\n" +
+                    "2026-10-31 10:00:02 | API\n"
+            )
+            val counts = CatcherEvents.countsByCategory(dir)
+            assertEquals(1, counts["API"])
+            assertEquals(1, counts.size)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun countsByCategoryIncludesPrevGeneration() {
+        // FIXER ISSUE-5 (ISSUE-4 ko cover karta hai): rotation ke
+        // baad prev file ki counts bhi judi honi chahiye; prev na
+        // ho to sirf current gini jaye.
+        val dir = tempDir()
+        try {
+            CatcherEvents.recordTo(dir, "API", "current one")
+            assertEquals(1, CatcherEvents.countsByCategory(dir)["API"])
+            File(dir, CatcherEvents.PREV_FILE_NAME).writeText(
+                "2026-10-31 09:00:00 | API | old one\n" +
+                    "2026-10-31 09:00:01 | API | old two\n" +
+                    "2026-10-31 09:00:02 | STT | old three\n"
+            )
+            val counts = CatcherEvents.countsByCategory(dir)
+            assertEquals(3, counts["API"])
+            assertEquals(1, counts["STT"])
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun countsByCategoryGroupsPerClass() {
         val dir = tempDir()
         try {

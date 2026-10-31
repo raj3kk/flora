@@ -99,24 +99,40 @@ object CatcherEvents {
     }
 
     /**
-     * REG-F9 residual (Part 1): per-class counts — log ki har
-     * category ki ginti. Pure File IO; line format
-     * `time | CATEGORY | detail` hai, kharab line skip hoti
-     * hai. Kabhi throw nahi karta (fail par empty map).
+     * FIXER ISSUE-6: pure count — sirf di hui lines ginata hai,
+     * koi disk IO nahi. Line format `time | CATEGORY | detail`
+     * hai, kharab line skip hoti hai. Kabhi throw nahi karta.
+     */
+    fun count(lines: List<String>): Map<String, Int> {
+        val counts = mutableMapOf<String, Int>()
+        for (line in lines) {
+            val parts = line.split(" | ")
+            if (parts.size < 3) continue
+            val category = parts[1].trim()
+            if (category.isEmpty()) continue
+            counts[category] = (counts[category] ?: 0) + 1
+        }
+        return counts
+    }
+
+    /**
+     * REG-F9 residual (Part 1) + FIXER ISSUE-4: per-class counts.
+     * IO-bound wrapper hai (disk read) — caller ise IO thread
+     * par hi bulaye (CatcherScreen aisa hi karta hai).
+     * Rotation par purani generation catcher_events.prev.log me
+     * archive hoti hai — counts me DONON files gini jati hain,
+     * warna rotation ke baad screen ki counts line achanak gir
+     * jati. Prev file na ho to sirf current file gini jati hai.
+     * Fail par empty map (kabhi throw nahi).
      */
     fun countsByCategory(filesDir: File): Map<String, Int> {
         return try {
+            val lines = mutableListOf<String>()
+            val prev = File(filesDir, PREV_FILE_NAME)
+            if (prev.exists()) lines += prev.readLines()
             val log = File(filesDir, FILE_NAME)
-            if (!log.exists()) return emptyMap()
-            val counts = mutableMapOf<String, Int>()
-            for (line in log.readLines()) {
-                val parts = line.split(" | ")
-                if (parts.size < 3) continue
-                val category = parts[1].trim()
-                if (category.isEmpty()) continue
-                counts[category] = (counts[category] ?: 0) + 1
-            }
-            counts
+            if (log.exists()) lines += log.readLines()
+            count(lines)
         } catch (e: Exception) {
             emptyMap()
         }
