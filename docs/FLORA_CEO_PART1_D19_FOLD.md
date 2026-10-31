@@ -19,7 +19,7 @@ hai wo "CARRIED" ke roop me saaf likha hai.
   maujood hai. Phone par duplicate-turn check abhi bhi phone-gated
   hai (is record se phone daava nahi hai).
 - **N1-P2-2 Guidance-vs-interrupt ordering — FIXED, candidate (a)
-  (folded).** `ui/FloraApp.kt:1385-1395` me interrupt pending ho
+  (folded).** `ui/FloraApp.kt:1406-1415` me interrupt pending ho
   to guidance ABHI nahi boli jati (comment me candidate (a) darj
   hai); pending agle bina-interrupt speech-done par bolega;
   normal path waisa hi hai.

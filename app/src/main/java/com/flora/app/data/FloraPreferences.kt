@@ -120,7 +120,6 @@ class FloraPreferences(private val context: Context) {
         // Phase 8 feature flags: aakhri mili hui flags ka JSON
         // (offline me wahi chalti hain; fail-open bhi yahi se).
         val FEATURE_FLAGS_JSON = stringPreferencesKey("feature_flags_json")
-        val CALL_TALK = booleanPreferencesKey("call_talk")
         val HOME_BOX_CODE = stringPreferencesKey("home_box_code")
         val PC_PAIR_CODE = stringPreferencesKey("pc_pair_code")
         // SD-P1 Batch 2 (SD-1): user ke apne connector tokens —

@@ -191,6 +191,10 @@
   `generate()` → `planner/PlannerEngine.kt:271` (createPlan se call) aur
   `planner/PlannerEngine.kt:752` (replan se call). Teeno lines live tip
   blob se verify ki gayi hain (local copy tip se byte-identical mili).
+- TIP NOTE (current tip par, pinned citations mat badlo): upar ki
+  pinned citations ef88622c ke liye accurate hain. Current tip par
+  replan call `planner/PlannerEngine.kt:784` par hai (pinned base
+  par :752 tha; D-06 insertions se lines shift hui hain).
 - Planner schema me stops/noDo: `planner/PlannerBrain.kt:162` (prompt
   schema me `"stops":[], "noDo":[]`), `planner/PlannerModels.kt:89-90`
   (PlanDraft fields), `planner/PlanRoom.kt:253-254` (persist) aur

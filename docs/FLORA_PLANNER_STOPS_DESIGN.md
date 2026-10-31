@@ -116,8 +116,9 @@ Verified maujooda haalat (tip ef88622c):
   khaali ya naya din ho to 0 (exception par bhi 0).
 - `data/FloraPreferences.kt:1100-1110` — `talkSecondsUsed` /
   `addTalkSeconds`: stored date aaj se alag ho to used 0 se shuru.
-- `data/FloraPreferences.kt` — toggles default OFF: `callTalk()`
-  (`?: false`), aur baaki boolean prefs isi pattern par.
+- `data/FloraPreferences.kt` — toggles default OFF:
+  `automationConsent()` (`?: false`), aur baaki boolean prefs
+  isi pattern par.
 - `data/LicenceClient.kt:370-380` — `countUsage`: stored device_id
   khaali ho to `device_id` body me bheja hi nahi jata → server
   `counted:false` (register ka "stored id khaali → counted:false"
