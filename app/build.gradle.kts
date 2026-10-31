@@ -26,13 +26,31 @@ android {
     // chheda nahi gaya (CI aaj bhi sirf assembleDebug banata hai,
     // wo flow intact hai). Release: arm64-v8a akela (4 ABI native
     // ~196 MB se ~49 MB), R8 minify + resource shrink.
-    // Signing: repo me koi signing config nahi hai aur keystore
-    // invent nahi kiya gaya — release APK unsigned banta hai
-    // (size evidence ke liye); sideload identity debug-signed hi
-    // rahegi jab tak signing par alag faisla na ho. Play Store
-    // update KABHI NAHI (purani key lost hai).
+    // Release signing (Item 5, 2026-10-31): nayi release key —
+    // purani key LOST hai, reuse KABHI NAHI. Keystore repo ke
+    // BAHAR hai (~/workspace/secure/flora-release.keystore,
+    // 600 perms); password bahar ki file se padha jaata hai
+    // (flora-release-keystore.pwd, 600 perms) — koi value is
+    // build file me hardcode nahi hai. Keystore/password files
+    // kabhi git/push me nahi aati. Sideload-only; purane
+    // installs ko ek baar uninstall+reinstall karna hoga.
+    // Play Store update KABHI NAHI (purani key lost hai).
+    signingConfigs {
+        create("release") {
+            val secureDir = File(System.getProperty("user.home"), "workspace/secure")
+            val pwdFile = File(secureDir, "flora-release-keystore.pwd")
+            storeFile = File(secureDir, "flora-release.keystore")
+            keyAlias = "flora-release"
+            if (pwdFile.exists()) {
+                val pwd = pwdFile.readText().trim()
+                storePassword = pwd
+                keyPassword = pwd
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
