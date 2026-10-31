@@ -158,6 +158,89 @@ code yahan nahi chheda gaya:
 - Server-side trace_id propagation + alerting setup — P3-17 ka
   server half (Part 2 team ke paas flag hai).
 
+## CEO decisions cycle 2026-10-31 — Part 3 items (C4-1, C4-2, Support entry, typing, P3-07, P3-17)
+
+- C4-1 storageError — SIRF wahi wire hua jahan asli storage
+  failure pakda ja sakta hai (andha har-jagah hook nahi):
+  `models/ModelDownloader.kt:283` (model-download part write /
+  rename / .ok write ka catch), `update/AppUpdate.kt:168`
+  (update-download cacheDir/updates part write + rename ka
+  catch), `ui/CatcherScreen.kt:180` (catcher-report-save
+  writeText ka catch — saath me fail par galat "save ho gaya"
+  message bhi theek kiya gaya, ab saaf failure message aata
+  hai). DataStore stores pehle se `dbError` se wired hain
+  (36 sites) — unhe dobara storageError nahi diya (category
+  alag hai). Kokoro downloadOne ka catch pehle se
+  `laneError("kokoro")` se covered hai — double-record nahi
+  kiya. fcmDeliveryNote ko fake hook se NAHI bhara gaya:
+  FCM delivery failure on-device se capture nahi ho sakta by
+  design — asli evidence panel-side ZP-F13 hi hai (ye note
+  `data/CatcherHooks.kt` me pehle se darj hai).
+- C4-2 CatcherScreen health line + prev-log indicator —
+  LIVE TIP (256b70a8) par NAHI mile (tip ki CatcherScreen me
+  na `healthLine` tha, na `prev` indicator), isliye IMPLEMENT
+  kiya gaya: `ui/CatcherScreen.kt:142` health line
+  (`CatcherHealth.healthLine()`, probe `FloraApplication` se
+  pehle se wired hai) + `:143-145` prev-log indicator
+  (rotation se bani `catcher_events.prev.log` maujood ho to
+  wahi dikhta hai). Collision note: local snapshot me ye
+  lines pehle se thi (kisi pichhle cycle ki unpushed edits),
+  par tip par nahi thi — implementation tip content se
+  dobara banaya gaya, local snapshot ko tip nahi mana gaya.
+- SupportRoute UI entry — `ui/CatcherScreen.kt:198` par
+  "Support ko mail karo" button: pehle se wired
+  `SupportRoute.sendIntent(note)` kholta hai (D-31 CONFIRMED
+  destination — website par published mailbox, badla nahi,
+  koi naya contact invent nahi, owner personal details kabhi
+  nahi). Sirf mail composer khulta hai; bhejna user-tap par,
+  auto-send kabhi nahi. Draft = user ki apni note line
+  (sanitized, 500 chars cap); note khaali ho to user mail
+  app me khud likhega.
+- Typing failure surface — DEFINITION (koi galat hook nahi):
+  typing mode sirf ek UI flag hai (`FloraApp.kt` typingMode —
+  ON = chat ka Mic button chhupa, sirf likh kar baat).
+  Typed text wahi shared `sendChat` path se jata hai jahan se
+  voice text bhi jata hai; us path ke failures pehle se
+  covered hain (BrainClient fail hooks, lane errors) ya user
+  ko message ke roop me dikhte hain. Typing ka apna koi
+  exception/IO/network failure path NAHI hai — isliye koi
+  typing-specific hook nahi lagaya gaya (galat hook lagane se
+  behtar hai). Prefs toggle write generic DataStore path hai,
+  typing failure surface nahi.
+- P3-07 rollback readiness — VERIFY (live rollback GATED):
+  `channelReady()` + `PreviousStable` + `isRollbackAvailable`
+  + `rollbackSteps` `data/UpdateRollback.kt` me maujood hain,
+  par unka KOI caller nahi hai — update UI
+  (`FloraApp.kt` update flow) sirf `apkUrl.isNotEmpty()`
+  check karta hai, na `channelReady` poochhta hai, na update
+  se pehle PreviousStable record karta hai. Ye integration
+  gap hai (is cycle me FloraApp.kt ko collision risk par
+  nahi chheda gaya). LIVE rollback GATED hai: `web/updates/
+  version.json` me apkUrl + sha256 khaali hain, P2-06 channel
+  + real release SHA (Part 2 scope) ke bina live rollback
+  nahi chalega — design + procedure taiyaar hai, force nahi
+  kiya gaya. D-01 (GitHub Releases) se consistent raasta:
+  channel fill hone par hi rollback khulega. FLAG → Part 2:
+  version.json ka notes text abhi bhi "private-repo ki wajah
+  se GitHub releases no-auth channel nahi" kehta hai — ye
+  D-01 (repo PUBLIC, Releases decided) se stale hai; notes
+  update Part 2 ke channel fill ke saath hona chahiye (is
+  cycle me version.json Part 2 scope samajh kar nahi chheda
+  gaya).
+- P3-17 server half coordination — SPEC FLAG → Part 2 team
+  (docs-only note; server code `supabase/functions/*` nahi
+  chheda gaya): server-side trace_id propagation (app se aaya
+  `x-flora-trace-id` function → tool tak aage badhe) +
+  alerting setup (`Observability.kt` thresholds: 5xx/429,
+  provider fail, queue backlog, FCM fail, admin activity,
+  quota anomaly, crash spike) Part 2 ka kaam hai. App-side
+  contract barkaraar hai (`TRACE_HEADER = "x-flora-trace-id"`,
+  format `flora-<millis>-<6 chars>`, usme koi tod-fod nahi).
+  GAP NOTE (spec banate waqt dhyan rakhna): header abhi
+  kisi request par attach nahi hota — `BrainClient` me
+  TRACE_HEADER ka koi use nahi hai; propagation spec is
+  attachment point ke saath hi test ho payega.
+
 ## Tester ko kya test karna hai (is push ke files)
 
 Unit tests (naye): CatcherHooksTest, CatcherRotationTest,

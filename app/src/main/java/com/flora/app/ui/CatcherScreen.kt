@@ -36,7 +36,10 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.pm.PackageInfoCompat
 import com.flora.app.data.AutoLogStore
 import com.flora.app.data.CatcherEvents
+import com.flora.app.data.CatcherHealth
+import com.flora.app.data.CatcherHooks
 import com.flora.app.data.CatcherReport
+import com.flora.app.data.SupportRoute
 import com.flora.app.data.CrashLogReader
 import com.flora.app.data.LicenceStatus
 import java.io.File
@@ -72,6 +75,7 @@ fun CatcherScreen(
     var crashText by remember { mutableStateOf<String?>(null) }
     var events by remember { mutableStateOf<List<String>>(emptyList()) }
     var countsText by remember { mutableStateOf("") }
+    var prevLogText by remember { mutableStateOf("") }
     var savedMsg by remember { mutableStateOf("") }
     var report by remember { mutableStateOf("") }
     val autoItems by autoLogStore.items.collectAsState(initial = emptyList())
@@ -80,10 +84,16 @@ fun CatcherScreen(
         val c = withContext(Dispatchers.IO) { CrashLogReader.readCrashLog(context.filesDir) }
         val e = withContext(Dispatchers.IO) { CatcherEvents.readTail() }
         val counts = withContext(Dispatchers.IO) { CatcherEvents.countsByCategory(context.filesDir) }
+        val prevExists = withContext(Dispatchers.IO) { CatcherEvents.prevLogExists(context.filesDir) }
         crashText = c
         events = e
         countsText = counts.entries.sortedByDescending { it.value }
             .joinToString(", ") { "${it.key}: ${it.value}" }
+        prevLogText = if (prevExists) {
+            "Pichhli log generation maujood hai (catcher_events.prev.log)"
+        } else {
+            "Koi pichhli log generation nahi hai"
+        }
     }
     LaunchedEffect(crashText, events, autoItems, note, licence, autoMode, fcmStatus) {
         val fmt = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
@@ -126,6 +136,14 @@ fun CatcherScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Text("Events by category: $countsText")
         }
+        // CEO batch C4-2: init-health line + prev-log indicator —
+        // khaali screen ki jagah Catcher ki haalat hamesha dikhe.
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(CatcherHealth.healthLine())
+        if (prevLogText.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(prevLogText)
+        }
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
             value = note,
@@ -150,15 +168,38 @@ fun CatcherScreen(
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = {
             scope.launch {
-                withContext(Dispatchers.IO) {
+                // CEO batch C4-1: report-save asli storage IO hai —
+                // fail chupchaap nahi, Catcher me STORAGE entry + user
+                // ko saaf failure message (pehle fail par bhi "save ho
+                // gaya" likha jata tha, jo galat tha).
+                val ok = withContext(Dispatchers.IO) {
                     try {
                         File(context.filesDir, "catcher-report.txt").writeText(report)
+                        true
                     } catch (e: Exception) {
+                        CatcherHooks.storageError("catcher-report-save", "io-fail")
+                        false
                     }
                 }
-                savedMsg = "Report save ho gaya (catcher-report.txt)."
+                savedMsg = if (ok) {
+                    "Report save ho gaya (catcher-report.txt)."
+                } else {
+                    "Report save nahi ho paya — storage error, dobara koshish karo."
+                }
             }
         }) { Text("Report save karo") }
+        Spacer(modifier = Modifier.height(8.dp))
+        // CEO batch SupportRoute UI entry: pehle se wired
+        // SupportRoute intent kholta hai — sirf mail composer,
+        // bhejna user-tap par, auto-send kabhi nahi. Draft =
+        // user ki apni note line (sanitized, 500 chars cap);
+        // note khaali ho to user mail app me khud likhega.
+        Button(onClick = {
+            val send = SupportRoute.sendIntent(note)
+            context.startActivity(Intent.createChooser(send, "Support ko mail karo"))
+        }) { Text("Support ko mail karo") }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text("Mail composer khulega — bhejna tumhare tap par hoga.")
         if (savedMsg.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(savedMsg)

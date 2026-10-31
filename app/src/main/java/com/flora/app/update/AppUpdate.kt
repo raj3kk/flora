@@ -7,6 +7,7 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
 import com.flora.app.core.FloraConfig
+import com.flora.app.data.CatcherHooks
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -161,6 +162,10 @@ object AppUpdate {
             }
             out
         } catch (e: Exception) {
+            // CEO batch C4-1: update-download asli storage IO
+            // hai (cacheDir/updates me part write + rename) —
+            // fail yahan pakda ja sakta hai, isliye STORAGE hook.
+            CatcherHooks.storageError("update-download", "io-fail")
             null
         }
     }

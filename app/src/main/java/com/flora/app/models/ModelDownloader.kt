@@ -3,6 +3,7 @@ package com.flora.app.models
 import android.content.Context
 import com.flora.app.core.FloraConfig
 import com.flora.app.core.PinnedTrust
+import com.flora.app.data.CatcherHooks
 import com.flora.app.data.FloraPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -276,6 +277,10 @@ object ModelDownloader {
                 )
                 true
             } catch (e: Exception) {
+                // CEO batch C4-1: model-download asli storage IO
+                // hai (part write / rename / .ok write) — fail
+                // yahan pakda ja sakta hai, isliye STORAGE hook.
+                CatcherHooks.storageError("model-download", "io-fail")
                 // Resume ke liye .part RAKHO — agla try wahi se
                 // jaari rakhega. Galat SHA par upar delete hota
                 // hi hai, isliye corrupt part kabhi ready nahi.
