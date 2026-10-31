@@ -400,13 +400,16 @@ class LicenceClient(private val prefs: FloraPreferences) {
      * FCM token server sync (v2.5). Fire-and-forget: fail ho to
      * local token phir bhi saved rehta hai, agle app-open par
      * dobara try hoga. Token kabhi log nahi hota.
-     * Do raaste (push-token-sync v2): LINKED path (JWT
-     * caller-match) users row upsert karta hai; UNLINKED path
-     * (app ka anon-key call — app me Auth session nahi) users
-     * row claim NAHI karta, sirf pehle se registered device ka
-     * token upsert karta hai, warna "device not registered
-     * (link ke baad sync hoga)". Isliye token sync poora
-     * tabhi chalta hai jab device app-link se registered ho.
+     * Do raaste (push-token-sync v2): LINKED path (linked ho to
+     * app SessionTokenCache se user JWT bhejta hai; caller-match
+     * par server users row upsert karta hai — yehi raasta link
+     * flow ki users row banata hai); UNLINKED path (unlinked ho
+     * to anon hi — app me Auth session nahi) users row claim
+     * NAHI karta, sirf pehle se registered device ka token
+     * upsert karta hai, warna "device not registered (link ke
+     * baad sync hoga)". App-link fix: syncPushToken ab JWT
+     * bhejta hai (pehle anon-only tha, isliye linked hone par
+     * bhi users row kabhi nahi banti thi).
      */
     suspend fun syncPushToken(userId: String, deviceId: String, token: String): Boolean =
         withContext(Dispatchers.IO) {
@@ -414,7 +417,17 @@ class LicenceClient(private val prefs: FloraPreferences) {
             if (key.isEmpty() || token.isEmpty()) return@withContext false
             val body = JSONObject().put("user_id", userId)
                 .put("device_id", deviceId).put("fcm_token", token)
-            val res = post(FloraConfig.PUSH_TOKEN_FUNCTION_PATH, body, key)
+            // App-link fix: linked user ka JWT bhejo (verify() /
+            // countUsage() wala SessionTokenCache raasta) taaki
+            // server LINKED path chale aur users row upsert ho
+            // (id=user_id, device_id). JWT na mile (unlinked) to
+            // anon hi — UNLINKED path, pehle jaisa vyavhaar.
+            val jwt = try {
+                SessionTokenCache.accessToken(prefs, this@LicenceClient)
+            } catch (e: Exception) {
+                null
+            }
+            val res = post(FloraConfig.PUSH_TOKEN_FUNCTION_PATH, body, key, jwt)
                 ?: return@withContext false
             res.optBoolean("ok", false)
         }
