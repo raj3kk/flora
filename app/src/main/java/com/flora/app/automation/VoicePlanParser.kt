@@ -34,6 +34,22 @@ object VoicePlanParser {
 
     private val OWN_SCREEN_NAMES = setOf("camera", "yaadein", "memories")
 
+    // Fixer (tester D1): Flora ki apni screens — FloraApp.kt
+    // screen map (live tip :4903-4938) ke naam. Bare-open branch
+    // in par null lautaati hai, warna findByName substring-match
+    // system app (jaise Settings) par resolve karke Flora screen
+    // hijack ho jati. Sirf bare-open branch is set ko dekhti hai;
+    // baaki branches ka behaviour is set se nahi badalta.
+    private val FLORA_SCREEN_NAMES = setOf(
+        "chat", "settings", "tools", "docs", "documents", "whiteboard",
+        "home", "avatar", "live screen", "journal", "permissions",
+        "licence", "license", "auto log", "catcher", "problem report",
+        "models", "awaaz sikhao", "voice enrol", "notifications",
+        "face", "chehra", "connect", "privacy", "terms", "auto",
+        "routines", "scan", "gaadi", "driving", "sos", "lock",
+        "screen lock", "pc link", "pc", "builder", "planner", "doctor",
+    )
+
     private fun youtubeSearchUrl(song: String): String =
         "https://www.youtube.com/results?search_query=" + song.trim().replace(" ", "+")
 
@@ -208,7 +224,16 @@ object VoicePlanParser {
                 } else {
                     null
                 }
-                if (scrollDir != null || meQuery != null || kholoQuery != null) {
+                // Fixer (tester D3): "chrome me <site> kholo" FloraApp
+                // ki purani chrome branch ka kaam hai (openWebsiteVerified
+                // + Flora-browser fallback) — §1e is par plan NA banaye.
+                // Skip = fall-through (null nahi), taaki maujooda branch
+                // URL seedha khol sake. Search-form ("chrome me x
+                // search karo") isse nahi chhooti — sirf kholo-form.
+                val chromeSiteKholo = appPart == "chrome" && kholoQuery != null
+                if (!chromeSiteKholo &&
+                    (scrollDir != null || meQuery != null || kholoQuery != null)
+                ) {
                     if (appPart in OWN_SCREEN_NAMES) return null
                     val matches = resolveApp(appPart)
                     if (matches.size != 1) return null
@@ -238,7 +263,7 @@ object VoicePlanParser {
                                 VoicePlanStep(
                                     title = "Pehla result kholo",
                                     executor = VoicePlanExecutor.TAP_FIRST_RESULT,
-                                    input = mapOf("package" to pkg),
+                                    input = mapOf("package" to pkg, "query" to query),
                                     successCheck = "$label saamne ho aur pehla result khula ho.",
                                     failMessage = "Search khol diya hai, pehla result khud tap karo (auto tap yahan ruka).",
                                 ),
@@ -263,7 +288,7 @@ object VoicePlanParser {
             if (appName.isNotEmpty() && " me " !in appName &&
                 appName !in setOf("ye", "yeh", "is", "yahan", "is app", "iss app")
             ) {
-                if (appName in OWN_SCREEN_NAMES) return null
+                if (appName in OWN_SCREEN_NAMES || appName in FLORA_SCREEN_NAMES) return null
                 val matches = resolveApp(appName)
                 if (matches.size != 1) return null
                 val (label, pkg) = matches[0]
@@ -442,7 +467,7 @@ object VoicePlanParser {
             steps += VoicePlanStep(
                 title = "Pehla result play karo",
                 executor = VoicePlanExecutor.TAP_FIRST_RESULT,
-                input = mapOf("package" to tapPkg),
+                input = mapOf("package" to tapPkg, "query" to song),
                 successCheck = "YouTube saamne ho aur pehla result khula ho.",
                 failMessage = "Search khol diya hai, pehla result khud tap karo (auto-play chain yahan ruka).",
             )

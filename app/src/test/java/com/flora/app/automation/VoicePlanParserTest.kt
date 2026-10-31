@@ -22,6 +22,22 @@ class VoicePlanParserTest {
 
     private val foreground = "com.google.android.youtube" to "YouTube"
 
+    // Fixer test resolvers: system me us naam ki app maujood ho
+    // (warna bare-open/§1e waise hi null dega aur test khokhla
+    // hoga — bina fix ke ye resolver plan banata).
+    private val screenResolver: (String) -> List<Pair<String, String>> = { name ->
+        when (name) {
+            "settings" -> listOf("Settings" to "com.android.settings")
+            "chat" -> listOf("Chat" to "com.google.android.apps.messaging")
+            "docs" -> listOf("Docs" to "com.google.android.apps.docs")
+            else -> resolver(name)
+        }
+    }
+
+    private val chromeResolver: (String) -> List<Pair<String, String>> = { name ->
+        if (name == "chrome") listOf("Chrome" to "com.android.chrome") else resolver(name)
+    }
+
     @Test
     fun compoundAurMedia() {
         val plan = VoicePlanParser.parse("youtube kholo aur arijit ka gaana bajao", resolver)
@@ -312,5 +328,65 @@ class VoicePlanParserTest {
         assertEquals(VoicePlanExecutor.SCROLL, plan.steps[0].executor)
         assertEquals("false", plan.steps[0].input["forward"])
         assertNull(VoicePlanParser.parse("upar scroll karo", resolver, null))
+    }
+
+    // Fixer regression (tester D1): Flora ki apni screens par
+    // bare-open parser null de — chahe system me us naam ki app
+    // resolve hoti ho (findByName substring-match hijack).
+    @Test
+    fun bareOpenSettingsScreenIsNull() {
+        assertNull(VoicePlanParser.parse("settings kholo", screenResolver))
+    }
+
+    @Test
+    fun bareOpenChatScreenIsNull() {
+        assertNull(VoicePlanParser.parse("chat kholo", screenResolver))
+    }
+
+    @Test
+    fun bareOpenDocsScreenIsNull() {
+        assertNull(VoicePlanParser.parse("docs kholo", screenResolver))
+    }
+
+    // Fixer regression (tester D3): "chrome me <site> kholo" par
+    // §1e plan NA banaye (fall-through — purani chrome branch
+    // URL kholegi); search-form ka plan pehle jaisa rahe.
+    @Test
+    fun chromeMeSiteKholoFallsThrough() {
+        assertNull(VoicePlanParser.parse("chrome me example.com kholo", chromeResolver))
+    }
+
+    @Test
+    fun chromeMeSiteSearchStillPlans() {
+        val plan = VoicePlanParser.parse("chrome me example.com search karo", chromeResolver)
+        assertNotNull(plan)
+        assertEquals(2, plan!!.steps.size)
+        assertEquals(VoicePlanExecutor.APP_OPEN, plan.steps[0].executor)
+        assertEquals("Chrome", plan.steps[0].input["label"])
+        assertEquals(VoicePlanExecutor.IN_APP_SEARCH, plan.steps[1].executor)
+        assertEquals("example.com", plan.steps[1].input["query"])
+    }
+
+    // Fixer regression (tester D2, parser level): TAP step me
+    // query pahunche, taaki service token preference de sake.
+    // DFS pick khud FirstResultPickerTest me cover hai (service
+    // Android node tree par chalta hai, JVM test me nahi).
+    @Test
+    fun meFormKholoTapCarriesQuery() {
+        val plan = VoicePlanParser.parse("spotify me arijit kholo", resolver)
+        assertNotNull(plan)
+        assertEquals(3, plan!!.steps.size)
+        assertEquals(VoicePlanExecutor.TAP_FIRST_RESULT, plan.steps[2].executor)
+        assertEquals("arijit", plan.steps[2].input["query"])
+        assertEquals("com.spotify.music", plan.steps[2].input["package"])
+    }
+
+    @Test
+    fun mediaTapCarriesQuery() {
+        val plan = VoicePlanParser.parse("arijit ka video chalao", resolver)
+        assertNotNull(plan)
+        assertEquals(3, plan!!.steps.size)
+        assertEquals(VoicePlanExecutor.TAP_FIRST_RESULT, plan.steps[2].executor)
+        assertEquals("arijit ka", plan.steps[2].input["query"])
     }
 }

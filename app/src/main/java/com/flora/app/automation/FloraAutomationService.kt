@@ -206,10 +206,16 @@ class FloraAutomationService : AccessibilityService() {
      * text ho. Search-box/nav labels (Search/Khoj/Home/Shorts/...)
      * aur editable fields ko chhoda jata hai. Koi candidate na mile
      * to false (caller imaandaar report dega, jhootha "play ho gaya"
-     * kabhi nahi). Phone par asli YouTube UI se verify Phase 10 me
-     * hoga — ye heuristic hai, guarantee nahi.
+     * kabhi nahi). Ye heuristic hai, guarantee nahi.
+     *
+     * Fixer (tester D2): pick FirstResultPicker karta hai —
+     * barabar depth par PEHLA visited jeet-ta hai (purana >=
+     * comparison aakhri visited ko jitaata tha), aur [query] di
+     * ho to us tier me query-token wale container ko preference
+     * milti hai; clear match na mile to first-pick par fall back
+     * (abort nahi, taaki YouTube path pehle jaisa rahe).
      */
-    fun clickFirstVideoResult(): Boolean {
+    fun clickFirstVideoResult(query: String? = null): Boolean {
         val root = rootInActiveWindow ?: return false
         val skip = setOf(
             "search", "khoj", "home", "shorts", "subscriptions", "subscription",
@@ -233,37 +239,49 @@ class FloraAutomationService : AccessibilityService() {
             }
             return false
         }
-        var best: AccessibilityNodeInfo? = null
-        var bestDepth = -1
+        // Token preference ke liye container ka subtree text
+        // (title 2 level ke andar hi hota hai, hasTitleBelow jaisa).
+        fun subtreeText(node: AccessibilityNodeInfo, depth: Int): String {
+            val parts = mutableListOf(own(node))
+            if (depth < 2) {
+                for (i in 0 until node.childCount) {
+                    val c = node.getChild(i) ?: continue
+                    parts += subtreeText(c, depth + 1)
+                }
+            }
+            return parts.joinToString(" ").trim()
+        }
+        val nodes = mutableListOf<AccessibilityNodeInfo>()
+        val metas = mutableListOf<ResultCandidate>()
         fun dfs(node: AccessibilityNodeInfo?, depth: Int) {
             if (node == null || visited > 800) return
             visited++
             if (node.isClickable && !node.isEditable &&
-                own(node).lowercase() !in skip && hasTitleBelow(node, 0) &&
-                depth >= bestDepth
+                own(node).lowercase() !in skip && hasTitleBelow(node, 0)
             ) {
-                best = node
-                bestDepth = depth
+                nodes += node
+                metas += ResultCandidate(depth, subtreeText(node, 0))
             }
             for (i in 0 until node.childCount) {
                 dfs(node.getChild(i), depth + 1)
             }
         }
         dfs(root, 0)
-        val target = best ?: return false
-        return target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        val idx = FirstResultPicker.pick(metas, query) ?: return false
+        return nodes[idx].performAction(AccessibilityNodeInfo.ACTION_CLICK)
     }
 
     /**
      * Cycle 1 — generic alias: wahi title-like first-result
      * heuristic, kisi bhi app ke results par. Purana naam
-     * FloraApp ke YouTube chain ke liye barkaraar hai. 0
-     * candidate par false — caller abort + imaandaar report
+     * FloraApp ke YouTube chain ke liye barkaraar hai (no-arg
+     * call waisa hi chalta hai). [query] TAP step se aati hai.
+     * 0 candidate par false — caller abort + imaandaar report
      * (WhatsAppReply wali exact-count guard yahan lagu nahi
      * hoti: result rows ka koi naam diya hua nahi hota, isliye
      * "pehla" ka matlab ranked single pick hai, exact match nahi).
      */
-    fun clickFirstResult(): Boolean = clickFirstVideoResult()
+    fun clickFirstResult(query: String? = null): Boolean = clickFirstVideoResult(query)
 
     private fun findEditable(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         if (node == null) return null

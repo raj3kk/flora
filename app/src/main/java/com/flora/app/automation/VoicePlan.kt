@@ -205,8 +205,11 @@ object VoicePlanRunner {
                 if (!service.waitForForeground(pkg, 3000)) return false
                 // Cycle 1: generic first-result (YouTube wala
                 // clickFirstVideoResult hi iska alias hai — wahi
-                // heuristic, koi naya tap code nahi).
-                if (!service.clickFirstResult()) return false
+                // heuristic, koi naya tap code nahi). Fixer
+                // (tester D2): TAP step ki query aage do, taaki
+                // title me query-token wale result ko preference
+                // mile; query na ho to first-pick behaviour.
+                if (!service.clickFirstResult(step.input["query"])) return false
                 delay(1500)
                 service.foregroundPackage() == pkg
             }
