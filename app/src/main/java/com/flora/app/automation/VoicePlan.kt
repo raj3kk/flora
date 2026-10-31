@@ -16,14 +16,19 @@ import kotlinx.coroutines.delay
  * Ye PlannerEngine/PlanTool/Room plans se ALAG lightweight layer hai
  * (builder plans untouched). Executor sirf maujooda raaste hain:
  * VerifiedAppLauncher, InAppSearch, FloraAutomationService.
- * TAP_FIRST_RESULT sirf YouTube first-result chain ke liye hai
- * (Batch 2; SD-5 general surface nahi).
+ * TAP_FIRST_RESULT pehle sirf YouTube first-result chain ke
+ * liye tha (Batch 2); Cycle 1 se generic hai — pehla result
+ * (title-like clickable container heuristic, koi app-specific
+ * API nahi) kisi bhi app me, 0 candidate par abort + imaandaar
+ * failMessage. SCROLL generic scroll hai (aage = forward,
+ * peeche = backward), MacroEngine ke scroll surface jaisa.
  */
 enum class VoicePlanExecutor {
     APP_OPEN,
     SEARCH_URL,
     IN_APP_SEARCH,
     TAP_FIRST_RESULT,
+    SCROLL,
 }
 
 data class VoicePlanStep(
@@ -198,9 +203,16 @@ object VoicePlanRunner {
                 val pkg = step.input["package"] ?: return false
                 val service = FloraAutomationService.instance ?: return false
                 if (!service.waitForForeground(pkg, 3000)) return false
-                if (!service.clickFirstVideoResult()) return false
+                // Cycle 1: generic first-result (YouTube wala
+                // clickFirstVideoResult hi iska alias hai — wahi
+                // heuristic, koi naya tap code nahi).
+                if (!service.clickFirstResult()) return false
                 delay(1500)
                 service.foregroundPackage() == pkg
+            }
+            VoicePlanExecutor.SCROLL -> {
+                val service = FloraAutomationService.instance ?: return false
+                service.scroll(step.input["forward"] != "false")
             }
         }
     }

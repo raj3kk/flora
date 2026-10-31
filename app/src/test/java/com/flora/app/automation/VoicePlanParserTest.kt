@@ -222,4 +222,95 @@ class VoicePlanParserTest {
     fun kholoSpaceOwnScreenIsNull() {
         assertNull(VoicePlanParser.parse("camera kholo video chalao arijit", resolver))
     }
+
+    // Cycle 1 — generic in-app automation (sirf YouTube nahi).
+    @Test
+    fun genericTitledSearchSpotify() {
+        val plan = VoicePlanParser.parse("spotify kholo arijit search karo", resolver)
+        assertNotNull(plan)
+        assertEquals(2, plan!!.steps.size)
+        assertEquals(VoicePlanExecutor.APP_OPEN, plan.steps[0].executor)
+        assertEquals("Spotify", plan.steps[0].input["label"])
+        assertEquals("com.spotify.music", plan.steps[0].input["package"])
+        assertEquals(VoicePlanExecutor.IN_APP_SEARCH, plan.steps[1].executor)
+        assertEquals("arijit", plan.steps[1].input["query"])
+    }
+
+    @Test
+    fun bareOpenSpotify() {
+        val plan = VoicePlanParser.parse("spotify kholo", resolver)
+        assertNotNull(plan)
+        assertEquals(1, plan!!.steps.size)
+        assertEquals(VoicePlanExecutor.APP_OPEN, plan.steps[0].executor)
+        assertEquals("Spotify", plan.steps[0].input["label"])
+    }
+
+    @Test
+    fun bareOpenUnknownIsNull() {
+        assertNull(VoicePlanParser.parse("xyzapp kholo", resolver))
+    }
+
+    @Test
+    fun bareOpenAmbiguousIsNull() {
+        assertNull(VoicePlanParser.parse("music kholo", resolver))
+    }
+
+    @Test
+    fun bareOpenOwnScreenIsNull() {
+        assertNull(VoicePlanParser.parse("camera kholo", resolver))
+    }
+
+    @Test
+    fun meFormSearchSpotify() {
+        val plan = VoicePlanParser.parse("spotify me arijit search karo", resolver)
+        assertNotNull(plan)
+        assertEquals(2, plan!!.steps.size)
+        assertEquals(VoicePlanExecutor.APP_OPEN, plan.steps[0].executor)
+        assertEquals("Spotify", plan.steps[0].input["label"])
+        assertEquals(VoicePlanExecutor.IN_APP_SEARCH, plan.steps[1].executor)
+        assertEquals("arijit", plan.steps[1].input["query"])
+    }
+
+    @Test
+    fun meFormKholoSpotifyTapsFirstResult() {
+        val plan = VoicePlanParser.parse("spotify me arijit kholo", resolver)
+        assertNotNull(plan)
+        assertEquals(3, plan!!.steps.size)
+        assertEquals(VoicePlanExecutor.APP_OPEN, plan.steps[0].executor)
+        assertEquals(VoicePlanExecutor.IN_APP_SEARCH, plan.steps[1].executor)
+        assertEquals("arijit", plan.steps[1].input["query"])
+        assertEquals(VoicePlanExecutor.TAP_FIRST_RESULT, plan.steps[2].executor)
+        assertEquals("com.spotify.music", plan.steps[2].input["package"])
+    }
+
+    @Test
+    fun meFormUnknownIsNull() {
+        assertNull(VoicePlanParser.parse("xyzapp me arijit search karo", resolver))
+    }
+
+    @Test
+    fun meFormAmbiguousIsNull() {
+        assertNull(VoicePlanParser.parse("music me arijit search karo", resolver))
+    }
+
+    @Test
+    fun meFormScrollSpotify() {
+        val plan = VoicePlanParser.parse("spotify me neeche scroll karo", resolver)
+        assertNotNull(plan)
+        assertEquals(2, plan!!.steps.size)
+        assertEquals(VoicePlanExecutor.APP_OPEN, plan.steps[0].executor)
+        assertEquals(VoicePlanExecutor.SCROLL, plan.steps[1].executor)
+        assertEquals("true", plan.steps[1].input["forward"])
+    }
+
+    @Test
+    fun foregroundScrollOnly() {
+        val fg = "com.spotify.music" to "Spotify"
+        val plan = VoicePlanParser.parse("upar scroll karo", resolver, fg)
+        assertNotNull(plan)
+        assertEquals(1, plan!!.steps.size)
+        assertEquals(VoicePlanExecutor.SCROLL, plan.steps[0].executor)
+        assertEquals("false", plan.steps[0].input["forward"])
+        assertNull(VoicePlanParser.parse("upar scroll karo", resolver, null))
+    }
 }

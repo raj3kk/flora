@@ -187,9 +187,131 @@ object VoicePlanParser {
             }
         }
 
+        // Cycle 1 — generic "<app> me <cheez> ..." (§1c se
+        // PEHLE, warna §1c bare-open iska app naam "spotify me
+        // arijit" samajh kar null de dega). Deictic ("is app")
+        // par fall-through — wo maujooda foreground branch ka
+        // kaam hai, iska nahi. Sirf search/kholo/scroll rest hi
+        // claim hota hai; baaki rest (jaise "volume badhao") par
+        // fall-through, taaki maujooda branch ka behaviour na toote.
+        // App resolve ka null-contract §1b jaisa hai: 0 ya >1
+        // match par null (galat app kabhi nahi khulni chahiye).
+        if (lower.contains(" me ")) {
+            val appPart = lower.substringBefore(" me ").trim()
+            val restMe = lower.substringAfter(" me ").trim()
+            val deicticMe = appPart in setOf("is app", "is", "iss app", "yahan", "ye", "yeh")
+            if (appPart.isNotEmpty() && restMe.isNotEmpty() && !deicticMe) {
+                val scrollDir = parseScrollDirection(restMe)
+                val meQuery = parseSearchQuery(restMe)
+                val kholoQuery = if (meQuery == null && restMe.endsWith(" kholo")) {
+                    restMe.removeSuffix(" kholo").trim().ifEmpty { null }
+                } else {
+                    null
+                }
+                if (scrollDir != null || meQuery != null || kholoQuery != null) {
+                    if (appPart in OWN_SCREEN_NAMES) return null
+                    val matches = resolveApp(appPart)
+                    if (matches.size != 1) return null
+                    val (label, pkg) = matches[0]
+                    val openStep = openStep(label, pkg)
+                    if (scrollDir != null) {
+                        return VoicePlan(
+                            goal = question,
+                            steps = listOf(
+                                openStep,
+                                VoicePlanStep(
+                                    title = "$label me scroll karo",
+                                    executor = VoicePlanExecutor.SCROLL,
+                                    input = mapOf("forward" to scrollDir.toString()),
+                                    successCheck = "Screen scroll hui.",
+                                ),
+                            ),
+                        )
+                    }
+                    val query = meQuery ?: kholoQuery
+                    if (query != null) {
+                        val searchStep = searchStep(label, query)
+                        val steps = if (kholoQuery != null) {
+                            listOf(
+                                openStep,
+                                searchStep,
+                                VoicePlanStep(
+                                    title = "Pehla result kholo",
+                                    executor = VoicePlanExecutor.TAP_FIRST_RESULT,
+                                    input = mapOf("package" to pkg),
+                                    successCheck = "$label saamne ho aur pehla result khula ho.",
+                                    failMessage = "Search khol diya hai, pehla result khud tap karo (auto tap yahan ruka).",
+                                ),
+                            )
+                        } else {
+                            listOf(openStep, searchStep)
+                        }
+                        return VoicePlan(goal = question, steps = steps)
+                    }
+                }
+            }
+        }
+
+        // Cycle 1 — bare open: "<app> kholo" (poora vakya sirf
+        // app + kholo). " me " wala vakya upar §1e me hi faisla
+        // ho chuka hai; yahan app naam me " me " ho to skip
+        // (fall-through), null nahi — warna "is app me ..." wali
+        // maujooda branch hijack ho jayegi. Deictic ("ye kholo")
+        // par bhi skip; own-screen par null (§1b jaisa).
+        if (lower.endsWith(" kholo")) {
+            val appName = lower.removeSuffix(" kholo").trim()
+            if (appName.isNotEmpty() && " me " !in appName &&
+                appName !in setOf("ye", "yeh", "is", "yahan", "is app", "iss app")
+            ) {
+                if (appName in OWN_SCREEN_NAMES) return null
+                val matches = resolveApp(appName)
+                if (matches.size != 1) return null
+                val (label, pkg) = matches[0]
+                return VoicePlan(goal = question, steps = listOf(openStep(label, pkg)))
+            }
+        }
+
+        // Cycle 1 — "<app> kholo <cheez> search karo/khojo".
+        // Media verb wala vakya §1b ka hai (upar hi faisla ho
+        // chuka); yahan sirf search-suffix rest claim hota hai.
+        // Null-contract §1b jaisa: resolve 0/ambiguous -> null.
+        if (lower.contains(" kholo ")) {
+            val first = lower.substringBefore(" kholo ").trim()
+            val rest = lower.substringAfter(" kholo ").trim()
+            val q = if (rest.isNotEmpty()) parseSearchQuery(rest) else null
+            if (first.isNotEmpty() && q != null && " me " !in first &&
+                first !in setOf("ye", "yeh", "is", "yahan", "is app", "iss app")
+            ) {
+                if (first in OWN_SCREEN_NAMES) return null
+                val matches = resolveApp(first)
+                if (matches.size != 1) return null
+                val (label, pkg) = matches[0]
+                return VoicePlan(
+                    goal = question,
+                    steps = listOf(openStep(label, pkg), searchStep(label, q)),
+                )
+            }
+        }
+
         // 2) Follow-up in-app search — sirf tab jab Flora se kholi gayi
         // app saamne ho (ForegroundAppContext ka maujooda niyam).
         if (foregroundApp != null) {
+            // Cycle 1 — foreground app me seedha scroll (koi app
+            // naam nahi, isliye koi resolve nahi, koi galat app nahi).
+            val scrollDir = parseScrollDirection(lower)
+            if (scrollDir != null) {
+                return VoicePlan(
+                    goal = question,
+                    steps = listOf(
+                        VoicePlanStep(
+                            title = "Scroll karo",
+                            executor = VoicePlanExecutor.SCROLL,
+                            input = mapOf("forward" to scrollDir.toString()),
+                            successCheck = "Screen scroll hui.",
+                        ),
+                    ),
+                )
+            }
             val q = parseSearchQuery(lower)
             if (q != null) {
                 return VoicePlan(
@@ -210,6 +332,33 @@ object VoicePlanParser {
         // 3) Standalone media phrase — position-independent
         // (vakya-start ki shart nahi).
         return parseMedia(lower, question, resolveApp)
+    }
+
+    // Cycle 1 helpers — §1/§1b ke maujooda step shapes se
+    // bilkul wahi title/successCheck, taaki generic plans ka
+    // runner behaviour YouTube plans jaisa hi rahe (koi naya
+    // executor shape nahi, sirf app naam badalta hai).
+    private fun openStep(label: String, pkg: String): VoicePlanStep =
+        VoicePlanStep(
+            title = "$label kholo",
+            executor = VoicePlanExecutor.APP_OPEN,
+            input = mapOf("label" to label, "package" to pkg),
+            successCheck = "App verified khuli.",
+        )
+
+    private fun searchStep(label: String, query: String): VoicePlanStep =
+        VoicePlanStep(
+            title = "$label me '$query' search karo",
+            executor = VoicePlanExecutor.IN_APP_SEARCH,
+            input = mapOf("query" to query),
+            successCheck = "Search box me query type + submit hua.",
+            fallback = "",
+        )
+
+    private fun parseScrollDirection(rest: String): Boolean? = when (rest.trim()) {
+        "neeche scroll karo", "aage scroll karo", "scroll karo" -> true
+        "upar scroll karo", "peeche scroll karo" -> false
+        else -> null
     }
 
     private fun parseSearchQuery(lower: String): String? {

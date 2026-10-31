@@ -194,8 +194,10 @@ class FloraAutomationService : AccessibilityService() {
     }
 
     /**
-     * Planner-first routing, Batch 2 — YouTube first-result chain ONLY
-     * (general tap surface nahi, wo SD-P4 domain hai).
+     * Planner-first routing, Batch 2 — YouTube first-result chain.
+     * Cycle 1 se ye heuristic generic first-result ke liye reuse
+     * hota hai (clickFirstResult alias): koi YouTube API/code
+     * nahi, sirf title-like clickable container ki khoj hai.
      *
      * Search results page par pehla video result tap karta hai.
      * Video ka title TextView khud clickable nahi hota — uska item
@@ -251,6 +253,17 @@ class FloraAutomationService : AccessibilityService() {
         val target = best ?: return false
         return target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
     }
+
+    /**
+     * Cycle 1 — generic alias: wahi title-like first-result
+     * heuristic, kisi bhi app ke results par. Purana naam
+     * FloraApp ke YouTube chain ke liye barkaraar hai. 0
+     * candidate par false — caller abort + imaandaar report
+     * (WhatsAppReply wali exact-count guard yahan lagu nahi
+     * hoti: result rows ka koi naam diya hua nahi hota, isliye
+     * "pehla" ka matlab ranked single pick hai, exact match nahi).
+     */
+    fun clickFirstResult(): Boolean = clickFirstVideoResult()
 
     private fun findEditable(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         if (node == null) return null
