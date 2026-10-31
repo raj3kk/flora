@@ -324,6 +324,11 @@ fun FloraApp(
     // step se resume, Ruko par macro ruk jayegi. Kabhi silent resume nahi.
     var macroPending by remember { mutableStateOf<Pair<com.flora.app.automation.Macro, Int>?>(null) }
     var macroNeedsConfirm by remember { mutableStateOf(false) }
+    // D-06 W11 upfront-once: macro shuru hone se pehle sensitive
+    // steps ka ek-baari confirm dialog (macroUpfrontConfirm).
+    // Mid-run NeedsConfirm sirf runtime password-field case ke
+    // liye bachta hai.
+    var macroUpfrontConfirm by remember { mutableStateOf(false) }
     // Item 34: voice se romantic maanga gaya par 18+ confirm
     // abhi nahi hai — dialog isi state par khulta hai. Bina
     // confirm ke romantic ON ka koi raasta nahi (fail-closed).
@@ -727,6 +732,22 @@ fun FloraApp(
     // resume hoga. Kabhi silent macro nahi.
     fun runMacroFrom(macro: com.flora.app.automation.Macro, fromStep: Int) {
         if (!gateFeature("macros")) return
+        // D-06 W11 upfront-once: shuru (fromStep == 0) par sensitive
+        // Tap steps ek baar list karke confirm hon — beech me dobara
+        // nahi. Pehle se confirm ho chuke steps par dialog dobara
+        // nahi khulega (resume path).
+        if (fromStep == 0) {
+            val sensitive = com.flora.app.automation.MacroEngine.sensitiveStepIndices(macro)
+            if (sensitive.isNotEmpty() && !sensitive.all { it in macroConfirmedSteps }) {
+                val labels = com.flora.app.automation.MacroEngine.sensitiveStepLabels(macro)
+                macroPending = macro to 0
+                macroUpfrontConfirm = true
+                val msg = "Macro '${macro.name}' me sensitive steps hain (${labels.joinToString(", ")}) — ek baar confirm karo to poora macro bina dobara poochhe chalega."
+                messages = messages + ChatMsg("Flora: $msg", false)
+                voice.speak(msg)
+                return
+            }
+        }
         runGuardedVoice {
             scope.launch {
                 val service = com.flora.app.automation.FloraAutomationService.instance
@@ -5752,8 +5773,11 @@ fun FloraApp(
                 ToolsScreen(searchTools)
             }
 
-            // Phase 6: macro sensitive-step confirm — Haan par wahi
-            // step se resume, Ruko par macro ruk jayegi.
+            // Phase 6: macro sensitive-step confirm — RUNTIME-ONLY
+            // fallback (D-06 W11 ke baad label-known steps upfront
+            // dialog se guzarte hain; ye dialog sirf runtime par
+            // mile password-field case ke liye bachta hai). Haan
+            // par wahi step se resume, Ruko par macro ruk jayegi.
             if (macroNeedsConfirm) {
                 val pending = macroPending
                 AlertDialog(
@@ -5777,6 +5801,43 @@ fun FloraApp(
                     dismissButton = {
                         TextButton(onClick = {
                             macroNeedsConfirm = false
+                            macroPending = null
+                            macroConfirmedSteps = emptySet()
+                            voice.speak("Macro rok diya.")
+                        }) { Text("Ruko") }
+                    }
+                )
+            }
+            // D-06 W11 upfront-once dialog: sensitive steps shuru me
+            // ek baar — Haan par saare sensitive steps pre-confirm
+            // hokar macro chalega, beech me dobara dialog nahi aayega.
+            if (macroUpfrontConfirm) {
+                val pending = macroPending
+                val upLabels = pending?.let {
+                    com.flora.app.automation.MacroEngine.sensitiveStepLabels(it.first)
+                } ?: emptyList()
+                val upIndices = pending?.let {
+                    com.flora.app.automation.MacroEngine.sensitiveStepIndices(it.first)
+                } ?: emptySet()
+                AlertDialog(
+                    onDismissRequest = {
+                        macroUpfrontConfirm = false
+                        macroPending = null
+                        macroConfirmedSteps = emptySet()
+                    },
+                    title = { Text("Macro ke sensitive steps — ek baar confirm?") },
+                    text = { Text("Macro '${pending?.first?.name}' ke sensitive steps: ${upLabels.joinToString(", ")}. Haan dabao to ye steps ek baar me confirm hokar macro bina dobara poochhe chalega, Ruko par macro ruk jayegi.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            macroUpfrontConfirm = false
+                            val p = macroPending
+                            if (p != null) macroConfirmedSteps = macroConfirmedSteps + upIndices
+                            if (p != null) runMacroFrom(p.first, 0)
+                        }) { Text("Haan, chalao") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            macroUpfrontConfirm = false
                             macroPending = null
                             macroConfirmedSteps = emptySet()
                             voice.speak("Macro rok diya.")

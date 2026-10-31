@@ -682,6 +682,38 @@ class PlannerEngine(
                 }
             }
             val fresh = repository.loadPlan(planId) ?: return
+            // D-06 R4-1: plan-level stops = HARD GATES. Parser/model se aaye
+            // stops sirf display (PlannerScreen) par nahi rukte — koi step
+            // chalne se pehle plan PAUSED hota hai, wajah ke saath. Ye
+            // gate har loop iteration par dobara check hota hai (replan
+            // ke baad aaye stops bhi isi se rukenge).
+            if (fresh.stops.isNotEmpty()) {
+                repository.updatePlanMeta(
+                    planId, status = PlanStatus.PAUSED,
+                    lastError = "Plan stops par ruka: ${fresh.stops.joinToString(", ")}",
+                )
+                log(planId, -1, "plan stops hard gate: ${fresh.stops.joinToString(", ")}")
+                refreshState(planId, PlanStatus.PAUSED, "Ruka: stops — ${fresh.stops.joinToString(", ")}")
+                return
+            }
+            // D-06 R4-1: plan-level noDo enforcement (pending steps par hi,
+            // prospective — VERIFIED steps ko retroactively gate nahi karta).
+            // Kisi pending step ka title kisi noDo phrase se match kare to
+            // plan PAUSED, wajah me noDo entry + step ka naam.
+            val noDoHit = fresh.steps.filter { it.status == StepStatus.PENDING }.firstNotNullOfOrNull { step ->
+                fresh.noDo.firstOrNull { entry ->
+                    entry.isNotBlank() && step.title.lowercase().contains(entry.trim().lowercase())
+                }?.let { entry -> entry to step.title }
+            }
+            if (noDoHit != null) {
+                repository.updatePlanMeta(
+                    planId, status = PlanStatus.PAUSED,
+                    lastError = "No-do gate: '${noDoHit.second}' step noDo '${noDoHit.first}' se takrata hai",
+                )
+                log(planId, -1, "plan noDo hard gate: ${noDoHit.first} -> ${noDoHit.second}")
+                refreshState(planId, PlanStatus.PAUSED, "Ruka: no-do — ${noDoHit.first}")
+                return
+            }
             val pending = fresh.steps.filter { it.status == StepStatus.PENDING }
             if (pending.isEmpty()) {
                 val allDone = fresh.steps.all { it.status == StepStatus.VERIFIED || it.status == StepStatus.SKIPPED }

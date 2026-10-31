@@ -80,6 +80,22 @@ object VoicePlanRunner {
             try { host.log("VoicePlan STOP: ${plan.goal} -> ${plan.stops.joinToString(",")}") } catch (e: Exception) { }
             return msg
         }
+        // D-06 R4-1: noDo enforcement (pehle display-only tha, ab hard
+        // gate hai). Kisi step ka title/input kisi noDo phrase se match
+        // kare to poora plan nahi chalega — wajah me entry + step.
+        for (step in plan.steps) {
+            val hay = (step.title + " " + step.input.values.joinToString(" ")).lowercase()
+            val hit = plan.noDo.firstOrNull { entry ->
+                entry.isNotBlank() && hay.contains(entry.trim().lowercase())
+            }
+            if (hit != null) {
+                val msg = "Ye plan no-do gate par ruka hai: '${step.title}' step no-do '$hit' se takrata hai, isliye chalaya nahi gaya."
+                host.addMessage(msg)
+                host.speak(msg)
+                try { host.log("VoicePlan NODO: ${plan.goal} -> ${step.title} ($hit)") } catch (e: Exception) { }
+                return msg
+            }
+        }
         host.addMessage("Plan chala raha hun: " + plan.steps.joinToString(" → ") { it.title })
         var usedFallback = false
         for (step in plan.steps) {

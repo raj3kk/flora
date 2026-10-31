@@ -209,7 +209,7 @@ fun RoutinesScreen(voice: VoiceEngine, onRunRoutine: (Routine) -> Unit, onRunMac
         AlertDialog(
             onDismissRequest = { confirmMacro = null },
             title = { Text("Macro chalau?") },
-            text = { Text("'${macro.name}' ke steps accessibility se chalenge. Sensitive step (password wali screen par pay/submit) par dobara poocha jayega.") },
+            text = { Text("'${macro.name}' ke steps accessibility se chalenge. Sensitive steps shuru me ek baar list karke confirm honge (D-06 W11 upfront-once) — beech me dobara nahi poocha jayega. Password field wali screen runtime par mile to us par alag confirm abhi bhi hoga.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmMacro = null

@@ -19,8 +19,11 @@ import org.json.JSONObject
  *
  * KABHI SILENT NAHI: macro sirf tab chalta hai jab user ne
  * saaf bola ho ("macro chalao <naam>") ya Routines screen par
- * confirm dialog me Haan dabaya ho. Sensitive step (password
- * field wali screen par pay/submit/login jaisa tap) par runner
+ * confirm dialog me Haan dabaya ho. D-06 W11 upfront-once:
+ * label se pehle se jaane jaane wale sensitive Tap steps shuru
+ * me ek baar list karke confirm hote hain (sensitiveStepIndices)
+ * — beech me dobara confirm nahi maanga jata. Sirf runtime par
+ * pata chalne wale cases (password field wali screen) par runner
  * NeedsConfirm deta hai — caller dialog dikhata hai, Haan par
  * wahi step se resume hota hai, Ruko par macro ruk jata hai.
  * Password field me macro kabhi type nahi karta (fill wahi
@@ -170,6 +173,30 @@ object MacroEngine {
     private fun isSensitiveTap(label: String): Boolean {
         val lower = label.lowercase()
         return SENSITIVE_TAP_WORDS.any { lower.contains(it) }
+    }
+
+    /**
+     * D-06 W11 upfront-once: plan se pehle hi jaane jaane wale
+     * sensitive Tap steps (label se pata chalta hai). Caller inhe
+     * shuru me ek baar list karke confirm karta hai, phir ye steps
+     * beech me dobara confirm nahi maangte. Password-field Type
+     * steps isme nahi hain — field ki maujoodgi sirf runtime par
+     * pata chalti hai, isliye un par runtime NeedsConfirm barkaraar
+     * hai (fail-closed).
+     */
+    fun sensitiveStepIndices(macro: Macro): Set<Int> {
+        val out = mutableSetOf<Int>()
+        macro.steps.forEachIndexed { i, step ->
+            if (step is MacroStep.Tap && isSensitiveTap(step.label)) out.add(i)
+        }
+        return out
+    }
+
+    fun sensitiveStepLabels(macro: Macro): List<String> {
+        val indices = sensitiveStepIndices(macro)
+        return macro.steps.mapIndexedNotNull { i, step ->
+            if (i in indices && step is MacroStep.Tap) step.label else null
+        }
     }
 
     /**
