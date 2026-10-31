@@ -25,6 +25,11 @@ object VoicePlanParser {
         "song play",
         "gaana sunao",
         "gana sunao",
+        // Voice-fix: video verbs — gaana chain hi reuse hota hai
+        // (parseMedia me APP_OPEN + IN_APP_SEARCH + TAP_FIRST_RESULT,
+        // wahi failMessage); koi alag video chain nahi bani.
+        "video chalao",
+        "video play karo",
     )
 
     private val OWN_SCREEN_NAMES = setOf("camera", "yaadein", "memories")
@@ -124,6 +129,54 @@ object VoicePlanParser {
                 }
                 // App naam nahi mila (jaise "tum aur hum gaana bajao")
                 // → neeche media check par jaane do, wahi sahi raasta hai.
+            }
+        }
+
+        // 1b) Voice-fix: "<app> kholo <media verb>" — plain " kholo "
+        // upar wale seps me nahi hai, isliye "youtube kholo video
+        // chalao" yahan tak aata hai. Sirf tab jab rest me koi media
+        // verb ho; warna neeche ke raaste waisi hi chalenge.
+        // "aur/phir/khol k/kholo to" wale vakya upar hi faisla ho
+        // chuke hote hain, isliye yahan unka hijack nahi hota.
+        if (lower.contains(" kholo ")) {
+            val first = lower.substringBefore(" kholo ").trim()
+            val rest = lower.substringAfter(" kholo ").trim()
+            if (first.isNotEmpty() && rest.isNotEmpty() &&
+                first !in OWN_SCREEN_NAMES &&
+                MEDIA_VERBS.any { rest.contains(it) }
+            ) {
+                val matches = resolveApp(first)
+                if (matches.size == 1) {
+                    val (label, pkg) = matches[0]
+                    val openStep = VoicePlanStep(
+                        title = "$label kholo",
+                        executor = VoicePlanExecutor.APP_OPEN,
+                        input = mapOf("label" to label, "package" to pkg),
+                        successCheck = "App verified khuli.",
+                    )
+                    val restMedia = parseMedia(rest, rest, resolveApp, forceApp = (label to pkg))
+                    if (restMedia != null) {
+                        // YouTube → poori chain (open + search + tap);
+                        // non-YouTube → sirf open + search (parseMedia
+                        // non-YouTube forceApp par tap step banata hi nahi).
+                        return VoicePlan(
+                            goal = question,
+                            steps = listOf(openStep) + restMedia.steps.dropWhile {
+                                it.executor == VoicePlanExecutor.APP_OPEN
+                            },
+                        )
+                    }
+                    // Bare media verb, koi title nahi (jaise
+                    // "youtube kholo video chalao"): search ke liye
+                    // query nahi hai, isliye sirf YouTube kholo;
+                    // non-YouTube par null (maujooda raasta sambhalega).
+                    if (rest in MEDIA_VERBS && label.equals("YouTube", ignoreCase = true)) {
+                        return VoicePlan(goal = question, steps = listOf(openStep))
+                    }
+                    return null
+                }
+                // App resolve na ho / ambiguous ho to neeche
+                // standalone media raasta waisa hi chalega.
             }
         }
 

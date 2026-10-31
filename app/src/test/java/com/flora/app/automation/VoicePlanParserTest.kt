@@ -137,4 +137,71 @@ class VoicePlanParserTest {
         // Rest samajh na aaye to maujooda compound branch sambhalegi.
         assertNull(VoicePlanParser.parse("youtube kholo aur volume badhao", resolver))
     }
+
+    // Voice-fix tests: video verbs gaana chain reuse karte hain.
+    @Test
+    fun standaloneVideoWithTitle() {
+        val plan = VoicePlanParser.parse("arijit ka video chalao", resolver)
+        assertNotNull(plan)
+        assertEquals(3, plan!!.steps.size)
+        assertEquals(VoicePlanExecutor.APP_OPEN, plan.steps[0].executor)
+        assertEquals("arijit ka", plan.steps[1].input["query"])
+        assertEquals(VoicePlanExecutor.TAP_FIRST_RESULT, plan.steps[2].executor)
+        assertEquals("com.google.android.youtube", plan.steps[2].input["package"])
+    }
+
+    @Test
+    fun standaloneVideoPlayKaroWithTitle() {
+        val plan = VoicePlanParser.parse("video play karo arijit", resolver)
+        assertNotNull(plan)
+        assertEquals(3, plan!!.steps.size)
+        assertEquals("arijit", plan.steps[1].input["query"])
+        assertEquals(VoicePlanExecutor.TAP_FIRST_RESULT, plan.steps[2].executor)
+    }
+
+    @Test
+    fun compoundKholoSpaceVideoWithTitle() {
+        val plan = VoicePlanParser.parse("youtube kholo video chalao arijit", resolver)
+        assertNotNull(plan)
+        assertEquals(3, plan!!.steps.size)
+        assertEquals(VoicePlanExecutor.APP_OPEN, plan.steps[0].executor)
+        assertEquals("YouTube", plan.steps[0].input["label"])
+        assertEquals("arijit", plan.steps[1].input["query"])
+        assertEquals(VoicePlanExecutor.TAP_FIRST_RESULT, plan.steps[2].executor)
+    }
+
+    @Test
+    fun compoundKholoSpaceBareVideoOpensYoutubeOnly() {
+        // Koi title nahi → search query nahi ban sakti, sirf open.
+        val plan = VoicePlanParser.parse("youtube kholo video chalao", resolver)
+        assertNotNull(plan)
+        assertEquals(1, plan!!.steps.size)
+        assertEquals(VoicePlanExecutor.APP_OPEN, plan.steps[0].executor)
+        assertEquals("YouTube", plan.steps[0].input["label"])
+    }
+
+    @Test
+    fun compoundKholoSpaceNonYoutubeIsOpenPlusSearch() {
+        val plan = VoicePlanParser.parse("spotify kholo video chalao arijit", resolver)
+        assertNotNull(plan)
+        assertEquals(2, plan!!.steps.size)
+        assertEquals(VoicePlanExecutor.APP_OPEN, plan.steps[0].executor)
+        assertEquals("Spotify", plan.steps[0].input["label"])
+        assertEquals(VoicePlanExecutor.IN_APP_SEARCH, plan.steps[1].executor)
+        assertEquals("arijit", plan.steps[1].input["query"])
+    }
+
+    @Test
+    fun compoundKholoSpaceBareVideoNonYoutubeIsNull() {
+        assertNull(VoicePlanParser.parse("spotify kholo video chalao", resolver))
+    }
+
+    @Test
+    fun compoundAurVideoWithTitle() {
+        val plan = VoicePlanParser.parse("youtube kholo aur video chalao arijit", resolver)
+        assertNotNull(plan)
+        assertEquals(3, plan!!.steps.size)
+        assertEquals("arijit", plan.steps[1].input["query"])
+        assertEquals(VoicePlanExecutor.TAP_FIRST_RESULT, plan.steps[2].executor)
+    }
 }

@@ -1506,11 +1506,46 @@ fun FloraApp(
         }
     }
 
+    // Voice-fix: mic-dialog raasta — command ho to voiceCommand
+    // raaste jaisa auto-send (sendChatHolder se), warna pehle
+    // jaisa sirf input bharo (dictation bacha rahega). Busy ho to
+    // auto-send nahi (sendChat busy par drop karta hai), isliye
+    // tab bhi sirf input bharo. Holder null ho to fallback bhi
+    // input bharna hi hai. Vars (input/busy/sendChatHolder/
+    // appContext) sab is effect se upar declare hain.
     LaunchedEffect(voiceResult.value) {
         val spoken = voiceResult.value
         if (spoken.isNotEmpty()) {
-            input = spoken
             voiceResult.value = ""
+            val lower = spoken.lowercase().trim()
+            val cheapCommand = lower.startsWith("open ") || lower.startsWith("kholo ") ||
+                lower.endsWith(" kholo") ||
+                lower.startsWith("website kholo ") || lower.startsWith("website ") ||
+                lower.startsWith("chrome me ")
+            val parsedCommand = if (cheapCommand) {
+                false
+            } else {
+                try {
+                    com.flora.app.automation.VoicePlanParser.parse(
+                        spoken,
+                        resolveApp = { name ->
+                            com.flora.app.automation.VerifiedAppLauncher.findByName(appContext, name)
+                                .map { it.label to it.packageName }
+                        },
+                        foregroundApp = com.flora.app.automation.ForegroundAppContext.lastOpenedPkg?.let { pkg ->
+                            pkg to (com.flora.app.automation.ForegroundAppContext.lastOpenedLabel ?: pkg)
+                        },
+                    ) != null
+                } catch (e: Exception) {
+                    false
+                }
+            }
+            val holder = sendChatHolder[0]
+            if ((cheapCommand || parsedCommand) && !busy && holder != null) {
+                holder.invoke(spoken)
+            } else {
+                input = spoken
+            }
         }
     }
 
@@ -2448,8 +2483,9 @@ fun FloraApp(
                     // bina bataye nahi — message saaf kehta hai
                     // ki PIN ke baad dobara bolna/bhejna padega
                     // (pending command unlock par khud nahi chalega).
-                    // Typed mic-dialog raasta (voiceResult sirf
-                    // input bharta hai, send nahi karta) chheda nahi.
+                    // Mic-dialog raasta (voiceResult): command ho to
+                    // auto-send hota hai, dictation sirf input bharta hai
+                    // (voice-fix — upar wala LaunchedEffect dekho).
                     if (faceLockOn && !isFaceLockUnlockedNow()) {
                         input = ""
                         val lockMsg = "Chat lock hai — pehle PIN daal kar unlock karo, phir dobara bolo ya bhejo. Ye wala message/task lock par nahi chala."

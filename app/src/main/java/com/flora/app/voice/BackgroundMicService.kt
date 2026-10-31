@@ -301,6 +301,13 @@ class BackgroundMicService : Service() {
             lower.startsWith("chrome me ") || lower.startsWith("website ") ||
             lower.startsWith("website kholo ") ||
             lower.startsWith("gaana bajao ") || lower.startsWith("gaana chalao ") ||
+            // Voice-fix: combined video command bhi command hai
+            // (foreground confirmation ke liye park hoga, brain Q&A
+            // par nahi girega). TIGHT patterns hi: video verb aakhir
+            // me, ya " kholo " + video verb ka combined roop.
+            lower.endsWith(" video chalao") || lower.endsWith(" video play karo") ||
+            (lower.contains(" kholo ") &&
+                (lower.contains(" video chalao") || lower.contains(" video play karo"))) ||
             lower == "photo lo" || lower == "scan karo" || lower == "camera kholo" ||
             lower == "sos" || lower == "sos bhejo" || lower == "madad" ||
             lower == "yaadein kholo" || lower == "memories kholo"
