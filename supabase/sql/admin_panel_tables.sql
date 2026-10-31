@@ -9,8 +9,13 @@
 -- admin_settings: admin-only settings (aaj sirf upi_vpa —
 --   website pay page par dikhne wala owner UPI address).
 --
--- SECURITY NOTE (imaandaar, chhupana nahi):
--- Ye values platform ke alawa at-rest encrypted NAHI hain.
+-- SECURITY NOTE (CEO batch 2026-10-31, D-21 FIX — purana note superseded):
+-- admin-keys ab key_value ko AES-GCM encrypt karke store karta hai
+-- (format enc:v1:..., key = SHA-256(PROVIDER_KEYS_ENCRYPTION_KEY
+-- dashboard secret)). Is file ka table shape wahi hai (key_value text);
+-- encryption function-level hai, schema change nahi. Legacy plaintext
+-- rows migration ke dauran padhi jayengi, phir panel se re-enter par
+-- encrypted ho jayengi (status me providers_encrypted se verify karo).
 -- Protection ye hai: (1) RLS ON hai, (2) koi policy NAHI banayi
 -- gayi hai — isliye anon/authenticated client se in tables ka
 -- koi read/write nahi ho sakta, sirf service-role (functions ke

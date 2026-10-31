@@ -63,12 +63,29 @@ serve(async (req) => {
   if (userErr || !userData?.user) return json({ error: "unauthorized" }, 401);
   const svc = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
+  // D-21 encryption: enc:v1: rows decrypt (PROVIDER_KEYS_ENCRYPTION_KEY);
+  // legacy plaintext rows migration ke dauran waise hi padhi jayengi.
+  async function decryptStored(stored: string): Promise<string> {
+    if (!stored.startsWith("enc:v1:")) return stored;
+    try {
+      const secret = Deno.env.get("PROVIDER_KEYS_ENCRYPTION_KEY") || "";
+      if (!secret) return "";
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+      const key = await crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["decrypt"]);
+      const bin = atob(stored.slice("enc:v1:".length));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes.slice(0, 12) }, key, bytes.slice(12));
+      return new TextDecoder().decode(plain);
+    } catch (_e) { return ""; }
+  }
   async function resolveKey(provider: string, envName: string): Promise<string> {
     const envKey = Deno.env.get(envName) || "";
     if (envKey) return envKey;
     try {
       const { data } = await svc.from("provider_keys").select("key_value").eq("provider", provider).maybeSingle();
-      return data?.key_value || "";
+      if (!data?.key_value) return "";
+      return await decryptStored(data.key_value);
     } catch (_e) { return ""; }
   }
 
