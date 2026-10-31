@@ -2,6 +2,7 @@ package com.flora.app
 
 import android.app.Application
 import com.flora.app.data.CatcherEvents
+import com.flora.app.data.CatcherHealth
 import com.flora.app.models.NeuralVoiceAttach
 import com.flora.app.planner.FloraToolsStartup
 
@@ -30,6 +31,9 @@ class FloraApplication : Application() {
         // Catcher (G2): diagnostic event store ka dir — hooks iske baad
         // record kar sakte hain; init na ho to record no-op hai.
         CatcherEvents.init(filesDir)
+        // P3-01 init-health: init fail silent no-op na rahe — probe ka
+        // natija memory me rehta hai, Catcher screen use dikhata hai.
+        CatcherHealth.recordInitProbe(filesDir)
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             try {
