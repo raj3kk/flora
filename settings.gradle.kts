@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "maya-rebuild"
+rootProject.name = "flora"
 include(":app")
